@@ -208,6 +208,25 @@ them to each `v*` release. Point `BABELSCRIBE_RELEASES` at another URL to self-h
 ภาษาไทยแนะนำ `babelscribe ไฟล์.mp4 -l th --accurate` — ข้อความจาก Pathumma Whisper (NECTEC) ที่ผิดน้อยที่สุดใน FLEURS (CER 8.9% เทียบ turbo 15.9%) + เวลาจาก large-v3-turbo
 หรือเลือก Thonburian Whisper เอง: `--text-model thai-thonburian`
 
+## Privacy Policy
+babelscribe runs entirely on your own computer. Last updated 2026-10-06.
+
+- **Data collection:** none. babelscribe has no telemetry, analytics, accounts or crash reporting, and never uploads your
+  audio, video, transcripts or file names anywhere.
+- **What it processes and where:** the media file you choose is converted and transcribed locally; subtitles and text are
+  written to your disk (next to the file, or the folder you choose). Through MCP, the transcript text is returned to the AI
+  app that called the tool — what that app does with it is governed by that app's own privacy policy.
+- **Network access (downloads only):** on first use it downloads the `whisper-cli` program from this project's GitHub
+  releases, speech models from Hugging Face (`huggingface.co/ggerganov/whisper.cpp`, and for `--accurate` Thai/Hindi the
+  fine-tune's own repository), and Python packages from PyPI when installed with pip/uv. These are plain downloads;
+  no personal data is sent. GitHub, Hugging Face and PyPI see a normal download request (IP address, user agent) under
+  their own privacy policies.
+- **Storage and retention:** downloaded programs and models are cached in `~/.babelscribe` (or `BABELSCRIBE_HOME` /
+  `BABELSCRIBE_MODELS`) until you delete that folder. Outputs stay wherever they were written until you delete them.
+  babelscribe keeps no other data.
+- **Third-party sharing:** none.
+- **Contact:** open an issue at https://github.com/phonology024/babelscribe/issues
+
 ## Credits & licence
 MIT. Built on [whisper.cpp](https://github.com/ggml-org/whisper.cpp) (MIT) and OpenAI Whisper models (MIT).
 Fine-tunes belong to their authors: [Pathumma Whisper](https://huggingface.co/nectec/Pathumma-whisper-th-large-v3) by NECTEC,

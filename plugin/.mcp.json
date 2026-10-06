@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "babelscribe": {
+      "command": "uvx",
+      "args": ["babelscribe==0.3.2", "mcp"]
+    }
+  }
+}

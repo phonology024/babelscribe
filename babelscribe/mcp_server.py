@@ -27,6 +27,7 @@ def _guard_stdout():
 def build():
     import anyio
     from mcp.server.mcpserver import Context, MCPServer
+    from mcp.types import ToolAnnotations
 
     from . import __version__, api, backend, models
 
@@ -38,7 +39,9 @@ def build():
         "(~1.6 GB), so it can take a few minutes. After transcribing you can proofread names, translate, or "
         "summarise from the returned text."))
 
-    @srv.tool()
+    # transcribe writes new .srt/.txt files (re-running rewrites its own output); first use downloads whisper-cli and the model
+    @srv.tool(title="Transcribe audio/video to subtitles", annotations=ToolAnnotations(
+        read_only_hint=False, destructive_hint=False, idempotent_hint=True, open_world_hint=True))
     async def transcribe(file_path: str, language: str = "auto", accurate: bool = False, formats: str = "srt,txt",
                          output_dir: str = "", ctx: Context | None = None) -> dict:
         """Transcribe a local audio or video file into subtitles / text.
@@ -79,7 +82,7 @@ def build():
             result["note"] = f"transcript truncated to {TEXT_LIMIT} characters; the full text is in the files listed"
         return result
 
-    @srv.tool()
+    @srv.tool(title="Find audio/video files", annotations=ToolAnnotations(read_only_hint=True, open_world_hint=False))
     def find_media(name_contains: str = "", folder: str = "", limit: int = 15) -> list[dict]:
         """Find audio/video files on this computer, newest first. Searches Downloads, Videos, Desktop, Music and
         Documents (two levels deep) unless folder is given. Use it when the user names a file without a full path."""
@@ -100,13 +103,13 @@ def build():
         return [{"path": str(p), "size_mb": round(sz / 1e6, 1), "modified": time.strftime("%Y-%m-%d %H:%M", time.localtime(t))}
                 for t, p, sz in hits[:limit]]
 
-    @srv.tool()
+    @srv.tool(title="List GPUs", annotations=ToolAnnotations(read_only_hint=True, open_world_hint=True))
     def list_devices() -> dict:
         """GPUs whisper.cpp can use on this computer and which one babelscribe picks automatically."""
         _, _, found = api.setup()
         return {"devices": found, "auto_pick": backend.pick_device(found)}
 
-    @srv.tool()
+    @srv.tool(title="List languages and models", annotations=ToolAnnotations(read_only_hint=True, open_world_hint=False))
     def list_languages_and_models() -> dict:
         """Models available, and which model --accurate uses per language."""
         return {"general": models.GENERAL, "fine_tunes": {k: v["note"] for k, v in models.FINETUNES.items()},

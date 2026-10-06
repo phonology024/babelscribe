@@ -3,14 +3,14 @@
   "name": "io.github.phonology024/babelscribe",
   "title": "babelscribe",
   "description": "Offline speech-to-text and SRT subtitles in 99 languages on your own AMD/NVIDIA/Intel/Apple GPU.",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "websiteUrl": "https://phonology024.github.io/babelscribe/",
   "repository": { "url": "https://github.com/phonology024/babelscribe", "source": "github" },
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "babelscribe",
-      "version": "0.3.1",
+      "version": "0.3.2",
       "runtimeHint": "uvx",
       "transport": { "type": "stdio" },
       "packageArguments": [ { "type": "positional", "value": "mcp" } ]
