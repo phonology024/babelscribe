@@ -46,8 +46,12 @@ jobs:
       - name: Configure + build
         shell: bash
         run: |
+          # x64: never GGML_NATIVE — it compiles for the CI machine's CPU (AVX-512) and the binary dies with
+          # "illegal instruction" on most user PCs. AVX2 baseline runs on virtually every x64 CPU since ~2015.
+          PORTABLE=""
+          case "${{ matrix.name }}" in *x64*) PORTABLE="-DGGML_NATIVE=OFF -DGGML_AVX=ON -DGGML_AVX2=ON -DGGML_FMA=ON -DGGML_F16C=ON -DGGML_BMI2=ON";; esac
           cmake -S whisper.cpp -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
-            -DWHISPER_BUILD_EXAMPLES=ON -DWHISPER_BUILD_TESTS=OFF ${{ matrix.cmake }}
+            -DWHISPER_BUILD_EXAMPLES=ON -DWHISPER_BUILD_TESTS=OFF $PORTABLE ${{ matrix.cmake }}
           cmake --build build --config Release -j 4 --target whisper-cli whisper-quantize
 
       - name: Package

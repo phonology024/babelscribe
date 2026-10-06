@@ -55,6 +55,23 @@ def fetch_binary(flavor: str | None = None) -> Path:
     return exe
 
 
+def probe_or_refetch(binary: Path, model: Path, flavor: str | None = None) -> tuple[Path, list[dict]]:
+    """Probe devices; a cached binary that crashes with 'illegal instruction' is deleted and downloaded again once."""
+    try:
+        return binary, probe_devices(binary, model)
+    except IllegalInstruction:
+        cache = (CACHE / "bin").resolve()
+        if cache not in binary.resolve().parents:
+            raise SystemExit(f"{binary} crashed with 'illegal instruction': it was built for a newer CPU than this one.")
+        shutil.rmtree(binary.parent)
+        print("cached whisper-cli does not run on this CPU; downloading the current build ...")
+        binary = fetch_binary(flavor)
+        try:
+            return binary, probe_devices(binary, model)
+        except IllegalInstruction:
+            raise SystemExit("the prebuilt whisper-cli does not run on this CPU; build whisper.cpp yourself and pass --bin.")
+
+
 def devices(binary: Path) -> list[dict]:
     """Ask whisper.cpp which GPUs it can see (it prints them while loading a model)."""
     out = subprocess.run([str(binary), "--help"], capture_output=True, text=True, errors="replace")
@@ -65,6 +82,10 @@ def devices(binary: Path) -> list[dict]:
     return found
 
 
+class IllegalInstruction(RuntimeError):
+    """The binary was compiled for CPU features this machine lacks (e.g. an old AVX-512 build)."""
+
+
 def probe_devices(binary: Path, model: Path) -> list[dict]:
     """Load a model on an empty clip to see the GPU list and which device whisper.cpp picks."""
     import tempfile, wave
@@ -73,6 +94,8 @@ def probe_devices(binary: Path, model: Path) -> list[dict]:
         with wave.open(str(wav), "wb") as w:
             w.setnchannels(1); w.setsampwidth(2); w.setframerate(16000); w.writeframes(b"\0\0" * 16000)
         out = subprocess.run([str(binary), "-m", str(model), "-f", str(wav), "-np"], capture_output=True, text=True, errors="replace")
+    if out.returncode in (0xC000001D, -4, 132):   # Windows STATUS_ILLEGAL_INSTRUCTION / SIGILL
+        raise IllegalInstruction(str(binary))
     text = out.stdout + out.stderr
     found = [{"backend": m.group(1), "id": int(m.group(2)), "name": m.group(3).strip(), "detail": m.group(4).strip()}
              for m in re.finditer(r"ggml_(vulkan|cuda|metal): *(\d+) = ([^|\n]+)\|?([^\n]*)", text)]

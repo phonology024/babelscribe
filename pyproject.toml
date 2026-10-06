@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "babelscribe"
-version = "0.2.0"
+version = "0.2.1"
 description = "Transcribe any audio/video in 99 languages on any GPU (AMD, NVIDIA, Intel via Vulkan; NVIDIA via CUDA; Apple via Metal) or CPU — whisper.cpp with batteries included."
 readme = "README.md"
 license = { text = "MIT" }

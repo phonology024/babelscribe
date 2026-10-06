@@ -41,7 +41,7 @@ def main(argv: list[str] | None = None) -> None:
 
     binary = backend.find_binary(a.bin, a.flavor)
     timing = models.ensure(a.model, binary.parent / ("whisper-quantize.exe" if binary.suffix == ".exe" else "whisper-quantize"))
-    found = backend.probe_devices(binary, timing)
+    binary, found = backend.probe_or_refetch(binary, timing, a.flavor)
     if a.input == "devices":
         for d in found:
             print(f"  [{d['id']}] {d['backend']:6} {d['name']}  {d.get('detail', '')}")
