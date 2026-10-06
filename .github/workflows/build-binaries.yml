@@ -1,0 +1,75 @@
+# Prebuilt whisper.cpp `whisper-cli` for every OS/GPU family, attached to a GitHub release.
+# babelscribe downloads the matching asset on first run (see babelscribe/backend.py:asset_name).
+#   windows-x64-vulkan  AMD / NVIDIA / Intel GPUs on Windows
+#   windows-x64-cuda    NVIDIA (CUDA) on Windows
+#   linux-x64-vulkan    AMD / NVIDIA / Intel GPUs on Linux
+#   linux-x64-cuda      NVIDIA (CUDA) on Linux
+#   macos-arm64-metal   Apple Silicon
+#   *-cpu               any machine without a usable GPU
+name: build-binaries
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      whisper_ref: { description: "whisper.cpp tag/branch", default: "v1.9.4" }
+
+env:
+  WHISPER_REF: ${{ github.event.inputs.whisper_ref || 'v1.9.4' }}
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, name: windows-x64-vulkan, cmake: "-DGGML_VULKAN=ON" }
+          - { os: windows-latest, name: windows-x64-cuda,   cmake: "-DGGML_CUDA=ON" }
+          - { os: windows-latest, name: windows-x64-cpu,    cmake: "" }
+          - { os: ubuntu-22.04,   name: linux-x64-vulkan,   cmake: "-DGGML_VULKAN=ON" }
+          - { os: ubuntu-22.04,   name: linux-x64-cuda,     cmake: "-DGGML_CUDA=ON" }
+          - { os: ubuntu-22.04,   name: linux-x64-cpu,      cmake: "" }
+          - { os: macos-14,       name: macos-arm64-metal,  cmake: "-DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON" }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { repository: ggml-org/whisper.cpp, ref: "${{ env.WHISPER_REF }}", path: whisper.cpp }
+
+      - name: Vulkan SDK
+        if: contains(matrix.name, 'vulkan')
+        uses: jakoch/install-vulkan-sdk-action@v1
+        with: { install_runtime: true, cache: true, stripdown: true }
+
+      - name: CUDA toolkit
+        if: contains(matrix.name, 'cuda')
+        uses: Jimver/cuda-toolkit@v0.2.19
+        with: { cuda: "12.6.0", method: network, sub-packages: '["nvcc","cudart","cublas","cublas_dev","thrust","visual_studio_integration"]' }
+
+      - name: Configure + build
+        shell: bash
+        run: |
+          cmake -S whisper.cpp -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
+            -DWHISPER_BUILD_EXAMPLES=ON -DWHISPER_BUILD_TESTS=OFF ${{ matrix.cmake }}
+          cmake --build build --config Release -j 4 --target whisper-cli whisper-quantize
+
+      - name: Package
+        shell: bash
+        run: |
+          mkdir -p pkg
+          find build -type f \( -name 'whisper-cli' -o -name 'whisper-cli.exe' -o -name 'whisper-quantize' -o -name 'whisper-quantize.exe' -o -name '*.dll' \) -exec cp {} pkg/ \;
+          cp whisper.cpp/LICENSE pkg/LICENSE-whisper.cpp
+          cd pkg && 7z a ../whisper-cli-${{ matrix.name }}.zip . >/dev/null 2>&1 || zip -r ../whisper-cli-${{ matrix.name }}.zip .
+
+      - uses: actions/upload-artifact@v4
+        with: { name: "whisper-cli-${{ matrix.name }}", path: "whisper-cli-${{ matrix.name }}.zip" }
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions: { contents: write }
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: dist, merge-multiple: true }
+      - uses: softprops/action-gh-release@v2
+        with: { files: "dist/*.zip" }
