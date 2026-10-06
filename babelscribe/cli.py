@@ -3,6 +3,7 @@ Vulkan, NVIDIA via CUDA, Apple via Metal) or the CPU.
 
   babelscribe talk.mp4                         # auto language, turbo model, best GPU -> talk.srt + talk.json
   babelscribe vo.wav -l th --text-model thai-thonburian   # hybrid: Thai fine-tune text + turbo timing
+  babelscribe talk.mp4 --accurate              # slower, fewest errors: large-v3 + beam search, or the best fine-tune
   babelscribe devices                          # list GPUs whisper.cpp can use
   babelscribe models                           # list models and fine-tunes"""
 from __future__ import annotations
@@ -27,6 +28,8 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("-l", "--lang", default="auto", help="language code (th, en, ja, ...) or auto")
     ap.add_argument("-m", "--model", default="turbo", help="timing/general model (default turbo = large-v3-turbo)")
     ap.add_argument("--text-model", help="language fine-tune for the text (hybrid mode), e.g. thai-thonburian")
+    ap.add_argument("--accurate", action="store_true",
+                    help="slower but fewest errors: large-v3 with beam search, or the language's best fine-tune (hybrid)")
     ap.add_argument("-f", "--formats", default="srt,json", help="comma list: srt,vtt,txt,json")
     ap.add_argument("-o", "--out", help="output base path (default: next to the input)")
     ap.add_argument("--device", default="auto", help="GPU id from `babelscribe devices`, or auto")
@@ -51,9 +54,16 @@ def main(argv: list[str] | None = None) -> None:
     lang = a.lang
     if lang == "auto":
         lang = transcribe.detected_language(binary, timing, src, dev); print(f"language: {lang}")
+    beam = None
+    if a.accurate:
+        if not a.text_model and lang in models.ACCURATE:
+            a.text_model = models.ACCURATE[lang]          # fine-tune text + turbo timing
+        elif not a.text_model and a.model == "turbo":
+            a.model, beam = "large-v3", 5
+            timing = models.ensure(a.model)
     t0 = time.time()
     print(f"transcribing with {a.model} on {gpu['backend']} {gpu['name']} ...")
-    segs = transcribe.run(binary, timing, src, lang, dev, verbose=a.verbose)
+    segs = transcribe.run(binary, timing, src, lang, dev, beam=beam, verbose=a.verbose)
     meta = {"tool": f"babelscribe {__version__}", "model": a.model, "lang": lang, "device": f"{gpu['backend']} {gpu['name']}"}
     if a.text_model:
         _, ft = models.resolve(a.text_model)

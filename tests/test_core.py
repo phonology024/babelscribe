@@ -35,3 +35,10 @@ def test_writers(tmp_path: Path):
     files = writers.write(segs, tmp_path / "x", ["srt", "vtt", "txt", "json"], {})
     assert (tmp_path / "x.srt").read_text(encoding="utf-8").startswith("1\n00:00:00,000 --> 00:00:01,500\nhi")
     assert len(files) == 4
+
+
+def test_accurate_models_resolve():
+    from babelscribe import cli, models  # noqa: F401  (import catches syntax errors in every module)
+    for lang, name in models.ACCURATE.items():
+        _, ft = models.resolve(name)
+        assert ft and ft["lang"] == lang

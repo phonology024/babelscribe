@@ -23,8 +23,15 @@ ALIASES = {"turbo": "large-v3-turbo", "large": "large-v3"}
 # Community fine-tunes: add a line to support a new language better. 'beam' = needs beam search (greedy loops).
 FINETUNES = {
     "thai-thonburian": {"repo": "biodatlab/whisper-th-large-v3-combined", "lang": "th", "beam": 5, "timestamps": False,
-                        "note": "Thonburian Whisper (Thai) — best Thai spelling; pair with turbo for timing"},
+                        "note": "Thonburian Whisper (Thai) — strong Thai spelling; pair with turbo for timing"},
+    "thai-pathumma": {"repo": "nectec/Pathumma-whisper-th-large-v3", "lang": "th", "beam": 5, "timestamps": False,
+                      "note": "Pathumma Whisper by NECTEC (Thai) — lowest Thai CER on FLEURS"},
+    "hindi-vasista": {"repo": "vasista22/whisper-hindi-large-v2", "lang": "hi", "beam": 5, "timestamps": False,
+                      "note": "Hindi fine-tune of large-v2 (Speech Lab, IIT Madras) — halves Hindi WER on FLEURS"},
 }
+# --accurate: per language, the model that scored best on FLEURS (bench/fleurs.py). Languages not listed use large-v3
+# with beam search, which beat every public fine-tune we tried for vi / ar.
+ACCURATE = {"th": "thai-pathumma", "hi": "hindi-vasista"}
 MODELS = Path(os.environ.get("BABELSCRIBE_MODELS", CACHE / "models"))
 
 
@@ -73,6 +80,10 @@ def convert_finetune(name: str, ft: dict, out: Path, quantizer: Path | None) -> 
     script = work / "convert-h5-to-ggml.py"
     if not script.exists():
         urllib.request.urlretrieve("https://raw.githubusercontent.com/ggml-org/whisper.cpp/master/models/convert-h5-to-ggml.py", script)
+    # some fine-tunes ship bf16 weights, which the converter cannot export -> load them as float32
+    src = script.read_text(encoding="utf-8").replace("WhisperForConditionalGeneration.from_pretrained(dir_model)\n",
+                                                     "WhisperForConditionalGeneration.from_pretrained(dir_model).float()\n")
+    script.write_text(src, encoding="utf-8")
     subprocess.run([sys.executable, str(script), hf, str(oa), str(work)], check=True)
     f32 = work / "ggml-model.bin"
     if quantizer and quantizer.exists():
