@@ -1,0 +1,20 @@
+# Publish server.json to the official MCP Registry (registry.modelcontextprotocol.io) on every v* tag.
+# Auth uses GitHub OIDC, so no token or manual login is needed. server.json's version must already be on PyPI.
+name: publish-mcp-registry
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions: { id-token: write, contents: read }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install mcp-publisher
+        run: curl -sL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" | tar xz mcp-publisher
+      - name: Publish
+        run: |
+          ./mcp-publisher login github-oidc
+          ./mcp-publisher publish
