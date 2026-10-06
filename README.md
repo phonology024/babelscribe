@@ -21,8 +21,25 @@ Vulkan SDK yourself. babelscribe downloads a prebuilt `whisper-cli` for your sys
 | Apple Silicon | Metal | `macos-arm64-metal` |
 | No usable GPU | CPU | `*-cpu` (`--flavor cpu`) |
 
-Measured on an AMD Radeon RX 9070 XT (Vulkan): 90 s of English in 5.4 s, 105 s of Thai in 9.8 s, a 14-minute talk in ~75 s
-with `large-v3-turbo`.
+A 19-minute English TED talk transcribes in 53 seconds on an AMD Radeon RX 9070 XT with 1.5% word error — see the benchmark below.
+
+## Benchmark: real talks, human captions as the answer key
+Four TED / TEDx talks, scored against the **human-made captions in the spoken language** (`bench/bench.py`, reproducible).
+Error = word error rate (WER) for space-separated languages, character error rate (CER) for Japanese and Thai.
+GPU: AMD Radeon RX 9070 XT via Vulkan, model `large-v3-turbo`.
+
+| Language | Talk | Length | Time | Speed | Error |
+|---|---|---|---|---|---|
+| English | [Matt Walker — Sleep Is Your Superpower (TED)](https://youtu.be/5MuIMqhT8DM) | 19.3 min | 53 s | 22x real time | WER **1.5%** |
+| Japanese | [Kazunari Taguchi (TEDxHimi)](https://youtu.be/cjtmDEG-B7U) | 16.2 min | 52 s | 19x | CER **4.7%** |
+| Spanish | [Adrià Solà Pastor — Cómo hablar (TEDxESIC University)](https://youtu.be/XUqrvbsTfck) | 19.9 min | 62 s | 19x | WER 13.8% |
+| Thai | [นิติ ชัยชิตาทร — โปรดเรียกฉันด้วยนามอันแท้จริง (TEDxBangkok)](https://youtu.be/48A9SU6_bQ8) | 14.1 min | 84 s | 10x | CER 22.7% |
+| Thai, hybrid `--text-model thai-thonburian` | same talk | 14.1 min | 471 s | 2x | CER **20.5%** |
+
+How to read it: TED captions are edited for reading (fillers dropped, light rewording), so these numbers are an upper bound —
+most of the Spanish "errors" are the speaker's actual words versus the tidied caption. Thai is genuinely harder: fast,
+casual speech with slang; hybrid mode improves it and spells names better, at ~5x the time.
+Talks are used only to measure accuracy; their transcripts are not redistributed (TED content is CC BY-NC-ND).
 
 ## Why babelscribe (vs. what already exists)
 | | GPU on AMD / Intel | Windows, no build step | Video in, subtitles out | Long files don't loop | Better text for your language |
