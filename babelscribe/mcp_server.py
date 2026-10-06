@@ -1,9 +1,9 @@
 """babelscribe as an MCP server: any MCP client (Claude Desktop / Code, Codex, Antigravity, Gemini CLI, Cursor,
 VS Code, ...) can transcribe local audio/video on the user's own GPU.
 
-  babelscribe-mcp            # stdio server; clients launch it themselves (see README "Use from an AI app")
+  babelscribe mcp            # stdio server; AI apps launch it themselves (see README "Use it from an AI app")
 
-Needs: pip install "babelscribe[mcp]" (Python 3.10+)."""
+Needs Python 3.10+ (the mcp SDK)."""
 
 import io
 import os
@@ -120,7 +120,7 @@ def main() -> None:
         import anyio
         from mcp.server.stdio import stdio_server
     except ImportError:
-        raise SystemExit('the MCP server needs: pip install "babelscribe[mcp]"  (Python 3.10+)')
+        raise SystemExit('the MCP server needs Python 3.10+ (the mcp SDK)')
     proto = _guard_stdout()
     srv = build()
 

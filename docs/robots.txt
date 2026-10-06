@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://phonology024.github.io/babelscribe/sitemap.xml

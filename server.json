@@ -1,0 +1,19 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.phonology024/babelscribe",
+  "title": "babelscribe",
+  "description": "Local speech-to-text and subtitles (SRT/VTT/TXT) for audio and video, 99 languages, on your own AMD/NVIDIA/Intel/Apple GPU.",
+  "version": "0.3.1",
+  "websiteUrl": "https://phonology024.github.io/babelscribe/",
+  "repository": { "url": "https://github.com/phonology024/babelscribe", "source": "github" },
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "babelscribe",
+      "version": "0.3.1",
+      "runtimeHint": "uvx",
+      "transport": { "type": "stdio" },
+      "packageArguments": [ { "type": "positional", "value": "mcp" } ]
+    }
+  ]
+}

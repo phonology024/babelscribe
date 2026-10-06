@@ -1,7 +1,15 @@
-# babelscribe
+# babelscribe — free, offline speech-to-text and subtitles on any GPU (AMD, NVIDIA, Intel, Apple)
 
-**Transcribe any audio or video, in any of Whisper's 99 languages, on any GPU — AMD, NVIDIA, Intel or Apple — or just the CPU.**
-One command, no CUDA required, subtitles out.
+<!-- mcp-name: io.github.phonology024/babelscribe -->
+
+[![PyPI](https://img.shields.io/pypi/v/babelscribe)](https://pypi.org/project/babelscribe/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![MCP server](https://img.shields.io/badge/MCP-server-blue)](#use-it-from-an-ai-app-mcp--no-terminal-needed)
+
+**babelscribe turns any audio or video file into subtitles (SRT, VTT) and text, in any of Whisper's 99 languages, on your
+own graphics card — AMD Radeon, NVIDIA, Intel Arc or Apple Silicon — or the CPU. No CUDA needed, no cloud, free (MIT).**
+It runs OpenAI Whisper through [whisper.cpp](https://github.com/ggml-org/whisper.cpp) with Vulkan, CUDA or Metal, and works
+from the command line, from Python, or from AI apps (Claude, Codex, Antigravity, Gemini CLI, Cursor) as an MCP server.
 
 ```bash
 pip install babelscribe          # Python 3.9+
@@ -36,12 +44,12 @@ Tools: `transcribe` (file → subtitles + text), `find_media` (newest audio/vide
 and double-click it (or *Settings → Extensions → Install extension*).
 
 **Everything else** runs the same command — [uv](https://docs.astral.sh/uv/) fetches babelscribe for you:
-`uvx --from "babelscribe[mcp]" babelscribe-mcp`
+`uvx babelscribe mcp`
 
 | App | How to add it |
 |---|---|
-| Claude Code | `claude mcp add babelscribe -- uvx --from "babelscribe[mcp]" babelscribe-mcp` |
-| OpenAI Codex CLI | `codex mcp add babelscribe -- uvx --from "babelscribe[mcp]" babelscribe-mcp`, then in `~/.codex/config.toml` under `[mcp_servers.babelscribe]` set `tool_timeout_sec = 3600` and `startup_timeout_sec = 120` (defaults are 60 s / 10 s — too short for a long video or the first model download) |
+| Claude Code | `claude mcp add babelscribe -- uvx babelscribe mcp` |
+| OpenAI Codex CLI | `codex mcp add babelscribe -- uvx babelscribe mcp`, then in `~/.codex/config.toml` under `[mcp_servers.babelscribe]` set `tool_timeout_sec = 3600` and `startup_timeout_sec = 120` (defaults are 60 s / 10 s — too short for a long video or the first model download) |
 | Google Antigravity | agent panel → ⋯ → *MCP Servers* → *Manage MCP Servers* → *View raw config*, add the JSON below |
 | Gemini CLI | add the JSON below to `~/.gemini/settings.json` |
 | Cursor | add the JSON below to `~/.cursor/mcp.json` |
@@ -50,11 +58,11 @@ and double-click it (or *Settings → Extensions → Install extension*).
 ```json
 {
   "mcpServers": {
-    "babelscribe": { "command": "uvx", "args": ["--from", "babelscribe[mcp]", "babelscribe-mcp"], "timeout": 3600000 }
+    "babelscribe": { "command": "uvx", "args": ["babelscribe", "mcp"], "timeout": 3600000 }
   }
 }
 ```
-(`timeout` is in milliseconds and only some apps read it.) Already installed with pip? Use `"command": "babelscribe-mcp"` with no args.
+(`timeout` is in milliseconds and only some apps read it.) Already installed with pip? Use `"command": "babelscribe", "args": ["mcp"]`.
 Web-only chat apps (e.g. grok.com, chatgpt.com) can only reach servers on the internet, not your computer, so they can't use your GPU or files.
 
 ## Benchmark: real talks, human captions as the answer key
@@ -118,6 +126,32 @@ babelscribe does **not** replace those projects — it stands on whisper.cpp and
 compiling for your GPU, converting media, picking the right device, avoiding the long-file repeat bug, and combining
 a language-specific fine-tune with accurate timestamps.
 
+## FAQ
+**How do I run Whisper on an AMD GPU on Windows?**
+`pip install babelscribe`, then `babelscribe video.mp4`. It downloads a Vulkan build of whisper.cpp that runs on AMD Radeon
+(and Intel Arc / NVIDIA) cards on Windows and Linux — no ROCm, no CUDA, no compiling.
+
+**How do I make subtitles (SRT) from a video for free, offline?**
+`babelscribe video.mp4 -f srt` writes `video.srt` next to the video. Nothing is uploaded; it runs on your own computer.
+
+**What is the most accurate free transcription for Thai?**
+`babelscribe video.mp4 -l th --accurate` — Pathumma Whisper (NECTEC) for the text plus Whisper turbo for timing:
+CER 8.9% on Google FLEURS vs 15.9% for plain Whisper turbo. Thonburian Whisper is available too (`--text-model thai-thonburian`).
+
+**Can Claude / ChatGPT Codex / Gemini transcribe a video on my computer?**
+Yes — add babelscribe as an MCP server (see *Use it from an AI app*). Claude Desktop installs it with one click from
+`babelscribe.mcpb`. The AI app can then find a file, transcribe it on your GPU, and proofread, translate or summarise the text.
+
+**How fast is it?**
+About 20x real time with Whisper large-v3-turbo on an AMD Radeon RX 9070 XT: a 19-minute talk in 48 seconds.
+
+**Which languages are supported?**
+All 99 Whisper languages, with automatic language detection. FLEURS error rates for 16 of them are in the benchmark table.
+
+**Is it better than faster-whisper or WhisperX?**
+Those are excellent on NVIDIA GPUs; on AMD / Intel GPUs they fall back to the CPU. babelscribe's niche is any GPU, zero setup,
+and better Thai / Hindi through community fine-tunes. If you have an NVIDIA card and like Python, faster-whisper is a fine choice.
+
 ## Languages
 All 99 languages Whisper was trained on, auto-detected or forced with `-l`:
 af am ar as az ba be bg bn bo br bs ca cs cy da de el en es et eu fa fi fo fr gl gu ha haw he hi hr ht hu hy id is it ja jw ka kk km kn ko la lb ln lo lt lv mg mi mk ml mn mr ms mt my ne nl nn no oc pa pl ps pt ro ru sa sd si sk sl sn so sq sr su sv sw ta te tg th tk tl tr tt uk ur uz vi yi yo yue zh
@@ -150,6 +184,12 @@ babelscribe vo.wav -l th --text-model thai-thonburian   # hybrid: pick a Thai fi
 babelscribe devices                                # GPUs whisper.cpp can see
 babelscribe models                                 # models and fine-tunes
 babelscribe talk.mp4 --bin /path/to/whisper-cli    # use your own whisper.cpp build
+```
+From Python:
+```python
+from babelscribe.api import transcribe_file
+r = transcribe_file("talk.mp4", lang="auto", formats=["srt", "txt"])   # or accurate=True
+print(r["lang"], r["device"], r["files"]); print(r["text"][:200])
 ```
 Models download on first use to `~/.babelscribe/models` (`BABELSCRIBE_MODELS` to change). Hybrid fine-tunes are converted on your
 machine from their original Hugging Face repo — install `pip install "babelscribe[finetune]"` once; converted weights are never

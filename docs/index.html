@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>babelscribe — free offline speech-to-text &amp; subtitles on any GPU (AMD, NVIDIA, Intel, Apple)</title>
+<meta name="description" content="Turn any audio or video into SRT subtitles and text in 99 languages on your own GPU — AMD Radeon, NVIDIA, Intel Arc, Apple Silicon — or CPU. Free, open source, offline Whisper. Works in Claude, Codex, Gemini CLI as an MCP server.">
+<link rel="canonical" href="https://phonology024.github.io/babelscribe/">
+<link rel="icon" href="icon.png">
+<meta property="og:type" content="website">
+<meta property="og:title" content="babelscribe — free offline subtitles on any GPU">
+<meta property="og:description" content="Whisper speech-to-text for AMD, NVIDIA, Intel and Apple GPUs. 99 languages, SRT/VTT/TXT, MCP server for AI apps. MIT.">
+<meta property="og:url" content="https://phonology024.github.io/babelscribe/">
+<meta property="og:image" content="https://phonology024.github.io/babelscribe/icon.png">
+<meta name="twitter:card" content="summary">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@graph":[
+{"@type":"SoftwareApplication","name":"babelscribe","applicationCategory":"MultimediaApplication","operatingSystem":"Windows, Linux, macOS",
+ "description":"Free, open-source, offline speech-to-text and subtitle generator. Transcribes audio and video in 99 languages on AMD, NVIDIA, Intel and Apple GPUs using OpenAI Whisper via whisper.cpp (Vulkan, CUDA, Metal). Also an MCP server for AI apps.",
+ "offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"license":"https://opensource.org/licenses/MIT",
+ "url":"https://phonology024.github.io/babelscribe/","downloadUrl":"https://pypi.org/project/babelscribe/",
+ "codeRepository":"https://github.com/phonology024/babelscribe","softwareVersion":"0.3.1",
+ "featureList":["Runs on AMD Radeon, NVIDIA, Intel Arc and Apple Silicon GPUs","99 languages with auto-detection","SRT, VTT, TXT and JSON output","Accurate mode with Thai and Hindi fine-tunes","MCP server for Claude, Codex, Gemini CLI, Antigravity, Cursor"]},
+{"@type":"FAQPage","mainEntity":[
+ {"@type":"Question","name":"How do I run Whisper on an AMD GPU on Windows?","acceptedAnswer":{"@type":"Answer","text":"Install babelscribe with pip install babelscribe, then run babelscribe video.mp4. It downloads a Vulkan build of whisper.cpp that runs on AMD Radeon, Intel Arc and NVIDIA cards on Windows and Linux without ROCm, CUDA or compiling."}},
+ {"@type":"Question","name":"How do I make SRT subtitles from a video for free and offline?","acceptedAnswer":{"@type":"Answer","text":"Run babelscribe video.mp4 -f srt. It writes video.srt next to the video. Everything runs on your own computer; nothing is uploaded."}},
+ {"@type":"Question","name":"What is the most accurate free speech-to-text for Thai?","acceptedAnswer":{"@type":"Answer","text":"babelscribe video.mp4 -l th --accurate uses Pathumma Whisper by NECTEC for the text and Whisper turbo for timing: 8.9% character error rate on Google FLEURS versus 15.9% for plain Whisper turbo."}},
+ {"@type":"Question","name":"Can Claude or Codex transcribe a video on my computer?","acceptedAnswer":{"@type":"Answer","text":"Yes. Add babelscribe as an MCP server (Claude Desktop installs it with one click from babelscribe.mcpb; other apps run uvx babelscribe mcp). The AI app can then find a file, transcribe it on your GPU, and proofread, translate or summarise it."}},
+ {"@type":"Question","name":"How fast is babelscribe?","acceptedAnswer":{"@type":"Answer","text":"About 20 times real time with Whisper large-v3-turbo on an AMD Radeon RX 9070 XT: a 19-minute talk transcribes in 48 seconds."}}
+]}]}
+</script>
+<style>
+:root{--bg:#f7f8fb;--fg:#141a2b;--mut:#5a6378;--card:#fff;--line:#e3e6ee;--acc:#0b7fc7;--code:#eef2f8;--onacc:#fff}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1422;--fg:#e8ecf5;--mut:#9aa4bb;--card:#171e30;--line:#263049;--acc:#5ac8ff;--code:#1d2640;--onacc:#0f1422}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:860px;margin:0 auto;padding:40px 16px 64px}
+header{display:flex;gap:16px;align-items:center}header img{width:64px;height:64px;border-radius:14px}
+h1{font-size:1.9rem;line-height:1.2;margin:0}h2{margin-top:2.2em;font-size:1.3rem}
+.lead{font-size:1.1rem;color:var(--mut)}a{color:var(--acc)}
+pre{background:var(--code);padding:14px 16px;border-radius:10px;overflow-x:auto;font-size:.9rem}
+code{font-family:ui-monospace,Consolas,monospace}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.card b{display:block;margin-bottom:4px}
+table{border-collapse:collapse;width:100%;font-size:.95rem}td,th{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left}
+details{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin:8px 0}summary{cursor:pointer;font-weight:600}
+.btns a{display:inline-block;margin:6px 8px 0 0;padding:9px 16px;border-radius:9px;background:var(--acc);color:var(--onacc);text-decoration:none;font-weight:600}
+.btns a.alt{background:transparent;color:var(--acc);border:1px solid var(--acc)}
+</style>
+</head>
+<body><main>
+<header><img src="icon.png" alt="babelscribe logo"><div><h1>babelscribe</h1><div class="lead">Free, offline speech-to-text and subtitles on any GPU</div></div></header>
+
+<p><strong>babelscribe turns any audio or video file into subtitles (SRT, VTT) and text, in any of Whisper's 99 languages, on your own graphics card — AMD Radeon, NVIDIA, Intel Arc or Apple Silicon — or the CPU.</strong> No CUDA, no cloud, free and open source (MIT). It runs OpenAI Whisper through whisper.cpp with Vulkan, CUDA or Metal.</p>
+<div class="btns"><a href="https://github.com/phonology024/babelscribe">GitHub</a><a class="alt" href="https://pypi.org/project/babelscribe/">PyPI</a><a class="alt" href="https://github.com/phonology024/babelscribe/releases/latest/download/babelscribe.mcpb">Claude Desktop extension</a></div>
+
+<h2>Install and run</h2>
+<pre><code>pip install babelscribe
+babelscribe interview.mp4              # auto language, best GPU -&gt; interview.srt
+babelscribe interview.mp4 --accurate   # slower, fewest errors</code></pre>
+
+<div class="grid">
+<div class="card"><b>Any GPU</b>AMD Radeon and Intel Arc via Vulkan, NVIDIA via Vulkan or CUDA, Apple via Metal. Picks your discrete card automatically.</div>
+<div class="card"><b>99 languages</b>Auto-detects the language. Thai and Hindi get community fine-tunes in accurate mode.</div>
+<div class="card"><b>Works in AI apps</b>MCP server for Claude Desktop, Claude Code, Codex, Antigravity, Gemini CLI, Cursor and VS Code.</div>
+<div class="card"><b>Private</b>Everything runs on your computer. Nothing is uploaded.</div>
+</div>
+
+<h2>Use it from an AI app</h2>
+<p>Claude Desktop: download <a href="https://github.com/phonology024/babelscribe/releases/latest/download/babelscribe.mcpb">babelscribe.mcpb</a> and double-click it. Then ask: <em>"make subtitles for the newest video in my Downloads"</em>. Other apps:</p>
+<pre><code>uvx babelscribe mcp</code></pre>
+
+<h2>Accuracy (Google FLEURS, 50 utterances per language)</h2>
+<table><tr><th>Language</th><th>Default (turbo)</th><th>--accurate</th></tr>
+<tr><td>English</td><td>6.1%</td><td>5.7%</td></tr><tr><td>Spanish</td><td>4.1%</td><td>4.2%</td></tr>
+<tr><td>Japanese (CER)</td><td>6.4%</td><td>5.7%</td></tr><tr><td>Chinese (CER)</td><td>6.3%</td><td>5.3%</td></tr>
+<tr><td>Thai (CER)</td><td>15.9%</td><td><b>8.9%</b></td></tr><tr><td>Hindi</td><td>28.4%</td><td><b>12.6%</b></td></tr>
+<tr><td>Vietnamese</td><td>10.8%</td><td>9.1%</td></tr><tr><td>Arabic</td><td>11.0%</td><td>10.6%</td></tr></table>
+<p>Full 16-language table and methodology in the <a href="https://github.com/phonology024/babelscribe#benchmark-16-languages-on-fleurs">README</a>.</p>
+
+<h2>FAQ</h2>
+<details><summary>How do I run Whisper on an AMD GPU on Windows?</summary><p><code>pip install babelscribe</code>, then <code>babelscribe video.mp4</code>. It downloads a Vulkan build of whisper.cpp that runs on AMD Radeon, Intel Arc and NVIDIA cards on Windows and Linux — no ROCm, no CUDA, no compiling.</p></details>
+<details><summary>How do I make SRT subtitles from a video for free and offline?</summary><p><code>babelscribe video.mp4 -f srt</code> writes <code>video.srt</code> next to the video. Nothing is uploaded.</p></details>
+<details><summary>What is the most accurate free speech-to-text for Thai?</summary><p><code>babelscribe video.mp4 -l th --accurate</code> — Pathumma Whisper (NECTEC) for the text plus Whisper turbo for timing: 8.9% CER on FLEURS vs 15.9% for plain Whisper turbo.</p></details>
+<details><summary>Can Claude or Codex transcribe a video on my computer?</summary><p>Yes — add babelscribe as an MCP server. The AI app can find a file, transcribe it on your GPU, then proofread, translate or summarise the text.</p></details>
+<details><summary>How fast is it?</summary><p>About 20x real time with large-v3-turbo on an AMD Radeon RX 9070 XT — a 19-minute talk in 48 seconds.</p></details>
+
+<h2>ภาษาไทย</h2>
+<p>ถอดเสียงและทำซับไตเติลจากวิดีโอหรือไฟล์เสียงฟรี ใช้การ์ดจอ AMD / NVIDIA / Intel / Apple ในเครื่องตัวเอง ไม่ต้องอัปโหลด ภาษาไทยแม่นที่สุดด้วย <code>--accurate</code> (Pathumma Whisper ของ NECTEC) หรือใช้ผ่าน Claude Desktop ได้โดยไม่ต้องพิมพ์คำสั่ง</p>
+
+<p style="color:var(--mut);margin-top:3em">MIT licence · built on whisper.cpp and OpenAI Whisper · fine-tunes belong to their authors</p>
+</main></body></html>

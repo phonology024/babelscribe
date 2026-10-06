@@ -2,7 +2,7 @@
   "manifest_version": "0.4",
   "name": "babelscribe",
   "display_name": "babelscribe — local speech-to-text",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Transcribe audio and video into subtitles on your own GPU (AMD, NVIDIA, Intel, Apple) in 99 languages. Nothing is uploaded.",
   "long_description": "Ask Claude to make subtitles or a transcript from any audio/video file on your computer. babelscribe runs whisper.cpp locally on your graphics card (Vulkan / CUDA / Metal) or CPU, writes .srt / .txt next to the file, and hands the text back so Claude can proofread names, translate or summarise it. Use accurate mode for the fewest errors — it is much better for Thai and Hindi. The first run downloads the speech model (~1.6 GB).",
   "author": {

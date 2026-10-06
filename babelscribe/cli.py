@@ -4,6 +4,7 @@ Vulkan, NVIDIA via CUDA, Apple via Metal) or the CPU.
   babelscribe talk.mp4                         # auto language, turbo model, best GPU -> talk.srt + talk.json
   babelscribe vo.wav -l th --text-model thai-thonburian   # hybrid: Thai fine-tune text + turbo timing
   babelscribe talk.mp4 --accurate              # slower, fewest errors: large-v3 + beam search, or the best fine-tune
+  babelscribe mcp                              # MCP server for AI apps (Claude, Codex, Gemini CLI, ...)
   babelscribe devices                          # list GPUs whisper.cpp can use
   babelscribe models                           # list models and fine-tunes"""
 from __future__ import annotations
@@ -16,6 +17,9 @@ from . import __version__, api, backend, models
 
 def main(argv: list[str] | None = None) -> None:
     argv = sys.argv[1:] if argv is None else argv
+    if argv[:1] == ["mcp"]:                          # MCP server for AI apps (stdio)
+        from .mcp_server import main as serve
+        return serve()
     if argv[:1] == ["models"]:
         print("general (99 languages):"); [print(f"  {k:16} {v}") for k, v in models.GENERAL.items()]
         print("fine-tunes (text quality for one language, use with --text-model):")

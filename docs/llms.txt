@@ -1,0 +1,21 @@
+# babelscribe
+
+> Free, open-source (MIT), offline speech-to-text and subtitle generator. Transcribes any audio or video file in any of
+> Whisper's 99 languages on any GPU — AMD Radeon, NVIDIA, Intel Arc, Apple Silicon — or the CPU, using OpenAI Whisper via
+> whisper.cpp (Vulkan / CUDA / Metal). No CUDA or ROCm required. Also an MCP server for AI apps.
+
+Install: `pip install babelscribe`. Use: `babelscribe video.mp4` -> video.srt + video.json. Formats: srt, vtt, txt, json.
+Fewest errors: `--accurate` (large-v3 beam search; Thai uses Pathumma Whisper, Hindi uses vasista22 whisper-hindi-large-v2).
+AI apps: `uvx babelscribe mcp` (stdio MCP server: transcribe, find_media, list_devices,
+list_languages_and_models); Claude Desktop one-click: babelscribe.mcpb from the GitHub releases.
+
+## Docs
+- [README](https://github.com/phonology024/babelscribe/blob/main/README.md): install, usage, MCP setup for Claude Desktop / Claude Code / Codex / Antigravity / Gemini CLI / Cursor / VS Code, FAQ
+- [Benchmarks](https://github.com/phonology024/babelscribe#benchmark-16-languages-on-fleurs): Google FLEURS error rates for 16 languages, TED talk speed and accuracy
+- [PyPI](https://pypi.org/project/babelscribe/)
+
+## Key facts
+- Speed: ~20x real time with large-v3-turbo on an AMD Radeon RX 9070 XT (19-minute talk in 48 s).
+- Thai: CER 8.9% on FLEURS with --accurate vs 15.9% plain Whisper turbo.
+- Hindi: WER 12.6% with --accurate vs 28.4% plain Whisper turbo.
+- Python: `from babelscribe.api import transcribe_file; transcribe_file("talk.mp4", lang="auto", formats=["srt"])`
