@@ -10,10 +10,8 @@ from __future__ import annotations
 
 import argparse
 import sys
-import time
-from pathlib import Path
 
-from . import __version__, backend, hybrid, models, transcribe, writers
+from . import __version__, api, backend, models
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -39,42 +37,16 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--version", action="version", version=__version__)
     a = ap.parse_args(argv)
 
-    binary = backend.find_binary(a.bin, a.flavor)
-    timing = models.ensure(a.model, binary.parent / ("whisper-quantize.exe" if binary.suffix == ".exe" else "whisper-quantize"))
-    binary, found = backend.probe_or_refetch(binary, timing, a.flavor)
     if a.input == "devices":
+        _, _, found = api.setup(a.model, a.bin, a.flavor)
         for d in found:
             print(f"  [{d['id']}] {d['backend']:6} {d['name']}  {d.get('detail', '')}")
         print(f"auto picks device {backend.pick_device(found)}"); return
-    dev = backend.pick_device(found) if a.device == "auto" else int(a.device)
-    gpu = next((d for d in found if d["id"] == dev), found[0])
-    src = Path(a.input)
-    if not src.exists():
-        raise SystemExit(f"no such file: {src}")
-    lang = a.lang
-    if lang == "auto":
-        lang = transcribe.detected_language(binary, timing, src, dev); print(f"language: {lang}")
-    beam = None
-    if a.accurate:
-        if not a.text_model and lang in models.ACCURATE:
-            a.text_model = models.ACCURATE[lang]          # fine-tune text + turbo timing
-        elif not a.text_model and a.model == "turbo":
-            a.model, beam = "large-v3", 5
-            timing = models.ensure(a.model)
-    t0 = time.time()
-    print(f"transcribing with {a.model} on {gpu['backend']} {gpu['name']} ...")
-    segs = transcribe.run(binary, timing, src, lang, dev, beam=beam, verbose=a.verbose)
-    meta = {"tool": f"babelscribe {__version__}", "model": a.model, "lang": lang, "device": f"{gpu['backend']} {gpu['name']}"}
-    if a.text_model:
-        _, ft = models.resolve(a.text_model)
-        tm = models.ensure(a.text_model, binary.parent / ("whisper-quantize.exe" if binary.suffix == ".exe" else "whisper-quantize"))
-        print(f"text pass with {a.text_model} ...")
-        segs = hybrid.run(binary, tm, src, segs, ft["lang"] if ft else lang, dev, (ft or {}).get("beam"), a.verbose)
-        meta["text_model"] = a.text_model
-    base = Path(a.out) if a.out else src.with_suffix("")
-    files = writers.write(segs, base, [f.strip() for f in a.formats.split(",") if f.strip()], meta)
-    print(f"{len(segs)} segments in {time.time() - t0:.1f}s -> " + ", ".join(str(f) for f in files))
-
+    try:
+        api.transcribe_file(a.input, a.lang, a.model, a.text_model, a.accurate,
+                            [f.strip() for f in a.formats.split(",") if f.strip()], a.out, a.device, a.bin, a.flavor, a.verbose)
+    except FileNotFoundError as e:
+        raise SystemExit(str(e))
 
 if __name__ == "__main__":
     main()

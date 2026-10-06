@@ -1,0 +1,68 @@
+{
+  "manifest_version": "0.4",
+  "name": "babelscribe",
+  "display_name": "babelscribe — local speech-to-text",
+  "version": "0.3.0",
+  "description": "Transcribe audio and video into subtitles on your own GPU (AMD, NVIDIA, Intel, Apple) in 99 languages. Nothing is uploaded.",
+  "long_description": "Ask Claude to make subtitles or a transcript from any audio/video file on your computer. babelscribe runs whisper.cpp locally on your graphics card (Vulkan / CUDA / Metal) or CPU, writes .srt / .txt next to the file, and hands the text back so Claude can proofread names, translate or summarise it. Use accurate mode for the fewest errors — it is much better for Thai and Hindi. The first run downloads the speech model (~1.6 GB).",
+  "author": {
+    "name": "phonology024",
+    "url": "https://github.com/phonology024"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/phonology024/babelscribe"
+  },
+  "homepage": "https://github.com/phonology024/babelscribe",
+  "license": "MIT",
+  "icon": "icon.png",
+  "keywords": [
+    "transcription",
+    "subtitles",
+    "speech-to-text",
+    "whisper",
+    "gpu",
+    "thai"
+  ],
+  "server": {
+    "type": "uv",
+    "entry_point": "src/server.py",
+    "mcp_config": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "${__dirname}",
+        "src/server.py"
+      ],
+      "env": {
+        "PYTHONIOENCODING": "utf-8"
+      }
+    }
+  },
+  "tools": [
+    {
+      "name": "transcribe",
+      "description": "Transcribe a local audio/video file into subtitles (.srt) and text"
+    },
+    {
+      "name": "find_media",
+      "description": "Find audio/video files in Downloads, Videos, Desktop, Music, Documents"
+    },
+    {
+      "name": "list_devices",
+      "description": "Show which GPUs can be used"
+    },
+    {
+      "name": "list_languages_and_models",
+      "description": "Models and the best model per language"
+    }
+  ],
+  "compatibility": {
+    "platforms": [
+      "win32",
+      "darwin",
+      "linux"
+    ]
+  }
+}

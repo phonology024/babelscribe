@@ -5,6 +5,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -30,7 +31,7 @@ def to_wav16k(src: Path, dst: Path, start: float | None = None, end: float | Non
     if tail_silence:   # whisper tends to drop the last words when audio stops abruptly
         cmd += ["-af", f"apad=pad_dur={tail_silence}"]
     cmd += ["-c:a", "pcm_s16le", str(dst)]
-    subprocess.run(cmd, check=True)
+    subprocess.run(cmd, check=True, stdout=sys.stderr)   # never stdout: it is the MCP channel
 
 
 def run(binary: Path, model: Path, media: Path, lang: str = "auto", device: int = 0, beam: int | None = None,

@@ -42,3 +42,19 @@ def test_accurate_models_resolve():
     for lang, name in models.ACCURATE.items():
         _, ft = models.resolve(name)
         assert ft and ft["lang"] == lang
+
+
+def test_mcp_server_tools(tmp_path):
+    import pytest
+    pytest.importorskip("mcp.server.mcpserver")
+    import anyio, json
+    from babelscribe import mcp_server
+    srv = mcp_server.build()
+    (tmp_path / "talk.mp4").write_bytes(b"x"); (tmp_path / "notes.txt").write_text("x")
+
+    async def go():
+        names = {t.name for t in await srv.list_tools()}
+        assert {"transcribe", "find_media", "list_devices", "list_languages_and_models"} <= names
+        return await srv.call_tool("find_media", {"folder": str(tmp_path)})
+    out = anyio.run(go)
+    assert "talk.mp4" in json.dumps(out, default=str) and "notes.txt" not in json.dumps(out, default=str)

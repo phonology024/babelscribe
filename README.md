@@ -23,6 +23,40 @@ Vulkan SDK yourself. babelscribe downloads a prebuilt `whisper-cli` for your sys
 
 A 19-minute English TED talk transcribes in 48 seconds on an AMD Radeon RX 9070 XT with 1.5% word error — see the benchmark below.
 
+## Use it from an AI app (MCP) — no terminal needed
+babelscribe is also an [MCP](https://modelcontextprotocol.io) server, so any AI app that supports local MCP servers can
+transcribe files on **your** computer with **your** GPU. Ask in plain words — *"make Thai subtitles for the newest video in
+my Downloads"* — and the app finds the file, transcribes it, writes `.srt` / `.txt` next to it, and can then proofread names,
+translate or summarise the text for you.
+
+Tools: `transcribe` (file → subtitles + text), `find_media` (newest audio/video in Downloads, Videos, Desktop, …),
+`list_devices`, `list_languages_and_models`.
+
+**Claude Desktop (one click):** download `babelscribe.mcpb` from the [latest release](https://github.com/phonology024/babelscribe/releases/latest)
+and double-click it (or *Settings → Extensions → Install extension*).
+
+**Everything else** runs the same command — [uv](https://docs.astral.sh/uv/) fetches babelscribe for you:
+`uvx --from "babelscribe[mcp]" babelscribe-mcp`
+
+| App | How to add it |
+|---|---|
+| Claude Code | `claude mcp add babelscribe -- uvx --from "babelscribe[mcp]" babelscribe-mcp` |
+| OpenAI Codex CLI | `codex mcp add babelscribe -- uvx --from "babelscribe[mcp]" babelscribe-mcp`, then in `~/.codex/config.toml` under `[mcp_servers.babelscribe]` set `tool_timeout_sec = 3600` and `startup_timeout_sec = 120` (defaults are 60 s / 10 s — too short for a long video or the first model download) |
+| Google Antigravity | agent panel → ⋯ → *MCP Servers* → *Manage MCP Servers* → *View raw config*, add the JSON below |
+| Gemini CLI | add the JSON below to `~/.gemini/settings.json` |
+| Cursor | add the JSON below to `~/.cursor/mcp.json` |
+| VS Code (Copilot) | `.vscode/mcp.json`: same entry under `"servers"` with `"type": "stdio"` |
+
+```json
+{
+  "mcpServers": {
+    "babelscribe": { "command": "uvx", "args": ["--from", "babelscribe[mcp]", "babelscribe-mcp"], "timeout": 3600000 }
+  }
+}
+```
+(`timeout` is in milliseconds and only some apps read it.) Already installed with pip? Use `"command": "babelscribe-mcp"` with no args.
+Web-only chat apps (e.g. grok.com, chatgpt.com) can only reach servers on the internet, not your computer, so they can't use your GPU or files.
+
 ## Benchmark: real talks, human captions as the answer key
 Four TED / TEDx talks, scored against the **human-made captions in the spoken language** (`bench/bench.py`, reproducible).
 Error = word error rate (WER) for space-separated languages, character error rate (CER) for Japanese and Thai.
@@ -129,6 +163,7 @@ Add one entry to `FINETUNES` in `babelscribe/models.py` (Hugging Face repo, lang
 them to each `v*` release. Point `BABELSCRIBE_RELEASES` at another URL to self-host.
 
 ## ภาษาไทย
+ใช้ผ่าน Claude Desktop ได้โดยไม่ต้องพิมพ์คำสั่ง: โหลด `babelscribe.mcpb` จากหน้า Releases แล้วดับเบิลคลิก จากนั้นพิมพ์ในแชทว่า *"ทำซับไทยให้คลิปล่าสุดในโฟลเดอร์ดาวน์โหลด"*
 ถอดเสียงจากไฟล์เสียงหรือวิดีโอได้ทุกภาษา บนการ์ดจอทุกยี่ห้อ (AMD / NVIDIA / Intel ผ่าน Vulkan, Apple ผ่าน Metal) หรือ CPU
 ภาษาไทยแนะนำ `babelscribe ไฟล์.mp4 -l th --accurate` — ข้อความจาก Pathumma Whisper (NECTEC) ที่ผิดน้อยที่สุดใน FLEURS (CER 8.9% เทียบ turbo 15.9%) + เวลาจาก large-v3-turbo
 หรือเลือก Thonburian Whisper เอง: `--text-model thai-thonburian`

@@ -76,7 +76,7 @@ def convert_finetune(name: str, ft: dict, out: Path, quantizer: Path | None) -> 
     hf = snapshot_download(ft["repo"], local_dir=work / "hf")
     oa = work / "openai-whisper"
     if not oa.exists():
-        subprocess.run(["git", "clone", "-q", "--depth", "1", "https://github.com/openai/whisper.git", str(oa)], check=True)
+        subprocess.run(["git", "clone", "-q", "--depth", "1", "https://github.com/openai/whisper.git", str(oa)], check=True, stdout=sys.stderr)
     script = work / "convert-h5-to-ggml.py"
     if not script.exists():
         urllib.request.urlretrieve("https://raw.githubusercontent.com/ggml-org/whisper.cpp/master/models/convert-h5-to-ggml.py", script)
@@ -84,10 +84,10 @@ def convert_finetune(name: str, ft: dict, out: Path, quantizer: Path | None) -> 
     src = script.read_text(encoding="utf-8").replace("WhisperForConditionalGeneration.from_pretrained(dir_model)\n",
                                                      "WhisperForConditionalGeneration.from_pretrained(dir_model).float()\n")
     script.write_text(src, encoding="utf-8")
-    subprocess.run([sys.executable, str(script), hf, str(oa), str(work)], check=True)
+    subprocess.run([sys.executable, str(script), hf, str(oa), str(work)], check=True, stdout=sys.stderr)
     f32 = work / "ggml-model.bin"
     if quantizer and quantizer.exists():
-        subprocess.run([str(quantizer), str(f32), str(out), "q8_0"], check=True)
+        subprocess.run([str(quantizer), str(f32), str(out), "q8_0"], check=True, stdout=sys.stderr)
         f32.unlink()
     else:
         f32.replace(out)
