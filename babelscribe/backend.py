@@ -93,7 +93,8 @@ def probe_devices(binary: Path, model: Path) -> list[dict]:
         wav = Path(d) / "s.wav"
         with wave.open(str(wav), "wb") as w:
             w.setnchannels(1); w.setsampwidth(2); w.setframerate(16000); w.writeframes(b"\0\0" * 16000)
-        out = subprocess.run([str(binary), "-m", str(model), "-f", str(wav), "-np"], capture_output=True, text=True, errors="replace")
+        # no -np: static builds route the GPU list through the same logger -np silences
+        out = subprocess.run([str(binary), "-m", str(model), "-f", str(wav)], capture_output=True, text=True, errors="replace")
     if out.returncode in (0xC000001D, -4, 132):   # Windows STATUS_ILLEGAL_INSTRUCTION / SIGILL
         raise IllegalInstruction(str(binary))
     text = out.stdout + out.stderr
