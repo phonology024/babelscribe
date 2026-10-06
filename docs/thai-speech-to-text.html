@@ -1,0 +1,32 @@
+<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ถอดเสียงภาษาไทยเป็นข้อความและทำซับไทยฟรี แม่นยำ ใช้การ์ดจอในเครื่อง — babelscribe</title><meta name="description" content="ถอดเสียงภาษาไทยจากวิดีโอหรือไฟล์เสียงเป็นข้อความและซับ SRT ฟรี ไม่ต้องอัปโหลด ใช้การ์ดจอ AMD NVIDIA Intel หรือ Mac แม่นกว่า Whisper ปกติเกือบเท่าตัวด้วย Pathumma Whisper">
+<link rel="canonical" href="https://phonology024.github.io/babelscribe/thai-speech-to-text.html"><link rel="icon" href="icon.png">
+<meta property="og:title" content="ถอดเสียงภาษาไทยเป็นข้อความและทำซับไทยฟรี แม่นยำ ใช้การ์ดจอในเครื่อง — babelscribe"><meta property="og:description" content="ถอดเสียงภาษาไทยจากวิดีโอหรือไฟล์เสียงเป็นข้อความและซับ SRT ฟรี ไม่ต้องอัปโหลด ใช้การ์ดจอ AMD NVIDIA Intel หรือ Mac แม่นกว่า Whisper ปกติเกือบเท่าตัวด้วย Pathumma Whisper">
+<meta property="og:url" content="https://phonology024.github.io/babelscribe/thai-speech-to-text.html"><meta property="og:image" content="https://phonology024.github.io/babelscribe/icon.png">
+<script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "TechArticle", "headline": "ถอดเสียงภาษาไทยเป็นข้อความ ฟรี แม่นยำ ทำงานในเครื่อง", "description": "ถอดเสียงภาษาไทยจากวิดีโอหรือไฟล์เสียงเป็นข้อความและซับ SRT ฟรี ไม่ต้องอัปโหลด ใช้การ์ดจอ AMD NVIDIA Intel หรือ Mac แม่นกว่า Whisper ปกติเกือบเท่าตัวด้วย Pathumma Whisper", "inLanguage": "th", "url": "https://phonology024.github.io/babelscribe/thai-speech-to-text.html", "author": {"@type": "Person", "name": "phonology024"}, "dateModified": "2026-10-06", "about": {"@type": "SoftwareApplication", "name": "babelscribe", "url": "https://phonology024.github.io/babelscribe/"}}, {"@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "ถอดเสียงภาษาไทยฟรีโปรแกรมไหนแม่นที่สุด", "acceptedAnswer": {"@type": "Answer", "text": "จากการวัดบน FLEURS ของ Google การใช้ Pathumma Whisper ของ NECTEC ผ่าน babelscribe --accurate ได้ CER 8.9% เทียบกับ Whisper turbo ปกติที่ 15.9%"}}, {"@type": "Question", "name": "ต้องมีการ์ดจอ NVIDIA ไหม", "acceptedAnswer": {"@type": "Answer", "text": "ไม่ต้อง ใช้ได้กับการ์ด AMD Radeon, Intel Arc, NVIDIA และ Mac (Apple Silicon) หรือใช้ CPU ก็ได้แต่ช้ากว่า"}}, {"@type": "Question", "name": "ไฟล์ถูกอัปโหลดไปที่ไหนไหม", "acceptedAnswer": {"@type": "Answer", "text": "ไม่ ทุกอย่างทำงานในเครื่องของคุณเอง ดาวน์โหลดแค่โปรแกรมและโมเดลครั้งแรก"}}, {"@type": "Question", "name": "ทำซับไทยให้คลิป YouTube หรือ TikTok ได้ไหม", "acceptedAnswer": {"@type": "Answer", "text": "ได้ ถ้ามีไฟล์วิดีโอในเครื่อง babelscribe จะสร้างไฟล์ .srt ที่นำไปอัปโหลดเป็นคำบรรยายได้ทันที"}}]}]}</script><style>:root{--bg:#f7f8fb;--fg:#141a2b;--mut:#5a6378;--line:#e3e6ee;--acc:#0b7fc7;--code:#eef2f8}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1422;--fg:#e8ecf5;--mut:#9aa4bb;--line:#263049;--acc:#5ac8ff;--code:#1d2640}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.65 system-ui,-apple-system,"Segoe UI","Noto Sans Thai",sans-serif}
+main{max-width:780px;margin:0 auto;padding:36px 16px 64px}a{color:var(--acc)}h1{font-size:1.75rem;line-height:1.25}h2{margin-top:2em;font-size:1.25rem}
+.lead{color:var(--mut);font-size:1.08rem}pre{background:var(--code);padding:14px 16px;border-radius:10px;overflow-x:auto;font-size:.9rem}
+code{font-family:ui-monospace,Consolas,monospace}p code,li code,td code{background:var(--code);padding:1px 5px;border-radius:5px}
+table{border-collapse:collapse;width:100%;font-size:.95rem}td,th{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left}
+.nav{font-size:.95rem}.foot{color:var(--mut);margin-top:3em;font-size:.9rem}</style></head>
+<body><main><p class="nav"><a href="./">babelscribe</a> · <a href="https://github.com/phonology024/babelscribe">GitHub</a></p>
+<h1>ถอดเสียงภาษาไทยเป็นข้อความ ฟรี แม่นยำ ทำงานในเครื่อง</h1><p class="lead">คำตอบสั้นๆ: <code>pip install babelscribe</code> แล้วสั่ง <code>babelscribe คลิป.mp4 -l th --accurate</code> จะได้ไฟล์ซับ <code>.srt</code> ภาษาไทยข้างไฟล์วิดีโอ ไม่มีการอัปโหลดไฟล์ไปไหน</p><h2>แม่นแค่ไหน</h2>
+<p>วัดบนชุดทดสอบ FLEURS ของ Google (ภาษาไทย 50 ประโยค) ด้วยอัตราความผิดพลาดระดับตัวอักษร (CER) ยิ่งน้อยยิ่งดี</p>
+<table><tr><th>โมเดล</th><th>CER</th></tr>
+<tr><td>Whisper large-v3-turbo (ค่าเริ่มต้น)</td><td>15.9%</td></tr>
+<tr><td>Whisper large-v3</td><td>11.5%</td></tr>
+<tr><td>Typhoon Whisper</td><td>11.9%</td></tr>
+<tr><td>Thonburian Whisper (<code>--text-model thai-thonburian</code>)</td><td>9.1%</td></tr>
+<tr><td><b>Pathumma Whisper ของ NECTEC (<code>--accurate</code>)</b></td><td><b>8.9%</b></td></tr></table>
+<p>กับคลิป TEDxBangkok ยาว 14 นาทีที่พูดเร็วและมีศัพท์วัยรุ่น ความผิดพลาดลดจาก 22.7% เหลือ 16.4%</p>
+<h2>ทำไมแม่นขึ้น</h2>
+<p>โมเดลที่ฝึกเฉพาะภาษาไทยสะกดคำไทยได้ดีกว่ามาก แต่มักบอกเวลาของแต่ละช่วงไม่ได้ babelscribe จึงใช้ <b>โหมดไฮบริด</b> คือเอาข้อความจาก Pathumma Whisper แล้วเอาเวลาจาก Whisper turbo มาจับคู่กันทีละตัวอักษร และตัดซับเฉพาะตรงรอยต่อคำ (ใช้ pythainlp) จะได้ไม่มีคำไทยขาดกลางคำ</p>
+<h2>ใช้งาน</h2>
+<pre><code>pip install babelscribe
+babelscribe คลิป.mp4 -l th              # เร็ว
+babelscribe คลิป.mp4 -l th --accurate   # แม่นที่สุด (ช้ากว่า)
+babelscribe คลิป.mp4 -l th -f srt,txt   # ได้ทั้งซับและข้อความล้วน</code></pre>
+<p>ไม่อยากพิมพ์คำสั่ง: ติดตั้ง babelscribe ใน Claude Desktop แล้วพิมพ์ในแชทว่า “ทำซับไทยให้คลิปล่าสุดในโฟลเดอร์ดาวน์โหลด” ได้เลย</p><h2>คำถามที่พบบ่อย</h2><h3>ถอดเสียงภาษาไทยฟรีโปรแกรมไหนแม่นที่สุด</h3><p>จากการวัดบน FLEURS ของ Google การใช้ Pathumma Whisper ของ NECTEC ผ่าน babelscribe --accurate ได้ CER 8.9% เทียบกับ Whisper turbo ปกติที่ 15.9%</p><h3>ต้องมีการ์ดจอ NVIDIA ไหม</h3><p>ไม่ต้อง ใช้ได้กับการ์ด AMD Radeon, Intel Arc, NVIDIA และ Mac (Apple Silicon) หรือใช้ CPU ก็ได้แต่ช้ากว่า</p><h3>ไฟล์ถูกอัปโหลดไปที่ไหนไหม</h3><p>ไม่ ทุกอย่างทำงานในเครื่องของคุณเอง ดาวน์โหลดแค่โปรแกรมและโมเดลครั้งแรก</p><h3>ทำซับไทยให้คลิป YouTube หรือ TikTok ได้ไหม</h3><p>ได้ ถ้ามีไฟล์วิดีโอในเครื่อง babelscribe จะสร้างไฟล์ .srt ที่นำไปอัปโหลดเป็นคำบรรยายได้ทันที</p>
+<p class="foot">babelscribe is free and open source (MIT) · <a href="privacy.html">Privacy</a></p></main></body></html>
