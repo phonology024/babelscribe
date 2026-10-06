@@ -4,7 +4,7 @@
 One command, no CUDA required, subtitles out.
 
 ```bash
-pip install babelscribe
+pip install babelscribe          # Python 3.9+
 babelscribe interview.mp4                 # auto-detects language, picks your best GPU -> interview.srt + interview.json
 ```
 
@@ -22,6 +22,32 @@ Vulkan SDK yourself. babelscribe downloads a prebuilt `whisper-cli` for your sys
 
 Measured on an AMD Radeon RX 9070 XT (Vulkan): 90 s of English in 5.4 s, 105 s of Thai in 9.8 s, a 14-minute talk in ~75 s
 with `large-v3-turbo`.
+
+## Why babelscribe (vs. what already exists)
+| | GPU on AMD / Intel | Windows, no build step | Video in, subtitles out | Long files don't loop | Better text for your language |
+|---|---|---|---|---|---|
+| **babelscribe** | ✅ Vulkan | ✅ prebuilt `whisper-cli` downloaded for you | ✅ ffmpeg bundled | ✅ `--max-context 0` by default | ✅ hybrid fine-tune text + turbo timing |
+| whisper.cpp (raw) | ✅ Vulkan — if you compile it | ❌ official releases ship no Windows Vulkan build | ❌ WAV 16 kHz only | ⚠️ you must know the flag | ❌ |
+| faster-whisper / WhisperX | ❌ GPU = NVIDIA CUDA only | ✅ pip | ✅ | ⚠️ | ⚠️ manual |
+| Cloud APIs | n/a (cloud) | ✅ | ✅ | ✅ | ❌ — and your audio leaves your machine, paid per minute |
+
+babelscribe does **not** replace those projects — it stands on whisper.cpp and simply removes the hard parts:
+compiling for your GPU, converting media, picking the right device, avoiding the long-file repeat bug, and combining
+a language-specific fine-tune with accurate timestamps.
+
+## Languages
+All 99 languages Whisper was trained on, auto-detected or forced with `-l`:
+af am ar as az ba be bg bn bo br bs ca cs cy da de el en es et eu fa fi fo fr gl gu ha haw he hi hr ht hu hy id is it ja jw ka kk km kn ko la lb ln lo lt lv mg mi mk ml mn mr ms mt my ne nl nn no oc pa pl ps pt ro ru sa sd si sk sl sn so sq sr su sv sw ta te tg th tk tl tr tt uk ur uz vi yi yo yue zh
+
+Accuracy follows Whisper's own training data: excellent for high-resource languages (English, Spanish, Japanese, …),
+weaker for low-resource ones. That is what hybrid mode is for — a community fine-tune for one language can be plugged in
+with one line in `babelscribe/models.py` (Thai is the first: *Thonburian Whisper*). PRs adding fine-tunes for other
+languages are the most valuable contribution.
+
+## Limitations (honest)
+- Tested end to end so far on an AMD Radeon RX 9070 XT (Windows, Vulkan). CUDA, Linux and macOS builds are produced by CI; reports from those machines are welcome.
+- Hybrid mode runs two models, so it is slower (≈1 min per minute of audio with a large fine-tune on that GPU).
+- Proper nouns can still be misspelled — check names before publishing subtitles.
 
 ## Features
 - **Any input** — mp4, mkv, mov, mp3, wav, m4a… (ffmpeg is bundled through `imageio-ffmpeg`).
