@@ -15,7 +15,8 @@ Vulkan SDK yourself. babelscribe downloads a prebuilt `whisper-cli` for your sys
 | Your hardware | Backend used | Prebuilt asset |
 |---|---|---|
 | AMD / NVIDIA / Intel GPU on Windows | Vulkan | `windows-x64-vulkan` |
-| NVIDIA on Windows (alternative) | CUDA | `windows-x64-cuda` (`--flavor cuda`) |
+| NVIDIA on Windows | Vulkan (same build) | `windows-x64-vulkan` |
+| NVIDIA on Linux (alternative) | CUDA | `linux-x64-cuda` (`--flavor cuda`) |
 | AMD / NVIDIA / Intel GPU on Linux | Vulkan | `linux-x64-vulkan` |
 | Apple Silicon | Metal | `macos-arm64-metal` |
 | No usable GPU | CPU | `*-cpu` (`--flavor cpu`) |

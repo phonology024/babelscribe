@@ -1,7 +1,6 @@
 # Prebuilt whisper.cpp `whisper-cli` for every OS/GPU family, attached to a GitHub release.
 # babelscribe downloads the matching asset on first run (see babelscribe/backend.py:asset_name).
-#   windows-x64-vulkan  AMD / NVIDIA / Intel GPUs on Windows
-#   windows-x64-cuda    NVIDIA (CUDA) on Windows
+#   windows-x64-vulkan  AMD / NVIDIA / Intel GPUs on Windows (Vulkan also drives NVIDIA cards)
 #   linux-x64-vulkan    AMD / NVIDIA / Intel GPUs on Linux
 #   linux-x64-cuda      NVIDIA (CUDA) on Linux
 #   macos-arm64-metal   Apple Silicon
@@ -24,14 +23,18 @@ jobs:
       matrix:
         include:
           - { os: windows-latest, name: windows-x64-vulkan, cmake: "-DGGML_VULKAN=ON" }
-          - { os: windows-latest, name: windows-x64-cuda,   cmake: "-DGGML_CUDA=ON" }
           - { os: windows-latest, name: windows-x64-cpu,    cmake: "" }
           - { os: ubuntu-22.04,   name: linux-x64-vulkan,   cmake: "-DGGML_VULKAN=ON" }
-          - { os: ubuntu-22.04,   name: linux-x64-cuda,     cmake: "-DGGML_CUDA=ON" }
+          - { os: ubuntu-22.04,   name: linux-x64-cuda,     cmake: "-DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES='61;70;75;80;86;89;90'", container: "nvidia/cuda:12.6.3-devel-ubuntu22.04" }
           - { os: ubuntu-22.04,   name: linux-x64-cpu,      cmake: "" }
           - { os: macos-14,       name: macos-arm64-metal,  cmake: "-DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON" }
     runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
     steps:
+      - name: Container tools
+        if: matrix.container
+        run: apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git cmake build-essential zip p7zip-full >/dev/null
+
       - uses: actions/checkout@v4
         with: { repository: ggml-org/whisper.cpp, ref: "${{ env.WHISPER_REF }}", path: whisper.cpp }
 
@@ -39,11 +42,6 @@ jobs:
         if: contains(matrix.name, 'vulkan')
         uses: jakoch/install-vulkan-sdk-action@v1
         with: { install_runtime: true, cache: true, stripdown: true }
-
-      - name: CUDA toolkit
-        if: contains(matrix.name, 'cuda')
-        uses: Jimver/cuda-toolkit@v0.2.19
-        with: { cuda: "12.6.0", method: network, sub-packages: '["nvcc","cudart","cublas","cublas_dev","thrust","visual_studio_integration"]' }
 
       - name: Configure + build
         shell: bash
@@ -65,7 +63,8 @@ jobs:
 
   release:
     needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
+    # publish whatever built: one failing flavour must not block the others
+    if: always() && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions: { contents: write }
     steps:
