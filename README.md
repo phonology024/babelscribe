@@ -195,6 +195,9 @@ Models download on first use to `~/.babelscribe/models` (`BABELSCRIBE_MODELS` to
 machine from their original Hugging Face repo — install `pip install "babelscribe[finetune]"` once; converted weights are never
 redistributed, so each fine-tune keeps its own licence. Thai word boundaries: `pip install "babelscribe[thai]"`.
 
+## Roadmap
+What's planned next (subtitle line wrapping, MCP progress for long files, folder batches, translate-to-English, more fine-tunes) is in [ROADMAP.md](ROADMAP.md) and the [open issues](https://github.com/phonology024/babelscribe/issues).
+
 ## Add a language fine-tune
 Add one entry to `FINETUNES` in `babelscribe/models.py` (Hugging Face repo, language code, whether it needs beam search) and open a PR.
 

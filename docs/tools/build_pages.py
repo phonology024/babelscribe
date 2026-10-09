@@ -19,7 +19,7 @@ table{border-collapse:collapse;width:100%;font-size:.95rem}td,th{border-bottom:1
 def page(slug, lang, title, desc, h1, lead, body, faq):
     ld = {"@context": "https://schema.org", "@graph": [
         {"@type": "TechArticle", "headline": h1, "description": desc, "inLanguage": lang, "url": BASE + slug,
-         "author": {"@type": "Person", "name": "phonology024"}, "dateModified": "2026-10-06",
+         "author": {"@type": "Person", "name": "phonology024"}, "dateModified": "2026-10-10",
          "about": {"@type": "SoftwareApplication", "name": "babelscribe", "url": BASE}},
         {"@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": q,
                                             "acceptedAnswer": {"@type": "Answer", "text": a}} for q, a in faq]}]}
@@ -125,6 +125,35 @@ babelscribe lecture.mp4 --accurate   # fewer errors, slower</code></pre>
        "Yes. babelscribe runs entirely offline after downloading the model once."),
       ("Which subtitle formats are supported?", "SRT, WebVTT, plain text and JSON with word timings."),
       ("Which languages can it subtitle?", "All 99 languages Whisper supports, with automatic language detection.")]),
+    ("mcp-transcribe-audio-video.html", "en",
+     "MCP server to transcribe audio and video with Claude, Codex or Gemini CLI — babelscribe",
+     "Add a local speech-to-text MCP server to Claude Desktop, Claude Code, Codex, Gemini CLI or Cursor. Transcribe "
+     "audio and video into SRT subtitles on your own GPU, offline.",
+     "A speech-to-text MCP server for Claude, Codex and Gemini CLI",
+     "Short answer: run <code>uvx babelscribe mcp</code> as a local MCP server. Your AI app can then find a video on your "
+     "computer, transcribe it on your own GPU and write <code>.srt</code> subtitles next to it — nothing is uploaded.",
+     """<h2>Install</h2>
+<pre><code># Claude Code
+claude mcp add babelscribe -- uvx babelscribe mcp
+# OpenAI Codex CLI
+codex mcp add babelscribe -- uvx babelscribe mcp
+# Claude Desktop: download babelscribe.mcpb from the GitHub releases and double-click it</code></pre>
+<p>For Gemini CLI, Cursor, Google Antigravity and VS Code, add <code>{"command": "uvx", "args": ["babelscribe", "mcp"]}</code> to the app's MCP config; the <a href="https://github.com/phonology024/babelscribe#use-it-from-an-ai-app-mcp--no-terminal-needed">README</a> has the exact file for each app.</p>
+<h2>Tools</h2>
+<table><tr><th>Tool</th><th>What it does</th></tr>
+<tr><td><code>transcribe</code></td><td>Audio or video file to subtitles (SRT, VTT) and text, 99 languages</td></tr>
+<tr><td><code>find_media</code></td><td>Finds the newest audio/video in Downloads, Videos, Desktop</td></tr>
+<tr><td><code>list_devices</code></td><td>Shows the GPUs available</td></tr>
+<tr><td><code>list_languages_and_models</code></td><td>Lists languages, models and fine-tunes</td></tr></table>
+<h2>Try it</h2>
+<p>Ask in plain words: “make Thai subtitles for the newest video in my Downloads”, then “proofread the names” or “translate to English”. Set the tool timeout to 3600 seconds for long videos (Codex defaults to 60 s).</p>""",
+     [("Is there an MCP server for speech to text?",
+       "Yes. babelscribe is a local MCP server (uvx babelscribe mcp) that transcribes audio and video with Whisper on your own GPU."),
+      ("Can Claude transcribe a video on my computer?",
+       "Yes. Add babelscribe as an MCP server in Claude Desktop (one-click .mcpb) or Claude Code, then ask for subtitles in chat."),
+      ("Does it upload my files?", "No. Transcription runs locally; there is no telemetry and no cloud call."),
+      ("Can I use it from ChatGPT or Grok on the web?",
+       "No. Web chat apps can only reach servers on the internet, not your computer. Use Claude Desktop, Claude Code, Codex CLI, Gemini CLI or Cursor.")]),
 ]
 
 if __name__ == "__main__":
@@ -133,6 +162,6 @@ if __name__ == "__main__":
     urls = [BASE, BASE + "privacy.html"] + [BASE + p[0] for p in PAGES]
     (DOCS / "sitemap.xml").write_text(
         '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
-        + "".join(f"  <url><loc>{u}</loc><lastmod>2026-10-06</lastmod></url>\n" for u in urls) + "</urlset>\n",
+        + "".join(f"  <url><loc>{u}</loc><lastmod>2026-10-10</lastmod></url>\n" for u in urls) + "</urlset>\n",
         encoding="utf-8")
     print("built", len(PAGES), "pages")
