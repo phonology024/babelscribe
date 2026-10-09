@@ -19,7 +19,7 @@
  "description":"Free, open-source, offline speech-to-text and subtitle generator. Transcribes audio and video in 99 languages on AMD, NVIDIA, Intel and Apple GPUs using OpenAI Whisper via whisper.cpp (Vulkan, CUDA, Metal). Also an MCP server for AI apps.",
  "offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"license":"https://opensource.org/licenses/MIT",
  "url":"https://phonology024.github.io/babelscribe/","downloadUrl":"https://pypi.org/project/babelscribe/",
- "codeRepository":"https://github.com/phonology024/babelscribe","softwareVersion":"0.3.2",
+ "codeRepository":"https://github.com/phonology024/babelscribe","softwareVersion":"0.3.2","alternateName":["babel scribe","babelscribe MCP"],"sameAs":["https://github.com/phonology024/babelscribe","https://pypi.org/project/babelscribe/","https://mcprush.com"],"author":{"@type":"Person","name":"phonology024","url":"https://github.com/phonology024"},
  "featureList":["Runs on AMD Radeon, NVIDIA, Intel Arc and Apple Silicon GPUs","99 languages with auto-detection","SRT, VTT, TXT and JSON output","Accurate mode with Thai and Hindi fine-tunes","MCP server for Claude, Codex, Gemini CLI, Antigravity, Cursor"]},
 {"@type":"FAQPage","mainEntity":[
  {"@type":"Question","name":"How do I run Whisper on an AMD GPU on Windows?","acceptedAnswer":{"@type":"Answer","text":"Install babelscribe with pip install babelscribe, then run babelscribe video.mp4. It downloads a Vulkan build of whisper.cpp that runs on AMD Radeon, Intel Arc and NVIDIA cards on Windows and Linux without ROCm, CUDA or compiling."}},
@@ -87,6 +87,11 @@ babelscribe interview.mp4 --accurate   # slower, fewest errors</code></pre>
 
 <h2>Guides</h2>
 <ul><li><a href="mcp-transcribe-audio-video.html">Speech-to-text MCP server for Claude, Codex and Gemini CLI</a></li>
+<li><a href="faster-whisper-alternative-amd-intel-gpu.html">faster-whisper alternative for AMD and Intel GPUs</a></li>
+<li><a href="whisper-cpp-vulkan-prebuilt-windows.html">Prebuilt whisper.cpp Vulkan build for Windows</a></li>
+<li><a href="hindi-speech-to-text.html">Hindi speech-to-text and subtitles</a></li>
+<li><a href="private-offline-transcription.html">Private, offline transcription</a></li>
+<li><a href="thai-subtitles-claude-desktop.html">ทำซับไทยด้วย Claude Desktop</a></li>
 <li><a href="whisper-amd-gpu-windows.html">How to run Whisper on an AMD GPU on Windows</a></li>
 <li><a href="free-offline-subtitles.html">Generate SRT subtitles from a video, free and offline</a></li>
 <li><a href="thai-speech-to-text.html">ถอดเสียงภาษาไทยเป็นข้อความ ฟรี แม่นยำ</a></li></ul>

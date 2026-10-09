@@ -1,5 +1,7 @@
 # Contributing to babelscribe
 
+Looking for something to pick up? See [ROADMAP.md](ROADMAP.md) (releases and a *Need help?* table) or the [`need help`](https://github.com/phonology024/babelscribe/labels/need%20help) label.
+
 Thanks for helping! The most valuable contributions are small and concrete:
 
 ## 1. Make your language more accurate (best first PR)

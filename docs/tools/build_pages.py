@@ -154,6 +154,97 @@ codex mcp add babelscribe -- uvx babelscribe mcp
       ("Does it upload my files?", "No. Transcription runs locally; there is no telemetry and no cloud call."),
       ("Can I use it from ChatGPT or Grok on the web?",
        "No. Web chat apps can only reach servers on the internet, not your computer. Use Claude Desktop, Claude Code, Codex CLI, Gemini CLI or Cursor.")]),
+    ("faster-whisper-alternative-amd-intel-gpu.html", "en",
+     "faster-whisper alternative for AMD and Intel GPUs — babelscribe",
+     "faster-whisper and WhisperX need an NVIDIA GPU for GPU speed. babelscribe runs Whisper on AMD Radeon, Intel Arc, "
+     "NVIDIA and Apple GPUs through whisper.cpp, no CUDA.",
+     "A faster-whisper alternative that uses your AMD or Intel GPU",
+     "Short answer: faster-whisper is excellent on NVIDIA. If your GPU is AMD Radeon, Intel Arc or Apple Silicon, "
+     "<code>pip install babelscribe</code> gives you GPU-speed Whisper through whisper.cpp (Vulkan / Metal) with no CUDA.",
+     """<h2>Comparison</h2>
+<table><tr><th></th><th>babelscribe</th><th>faster-whisper / WhisperX</th></tr>
+<tr><td>GPU support</td><td>Vulkan (AMD, Intel, NVIDIA), CUDA, Metal (Apple), CPU</td><td>NVIDIA CUDA; otherwise CPU</td></tr>
+<tr><td>Windows setup</td><td><code>pip install babelscribe</code>; prebuilt whisper-cli downloaded for you</td><td>pip, plus CUDA / cuDNN for GPU</td></tr>
+<tr><td>Video in, subtitles out</td><td>Yes, ffmpeg bundled; SRT, VTT, TXT, JSON</td><td>Yes (library; you write the glue)</td></tr>
+<tr><td>Better Thai / Hindi text</td><td>Yes, <code>--accurate</code> (hybrid fine-tune + turbo timing)</td><td>Manual</td></tr>
+<tr><td>AI-app integration</td><td>MCP server for Claude, Codex, Gemini CLI, Cursor</td><td>Third-party wrappers</td></tr></table>
+<p>If you have an NVIDIA card and like Python APIs, faster-whisper is a fine choice. babelscribe does not replace it; it covers the GPUs it does not. Speed: about 20x real time on an AMD Radeon RX 9070 XT (19-minute talk in 48 s).</p>
+<pre><code>pip install babelscribe
+babelscribe interview.mp4 -f srt</code></pre>""",
+     [("Is there a faster-whisper alternative for AMD GPUs?",
+       "Yes. babelscribe runs Whisper through whisper.cpp with Vulkan, which works on AMD Radeon and Intel Arc GPUs."),
+      ("Does faster-whisper work on AMD?",
+       "Its GPU path targets NVIDIA CUDA; on AMD it runs on the CPU. babelscribe uses the AMD GPU through Vulkan."),
+      ("Is babelscribe as accurate as faster-whisper?",
+       "Both run the same Whisper models, so base accuracy is comparable. babelscribe adds an --accurate mode with language-specific fine-tunes for Thai and Hindi.")]),
+    ("whisper-cpp-vulkan-prebuilt-windows.html", "en",
+     "whisper.cpp Vulkan build for Windows, prebuilt, no compiling — babelscribe",
+     "Official whisper.cpp releases ship no Windows Vulkan build. babelscribe downloads a prebuilt whisper-cli with Vulkan "
+     "for AMD, Intel and NVIDIA GPUs and wraps it with ffmpeg and models.",
+     "A prebuilt whisper.cpp Vulkan build for Windows",
+     "Short answer: skip the Vulkan SDK and CMake. <code>pip install babelscribe</code> fetches a prebuilt Vulkan "
+     "<code>whisper-cli</code> for your system and runs it for you.",
+     """<h2>What it handles</h2>
+<ul><li>Downloads a prebuilt <code>whisper-cli</code> (Windows / Linux Vulkan, Linux CUDA, macOS Metal, CPU) from this project's releases.</li>
+<li>Converts any media to 16 kHz WAV with bundled ffmpeg; whisper.cpp itself only reads WAV.</li>
+<li>Picks the discrete GPU over the integrated one (<code>babelscribe devices</code>, <code>--device N</code>).</li>
+<li>Uses <code>--max-context 0</code> so long files do not loop on one sentence.</li></ul>
+<p>Already have your own build? <code>babelscribe talk.mp4 --bin /path/to/whisper-cli</code>. Self-host the binaries with <code>BABELSCRIBE_RELEASES</code>.</p>
+<pre><code>pip install babelscribe
+babelscribe devices
+babelscribe talk.mp4</code></pre>""",
+     [("Does whisper.cpp have a Windows Vulkan release?", "The official releases do not ship a Windows Vulkan build. babelscribe publishes prebuilt Vulkan binaries and downloads the right one."),
+      ("Do I need the Vulkan SDK?", "No. You only need a GPU driver with Vulkan support, which AMD, Intel and NVIDIA drivers include."),
+      ("Can I use my own whisper.cpp build?", "Yes, pass --bin /path/to/whisper-cli.")]),
+    ("hindi-speech-to-text.html", "en",
+     "Hindi speech-to-text and subtitles, free and offline — babelscribe",
+     "Transcribe Hindi audio and video to text and SRT offline. --accurate cuts the word error rate from 28.4% to 12.6% on "
+     "Google FLEURS using the vasista22 fine-tune.",
+     "Hindi speech-to-text and subtitles, free and offline",
+     "Short answer: <code>babelscribe video.mp4 -l hi --accurate</code>. Plain Whisper turbo misses a lot of Hindi; "
+     "the community fine-tune used by <code>--accurate</code> brings it to 12.6% word error rate.",
+     """<h2>Accuracy on Google FLEURS (Hindi, 50 utterances)</h2>
+<table><tr><th>Setup</th><th>WER</th></tr><tr><td>Whisper large-v3-turbo (default)</td><td>28.4%</td></tr>
+<tr><td><b>--accurate</b>: vasista22/whisper-hindi-large-v2 + turbo timing</td><td><b>12.6%</b></td></tr>
+<tr><td>--accurate, ignoring extra words at clip edges</td><td>11.1%</td></tr></table>
+<p>The fine-tune is by vasista22 (Speech Lab, IIT Madras). Install the converter once with <code>pip install "babelscribe[finetune]"</code>; weights are converted on your machine, never redistributed.</p>
+<pre><code>pip install babelscribe
+babelscribe lecture.mp4 -l hi --accurate -f srt,txt</code></pre>""",
+     [("What is the best free Hindi speech-to-text?", "On Google FLEURS, babelscribe --accurate with the vasista22 Hindi fine-tune reaches 12.6% WER versus 28.4% for plain Whisper turbo."),
+      ("Does it work offline?", "Yes. After the one-time model download everything runs on your computer."),
+      ("Can I get Hindi subtitles for a video?", "Yes, add -f srt to get a .srt file next to the video.")]),
+    ("private-offline-transcription.html", "en",
+     "Private, offline transcription: interviews, meetings, lectures — babelscribe",
+     "Transcribe sensitive audio and video on your own computer. No account, no telemetry, no cloud: audio never leaves "
+     "your machine. Free and open source (MIT).",
+     "Transcribe private recordings without uploading them",
+     "Short answer: <code>pip install babelscribe</code> and transcribe locally. There is no account, no telemetry and no "
+     "upload; after downloading the model once it works without internet.",
+     """<h2>What leaves your computer</h2>
+<p>Nothing from your recordings. The only network use is downloading the whisper program from GitHub releases, models from Hugging Face and packages from PyPI. Full text: <a href="privacy.html">privacy policy</a>.</p>
+<h2>Good for</h2>
+<ul><li>Interviews and journalism, legal or medical notes, internal meetings, lecture recordings.</li>
+<li>Files too long or too numerous for per-minute cloud pricing.</li></ul>
+<p>Used from an AI app via MCP, the transcript text is returned to that app, so its own privacy policy applies to the text; the audio still stays local.</p>
+<pre><code>pip install babelscribe
+babelscribe meeting.m4a -f txt,srt</code></pre>""",
+     [("Is there a free offline transcription tool?", "Yes. babelscribe is free (MIT) and runs OpenAI Whisper on your own GPU or CPU."),
+      ("Does babelscribe send my audio anywhere?", "No. It has no telemetry or accounts and never uploads audio, video or transcripts."),
+      ("Does it need internet?", "Only for the first download of the program and model.")]),
+    ("thai-subtitles-claude-desktop.html", "th",
+     "ทำซับไทยด้วย Claude Desktop โดยไม่ต้องพิมพ์คำสั่ง — babelscribe",
+     "ติดตั้ง babelscribe ใน Claude Desktop ด้วยการดับเบิลคลิกไฟล์เดียว แล้วสั่งในแชทให้ทำซับไทยหรือถอดเสียงคลิปในเครื่อง ฟรี ไม่อัปโหลดไฟล์",
+     "ทำซับไทยด้วย Claude Desktop ไม่ต้องพิมพ์คำสั่ง",
+     "คำตอบสั้นๆ: โหลด <code>babelscribe.mcpb</code> จากหน้า Releases บน GitHub แล้วดับเบิลคลิก จากนั้นพิมพ์ในแชทว่า “ทำซับไทยให้คลิปล่าสุดในโฟลเดอร์ดาวน์โหลด”",
+     """<h2>ขั้นตอน</h2>
+<ol><li>ดาวน์โหลด <code>babelscribe.mcpb</code> จาก <a href="https://github.com/phonology024/babelscribe/releases/latest">GitHub Releases</a></li>
+<li>ดับเบิลคลิก หรือเปิด Claude Desktop → Settings → Extensions → Install extension</li>
+<li>พิมพ์ในแชท เช่น “ทำซับไทยให้คลิปล่าสุดใน Downloads” แล้ว Claude จะหาไฟล์ ถอดเสียงด้วยการ์ดจอของคุณ และบันทึก <code>.srt</code> ไว้ข้างไฟล์</li>
+<li>สั่งต่อได้ เช่น “ตรวจชื่อคนให้หน่อย” หรือ “แปลซับเป็นอังกฤษ”</li></ol>
+<p>ใช้ Claude Code ได้เหมือนกัน: <code>claude mcp add babelscribe -- uvx babelscribe mcp</code> ภาษาไทยให้เลือกโหมดแม่นยำสูง (Pathumma Whisper ของ NECTEC, CER 8.9% บน FLEURS) ดูรายละเอียดที่ <a href="thai-speech-to-text.html">ถอดเสียงภาษาไทย</a></p>""",
+     [("ทำซับไทยด้วย Claude ได้ไหม", "ได้ ติดตั้ง babelscribe เป็น MCP ใน Claude Desktop แล้วสั่งในแชท Claude จะถอดเสียงคลิปในเครื่องของคุณให้"),
+      ("ไฟล์วิดีโอถูกอัปโหลดไหม", "ไม่ การถอดเสียงทำงานในเครื่องของคุณ ไม่มีการอัปโหลดไฟล์เสียงหรือวิดีโอ"),
+      ("ใช้ ChatGPT หรือ Grok บนเว็บได้ไหม", "ไม่ได้ เพราะแอปเว็บเข้าถึงได้เฉพาะเซิร์ฟเวอร์บนอินเทอร์เน็ต ไม่ใช่คอมพิวเตอร์ของคุณ ให้ใช้ Claude Desktop, Claude Code, Codex CLI, Gemini CLI หรือ Cursor")]),
 ]
 
 if __name__ == "__main__":

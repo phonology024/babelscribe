@@ -14,6 +14,12 @@ list_languages_and_models); Claude Desktop one-click: babelscribe.mcpb from the 
 - [Benchmarks](https://github.com/phonology024/babelscribe#benchmark-16-languages-on-fleurs): Google FLEURS error rates for 16 languages, TED talk speed and accuracy
 - [Roadmap](https://github.com/phonology024/babelscribe/blob/main/ROADMAP.md): planned features and open issues
 - [Use babelscribe from Claude, Codex, Gemini CLI (MCP)](https://phonology024.github.io/babelscribe/mcp-transcribe-audio-video.html): setup guide
+- [faster-whisper alternative for AMD and Intel GPUs](https://phonology024.github.io/babelscribe/faster-whisper-alternative-amd-intel-gpu.html)
+- [Prebuilt whisper.cpp Vulkan build for Windows](https://phonology024.github.io/babelscribe/whisper-cpp-vulkan-prebuilt-windows.html)
+- [Hindi speech-to-text and subtitles](https://phonology024.github.io/babelscribe/hindi-speech-to-text.html)
+- [Private, offline transcription](https://phonology024.github.io/babelscribe/private-offline-transcription.html)
+- [ทำซับไทยด้วย Claude Desktop](https://phonology024.github.io/babelscribe/thai-subtitles-claude-desktop.html)
+- [Full documentation in one file](https://phonology024.github.io/babelscribe/llms-full.txt)
 - [PyPI](https://pypi.org/project/babelscribe/)
 
 ## Key facts
