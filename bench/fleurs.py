@@ -32,7 +32,7 @@ def fetch(d: Path, n: int, langs: list[str]) -> None:
         if (out / "refs.json").exists():
             continue
         tsv = get(base.format(cfg=cfg, f="test.tsv")).read().decode("utf-8")
-        meta = {r[1]: r[2] for r in csv.reader(io.StringIO(tsv), delimiter="	", quoting=csv.QUOTE_NONE) if len(r) > 2}   # file -> raw transcription
+        meta = {r[1]: r[2] for r in csv.reader(io.StringIO(tsv), delimiter="\t", quoting=csv.QUOTE_NONE) if len(r) > 2}   # file -> raw transcription
         refs = {}
         with tarfile.open(fileobj=get(base.format(cfg=cfg, f="audio/test.tar.gz")), mode="r|gz") as tar:
             for m in tar:
@@ -77,7 +77,7 @@ def norm(s: str, cer: bool, lang: str = "") -> str:
             continue                                   # non-spacing marks (diacritics, nukta, harakat): dropped, as Whisper's normaliser does
         if cat[0] in "LNM" or c.isspace():
             out.append(c)
-        elif c in "'’":
+        elif c in "''":
             continue                                   # don't -> dont, city's -> citys
         else:
             out.append(" ")
@@ -137,7 +137,7 @@ def table(d: Path, only: str | None = None) -> None:
     langs = [c for c in LANGS if any(c in res[t] for t in tags)] + sorted({c for t in tags for c in res[t]} - set(LANGS))
     print("| Language | metric | " + " | ".join(tags) + " |\n|---|---|" + "---|" * len(tags))
     for c in langs:
-        print(f"| {c} | {'CER' if c.split('_')[0] in CER else 'WER'} | " + " | ".join(f"{res[t][c]:.1f}%" if c in res[t] else "–" for t in tags) + " |")
+        print(f"| {c} | {'CER' if c.split('_')[0] in CER else 'WER'} | " + " | ".join(f"{res[t][c]:.1f}%" if c in res[t] else "-" for t in tags) + " |")
 
 
 def rescore(d: Path, a) -> None:
