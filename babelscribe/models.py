@@ -23,15 +23,17 @@ ALIASES = {"turbo": "large-v3-turbo", "large": "large-v3"}
 # Community fine-tunes: add a line to support a new language better. 'beam' = needs beam search (greedy loops).
 FINETUNES = {
     "thai-thonburian": {"repo": "biodatlab/whisper-th-large-v3-combined", "lang": "th", "beam": 5, "timestamps": False,
-                        "note": "Thonburian Whisper (Thai) — strong Thai spelling; pair with turbo for timing"},
+                        "note": "Thonburian Whisper (Thai) - strong Thai spelling; pair with turbo for timing"},
     "thai-pathumma": {"repo": "nectec/Pathumma-whisper-th-large-v3", "lang": "th", "beam": 5, "timestamps": False,
-                      "note": "Pathumma Whisper by NECTEC (Thai) — lowest Thai CER on FLEURS"},
+                      "note": "Pathumma Whisper by NECTEC (Thai) - lowest Thai CER on FLEURS"},
     "hindi-vasista": {"repo": "vasista22/whisper-hindi-large-v2", "lang": "hi", "beam": 5, "timestamps": False,
-                      "note": "Hindi fine-tune of large-v2 (Speech Lab, IIT Madras) — halves Hindi WER on FLEURS"},
+                      "note": "Hindi fine-tune of large-v2 (Speech Lab, IIT Madras) - halves Hindi WER on FLEURS"},
+    "vietnamese-vivos": {"repo": "doof-fer/whisper-large-v3-vietnamese", "lang": "vi", "beam": 5, "timestamps": False,
+                         "note": "Vietnamese fine-tune of large-v3 - beats large-v3 baseline on FLEURS"},
 }
 # --accurate: per language, the model that scored best on FLEURS (bench/fleurs.py). Languages not listed use large-v3
 # with beam search, which beat every public fine-tune we tried for vi / ar.
-ACCURATE = {"th": "thai-pathumma", "hi": "hindi-vasista"}
+ACCURATE = {"th": "thai-pathumma", "hi": "hindi-vasista", "vi": "vietnamese-vivos"}
 MODELS = Path(os.environ.get("BABELSCRIBE_MODELS", CACHE / "models"))
 
 
