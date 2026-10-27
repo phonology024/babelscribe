@@ -12,11 +12,14 @@ from __future__ import annotations
 import argparse
 import sys
 
-from . import __version__, api, backend, models
+from . import __version__, api, backend, doctor, models
 
 
 def main(argv: list[str] | None = None) -> None:
     argv = sys.argv[1:] if argv is None else argv
+    if argv[:1] == ["doctor"]:
+        doctor.main()
+        return
     if argv[:1] == ["mcp"]:                          # MCP server for AI apps (stdio)
         from .mcp_server import main as serve
         return serve()
