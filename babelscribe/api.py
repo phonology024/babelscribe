@@ -35,19 +35,26 @@ def transcribe_file(
     log: Callable[[str], None] = print,
     max_line_chars: int | None = None,
     prompt: str | None = None,
+    translate: bool = False,
 ) -> dict:
     """Transcribe one audio/video file. Returns a summary dict (files written, language, device, segments, text)."""
     src = Path(src).expanduser()
     if not src.is_file():
         raise FileNotFoundError(f"no such file: {src}")
+    if translate:
+        if text_model:
+            raise ValueError("translate cannot be combined with a text model (fine-tunes write the source language)")
+        if models.ALIASES.get(model, model) == "large-v3-turbo":   # turbo was not trained for translation
+            model = "large-v3"
+            log("translate: using large-v3 (turbo does not translate)")
     binary, timing, found = setup(model, bin, flavor)
     dev = backend.pick_device(found) if device == "auto" else int(device)
     gpu = next((d for d in found if d["id"] == dev), found[0])
     if lang == "auto":
         lang = transcribe.detected_language(binary, timing, src, dev)
         log(f"language: {lang}")
-    beam = None
-    if accurate and not text_model:
+    beam = 5 if translate and accurate else None
+    if accurate and not text_model and not translate:
         if lang in models.ACCURATE:
             text_model = models.ACCURATE[lang]          # fine-tune text + turbo timing
         elif model == "turbo":
@@ -55,8 +62,10 @@ def transcribe_file(
             timing = models.ensure(model, _quantizer(binary))
     t0 = time.time()
     log(f"transcribing with {model} on {gpu['backend']} {gpu['name']} ...")
-    segs = transcribe.run(binary, timing, src, lang, dev, beam=beam, verbose=verbose, prompt=prompt)
+    segs = transcribe.run(binary, timing, src, lang, dev, beam=beam, verbose=verbose, prompt=prompt, translate=translate)
     meta = {"tool": f"babelscribe {__version__}", "model": model, "lang": lang, "device": f"{gpu['backend']} {gpu['name']}"}
+    if translate:
+        meta["translate"] = "en"
     if text_model:
         _, ft = models.resolve(text_model)
         tm = models.ensure(text_model, _quantizer(binary))

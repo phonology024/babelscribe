@@ -37,6 +37,7 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--accurate", action="store_true",
                     help="slower but fewest errors: large-v3 with beam search, or the language's best fine-tune (hybrid)")
     ap.add_argument("--prompt", help='names and terms to spell correctly, e.g. --prompt "Pitakpong, babelscribe" (whisper initial prompt)')
+    ap.add_argument("--translate", action="store_true", help="translate the speech to English (uses large-v3; not with --text-model)")
     ap.add_argument("-f", "--formats", default="srt,json", help="comma list: srt,vtt,txt,json")
     ap.add_argument(
         "--max-line-chars",
@@ -71,6 +72,7 @@ def main(argv: list[str] | None = None) -> None:
             verbose=a.verbose,
             max_line_chars=a.max_line_chars,
             prompt=a.prompt,
+            translate=a.translate,
         )
     except FileNotFoundError as e:
         raise SystemExit(str(e))
