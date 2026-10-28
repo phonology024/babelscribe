@@ -42,7 +42,7 @@ def prompt_args(prompt: str | None) -> list[str]:
 
 def run(binary: Path, model: Path, media: Path, lang: str = "auto", device: int = 0, beam: int | None = None,
         threads: int | None = None, extra: list[str] | None = None, verbose: bool = False,
-        prompt: str | None = None) -> list[dict]:
+        prompt: str | None = None, translate: bool = False) -> list[dict]:
     with tempfile.TemporaryDirectory() as d:
         wav = Path(d) / "in.wav"
         to_wav16k(media, wav)
@@ -52,6 +52,8 @@ def run(binary: Path, model: Path, media: Path, lang: str = "auto", device: int 
         pa = prompt_args(prompt)
         cmd = [str(binary), "-m", str(model), "-f", str(wav), "-l", lang, "-ojf", "-of", str(out), *([] if pa else ["-mc", "0"]),
                "-dev", str(device), *pa]
+        if translate:   # whisper's translate-to-English task
+            cmd += ["-tr"]
         if beam:
             cmd += ["-bs", str(beam)]
         if threads:

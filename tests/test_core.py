@@ -266,3 +266,51 @@ def test_writers_split_long_subtitles_into_multiple_cues(tmp_path: Path):
     )
 
     assert subtitle_text == "One two three four five six seven eight"
+
+
+def test_translate_adds_tr_flag(monkeypatch, tmp_path):
+    from babelscribe import transcribe
+    argv = _argv_of(monkeypatch, tmp_path, transcribe.run, Path("whisper-cli"), Path("m.bin"), tmp_path / "a.wav", "th", 0, translate=True)
+    assert "-tr" in argv
+    argv = _argv_of(monkeypatch, tmp_path, transcribe.run, Path("whisper-cli"), Path("m.bin"), tmp_path / "a.wav", "th", 0)
+    assert "-tr" not in argv
+
+
+def test_translate_rejects_text_model_and_swaps_turbo(monkeypatch, tmp_path):
+    import pytest
+    from babelscribe import api
+    media = tmp_path / "t.wav"
+    media.write_bytes(b"x")
+    with pytest.raises(ValueError):
+        api.transcribe_file(media, "th", text_model="thai-thonburian", translate=True)
+    seen = {}
+
+    def fake_setup(model, *a, **k):
+        seen["model"] = model
+        raise RuntimeError("stop")
+    monkeypatch.setattr(api, "setup", fake_setup)
+    with pytest.raises(RuntimeError):
+        api.transcribe_file(media, "th", translate=True, log=lambda m: None)
+    assert seen["model"] == "large-v3"
+
+
+def test_cli_translate_flag_reaches_api(monkeypatch):
+    from babelscribe import api, cli
+    got = {}
+    monkeypatch.setattr(api, "transcribe_file", lambda *a, **k: got.update(k))
+    cli.main(["talk.mp4", "--translate"])
+    assert got["translate"] is True
+    cli.main(["talk.mp4"])
+    assert got["translate"] is False
+
+
+def test_mcp_translate_reaches_api(monkeypatch, tmp_path):
+    import pytest
+    pytest.importorskip("mcp.server.mcpserver")
+    import anyio
+    from babelscribe import api, mcp_server
+    got = {}
+    monkeypatch.setattr(api, "transcribe_file", lambda *a, **k: (got.update(k), {"text": ""})[1])
+    srv = mcp_server.build()
+    anyio.run(srv.call_tool, "transcribe", {"file_path": str(tmp_path / "t.mp4"), "translate": True})
+    assert got["translate"] is True

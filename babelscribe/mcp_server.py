@@ -43,7 +43,8 @@ def build():
     @srv.tool(title="Transcribe audio/video to subtitles", annotations=ToolAnnotations(
         read_only_hint=False, destructive_hint=False, idempotent_hint=True, open_world_hint=True))
     async def transcribe(file_path: str, language: str = "auto", accurate: bool = False, formats: str = "srt,txt",
-                         output_dir: str = "", vocabulary: str = "", ctx: Context | None = None) -> dict:
+                         output_dir: str = "", vocabulary: str = "",
+                         translate: bool = False, ctx: Context | None = None) -> dict:
         """Transcribe a local audio or video file into subtitles / text.
 
         file_path: absolute path to the media file (mp4, mkv, mov, mp3, wav, m4a, ...).
@@ -52,6 +53,7 @@ def build():
         formats: comma list from srt, vtt, txt, json.
         output_dir: folder for the output files; empty = next to the media file.
         vocabulary: names and terms to spell correctly, e.g. "Pitakpong, babelscribe" (whisper initial prompt); empty = none.
+        translate: true = write the transcript translated to English (uses large-v3; slower than turbo).
         Returns the files written, detected language, device used, and the transcript text."""
         src = Path(file_path).expanduser()
         out = Path(output_dir).expanduser() / src.stem if output_dir else None
@@ -75,7 +77,7 @@ def build():
             try:
                 result = await anyio.to_thread.run_sync(lambda: api.transcribe_file(
                     src, language, accurate=accurate, formats=fmts, out=out, log=lambda m: (lines.append(m), print(m)),
-                    prompt=vocabulary))
+                    prompt=vocabulary, translate=translate))
             finally:
                 done.set()
         text = result.pop("text", "")

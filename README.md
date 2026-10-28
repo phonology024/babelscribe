@@ -174,6 +174,7 @@ languages are the most valuable contribution.
 - **Hybrid mode for better spelling in your language** — community fine-tunes (e.g. Thai *Thonburian Whisper*) spell far better but often lose timestamps. `--text-model` takes the text from the fine-tune and the timing from `large-v3-turbo`, aligned character by character (works for languages without spaces), cut only at word boundaries, with the timing model filling any words the fine-tune skipped.
 - **`--accurate`** — slower, fewest errors: large-v3 with beam search, or for Thai and Hindi the best community fine-tune (hybrid). Chosen per language from the FLEURS benchmark above.
 - **Custom vocabulary** — `--prompt "Pitakpong, babelscribe"` gives whisper an initial prompt that biases the spelling of names and jargon. In the MCP `transcribe` tool the same thing is the `vocabulary` argument. While a prompt is set, `--max-context 0` is not passed (whisper.cpp ignores the prompt otherwise).
+- **Translate to English** — `--translate` writes the transcript translated to English (whisper's translate task, any source language). It uses `large-v3` because turbo was not trained to translate, and cannot be combined with `--text-model`. In the MCP `transcribe` tool it is the `translate` argument.
 - **Outputs** — `srt`, `vtt`, `txt`, `json` (segments with token timings).
 
 ## Usage
@@ -183,6 +184,7 @@ babelscribe podcast.mp3 -l en -m large-v3          # pick language and model
 babelscribe talk.mp4 -l hi --accurate              # slower, fewest errors (best model per language)
 babelscribe vo.wav -l th --text-model thai-thonburian   # hybrid: pick a Thai fine-tune yourself
 babelscribe talk.mp4 --prompt "Pitakpong, babelscribe"   # bias the spelling of names and terms
+babelscribe talk.mp4 --translate                   # subtitles translated to English
 babelscribe devices                                # GPUs whisper.cpp can see
 babelscribe models                                 # models and fine-tunes
 babelscribe talk.mp4 --bin /path/to/whisper-cli    # use your own whisper.cpp build
