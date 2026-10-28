@@ -28,6 +28,8 @@ FINETUNES = {
                       "note": "Pathumma Whisper by NECTEC (Thai) — lowest Thai CER on FLEURS"},
     "hindi-vasista": {"repo": "vasista22/whisper-hindi-large-v2", "lang": "hi", "beam": 5, "timestamps": False,
                       "note": "Hindi fine-tune of large-v2 (Speech Lab, IIT Madras) — halves Hindi WER on FLEURS"},
+    "vietnamese-toantam": {"repo": "toantam1290/whisper-large-v3-vietnamese", "lang": "vi", "beam": 5, "timestamps": False,
+                           "note": "Vietnamese fine-tune of large-v3 by toantam1290 (Apache-2.0)"},
 }
 # --accurate: per language, the model that scored best on FLEURS (bench/fleurs.py). Languages not listed use large-v3
 # with beam search, which beat every public fine-tune we tried for vi / ar.
