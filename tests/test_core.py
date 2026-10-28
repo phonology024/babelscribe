@@ -58,3 +58,141 @@ def test_mcp_server_tools(tmp_path):
         return await srv.call_tool("find_media", {"folder": str(tmp_path)})
     out = anyio.run(go)
     assert "talk.mp4" in json.dumps(out, default=str) and "notes.txt" not in json.dumps(out, default=str)
+def test_writers_wrap_long_subtitle_lines(tmp_path: Path):
+    segs = [{
+        "start": 0.0,
+        "end": 4.0,
+        "text": "This is a long subtitle line",
+        "words": [
+            ["This", 0.0, 0.4],
+            [" is", 0.4, 0.7],
+            [" a", 0.7, 0.9],
+            [" long", 0.9, 1.3],
+            [" subtitle", 1.3, 2.2],
+            [" line", 2.2, 4.0],
+        ],
+    }]
+
+    writers.write(
+        segs,
+        tmp_path / "wrapped",
+        ["srt"],
+        {},
+        max_line_chars=20,
+    )
+
+    text = (tmp_path / "wrapped.srt").read_text(encoding="utf-8")
+
+    assert "This is a long\nsubtitle line" in text
+def test_writers_wrap_long_vtt_lines(tmp_path: Path):
+    segs = [{
+        "start": 0.0,
+        "end": 4.0,
+        "text": "This is a long subtitle line",
+        "words": [
+            ["This", 0.0, 0.4],
+            [" is", 0.4, 0.7],
+            [" a", 0.7, 0.9],
+            [" long", 0.9, 1.3],
+            [" subtitle", 1.3, 2.2],
+            [" line", 2.2, 4.0],
+        ],
+    }]
+
+    writers.write(
+        segs,
+        tmp_path / "wrapped",
+        ["vtt"],
+        {},
+        max_line_chars=20,
+    )
+
+    text = (tmp_path / "wrapped.vtt").read_text(encoding="utf-8")
+
+    assert text.startswith("WEBVTT\n\n")
+    assert "This is a long\nsubtitle line" in text
+
+def test_writers_use_smaller_default_for_thai(tmp_path: Path):
+    thai_text = "สวัสดีครับวันนี้อากาศดีมากนะครับ"
+
+    segs = [{
+        "start": 0.0,
+        "end": 3.0,
+        "text": thai_text,
+        "words": [
+            ["สวัสดี", 0.0, 0.6],
+            ["ครับ", 0.6, 0.9],
+            ["วันนี้", 0.9, 1.4],
+            ["อากาศ", 1.4, 1.9],
+            ["ดีมาก", 1.9, 2.4],
+            ["นะครับ", 2.4, 3.0],
+        ],
+    }]
+
+    writers.write(
+        segs,
+        tmp_path / "thai",
+        ["srt"],
+        {"lang": "th"},
+    )
+
+    text = (tmp_path / "thai.srt").read_text(encoding="utf-8")
+    blocks = [
+        block for block in text.strip().split("\n\n")
+        if block
+    ]
+
+    assert len(blocks) == 1
+
+    subtitle_lines = blocks[0].splitlines()[2:]
+
+    assert len(subtitle_lines) == 2
+    assert all(0 < len(line) <= 24 for line in subtitle_lines)
+    assert "".join(subtitle_lines) == thai_text
+
+
+def test_writers_split_long_subtitles_into_multiple_cues(tmp_path: Path):
+    segs = [{
+        "start": 0.0,
+        "end": 4.0,
+        "text": "One two three four five six seven eight",
+        "words": [
+            ["One", 0.0, 0.3],
+            [" two", 0.3, 0.6],
+            [" three", 0.6, 1.0],
+            [" four", 1.0, 1.3],
+            [" five", 1.3, 1.6],
+            [" six", 1.6, 1.9],
+            [" seven", 1.9, 2.3],
+            [" eight", 2.3, 2.7],
+        ],
+    }]
+
+    writers.write(
+        segs,
+        tmp_path / "multi",
+        ["srt"],
+        {},
+        max_line_chars=10,
+    )
+
+    text = (tmp_path / "multi.srt").read_text(encoding="utf-8")
+    blocks = [block for block in text.strip().split("\n\n") if block]
+
+    # Every SRT block is a subtitle cue.
+    cues = blocks
+
+    assert len(cues) == 3
+
+    for cue in cues:
+        # Skip the cue number and timestamp.
+        subtitle_lines = cue.splitlines()[2:]
+        assert len(subtitle_lines) <= 2
+
+    subtitle_text = " ".join(
+    line
+    for cue in cues
+    for line in cue.splitlines()[2:]
+    )
+
+    assert subtitle_text == "One two three four five six seven eight"
