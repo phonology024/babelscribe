@@ -20,10 +20,22 @@ def setup(model: str = "turbo", bin: str | None = None, flavor: str | None = Non
     return binary, timing, found
 
 
-def transcribe_file(src: str | Path, lang: str = "auto", model: str = "turbo", text_model: str | None = None,
-                    accurate: bool = False, formats: list[str] | None = None, out: str | Path | None = None,
-                    device: str | int = "auto", bin: str | None = None, flavor: str | None = None,
-                    verbose: bool = False, log: Callable[[str], None] = print, prompt: str | None = None) -> dict:
+def transcribe_file(
+    src: str | Path,
+    lang: str = "auto",
+    model: str = "turbo",
+    text_model: str | None = None,
+    accurate: bool = False,
+    formats: list[str] | None = None,
+    out: str | Path | None = None,
+    device: str | int = "auto",
+    bin: str | None = None,
+    flavor: str | None = None,
+    verbose: bool = False,
+    log: Callable[[str], None] = print,
+    max_line_chars: int | None = None,
+    prompt: str | None = None,
+) -> dict:
     """Transcribe one audio/video file. Returns a summary dict (files written, language, device, segments, text)."""
     src = Path(src).expanduser()
     if not src.is_file():
@@ -52,7 +64,13 @@ def transcribe_file(src: str | Path, lang: str = "auto", model: str = "turbo", t
         segs = hybrid.run(binary, tm, src, segs, ft["lang"] if ft else lang, dev, (ft or {}).get("beam"), verbose, prompt=prompt)
         meta["text_model"] = text_model
     base = Path(out).expanduser() if out else src.with_suffix("")
-    files = writers.write(segs, base, formats or ["srt", "json"], meta)
+    files = writers.write(
+        segs,
+        base,
+        formats or ["srt", "json"],
+        meta,
+        max_line_chars=max_line_chars,
+    )
     took = time.time() - t0
     log(f"{len(segs)} segments in {took:.1f}s -> " + ", ".join(str(f) for f in files))
     return {**meta, "files": [str(f) for f in files], "segments": len(segs), "seconds": round(took, 1),

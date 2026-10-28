@@ -38,6 +38,11 @@ def main(argv: list[str] | None = None) -> None:
                     help="slower but fewest errors: large-v3 with beam search, or the language's best fine-tune (hybrid)")
     ap.add_argument("--prompt", help='names and terms to spell correctly, e.g. --prompt "Pitakpong, babelscribe" (whisper initial prompt)')
     ap.add_argument("-f", "--formats", default="srt,json", help="comma list: srt,vtt,txt,json")
+    ap.add_argument(
+        "--max-line-chars",
+        type=int,
+        help="maximum characters per subtitle line (default: 42, smaller for CJK/Thai)",
+    )
     ap.add_argument("-o", "--out", help="output base path (default: next to the input)")
     ap.add_argument("--device", default="auto", help="GPU id from `babelscribe devices`, or auto")
     ap.add_argument("--bin", help="path to a whisper-cli you built yourself")
@@ -52,8 +57,21 @@ def main(argv: list[str] | None = None) -> None:
             print(f"  [{d['id']}] {d['backend']:6} {d['name']}  {d.get('detail', '')}")
         print(f"auto picks device {backend.pick_device(found)}"); return
     try:
-        api.transcribe_file(a.input, a.lang, a.model, a.text_model, a.accurate,
-                            [f.strip() for f in a.formats.split(",") if f.strip()], a.out, a.device, a.bin, a.flavor, a.verbose, prompt=a.prompt)
+        api.transcribe_file(
+            src=a.input,
+            lang=a.lang,
+            model=a.model,
+            text_model=a.text_model,
+            accurate=a.accurate,
+            formats=[f.strip() for f in a.formats.split(",") if f.strip()],
+            out=a.out,
+            device=a.device,
+            bin=a.bin,
+            flavor=a.flavor,
+            verbose=a.verbose,
+            max_line_chars=a.max_line_chars,
+            prompt=a.prompt,
+        )
     except FileNotFoundError as e:
         raise SystemExit(str(e))
 
