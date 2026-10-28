@@ -58,6 +58,76 @@ def test_mcp_server_tools(tmp_path):
         return await srv.call_tool("find_media", {"folder": str(tmp_path)})
     out = anyio.run(go)
     assert "talk.mp4" in json.dumps(out, default=str) and "notes.txt" not in json.dumps(out, default=str)
+
+
+def _argv_of(monkeypatch, tmp_path, runner, *args, **kw):
+    """Run a whisper-cli caller with ffmpeg and subprocess mocked; return the argv it built."""
+    import json, subprocess
+    from babelscribe import transcribe
+    seen = []
+
+    def fake_run(cmd, *a, **k):
+        seen.append(list(cmd))
+        for i, c in enumerate(cmd):
+            if c == "-of":
+                Path(cmd[i + 1] + ".json").write_text(json.dumps({"transcription": []}), encoding="utf-8")
+            if c == "-f":
+                Path(cmd[i + 1] + ".json").write_text(json.dumps({"transcription": []}), encoding="utf-8")
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+    monkeypatch.setattr(transcribe.subprocess, "run", fake_run)
+    monkeypatch.setattr(transcribe, "to_wav16k", lambda *a, **k: None)
+    runner(*args, **kw)
+    return seen[-1]
+
+
+def test_prompt_reaches_whisper_cli(monkeypatch, tmp_path):
+    from babelscribe import transcribe
+    text = "Pitakpong, babelscribe สวัสดี"
+    argv = _argv_of(monkeypatch, tmp_path, transcribe.run, Path("whisper-cli"), Path("m.bin"), tmp_path / "a.wav", "en", 0, prompt=text)
+    assert argv.count("--prompt") == 1 and argv[argv.index("--prompt") + 1] == text
+    assert "-mc" not in argv   # whisper.cpp ignores the prompt with -mc 0
+
+
+def test_no_prompt_keeps_argv(monkeypatch, tmp_path):
+    from babelscribe import transcribe
+    for p in (None, "", "   "):
+        argv = _argv_of(monkeypatch, tmp_path, transcribe.run, Path("whisper-cli"), Path("m.bin"), tmp_path / "a.wav", "en", 0, prompt=p)
+        assert "--prompt" not in argv
+        assert argv[argv.index("-mc"):argv.index("-mc") + 2] == ["-mc", "0"]
+
+
+def test_prompt_reaches_hybrid_pass(monkeypatch, tmp_path):
+    from babelscribe import hybrid
+    segs = [{"start": 0.0, "end": 2.0, "text": "x", "words": []}]
+    argv = _argv_of(monkeypatch, tmp_path, hybrid.run, Path("whisper-cli"), Path("m.bin"), tmp_path / "a.wav", segs, "th", 0, None,
+                    prompt="  Pitakpong  ")
+    assert argv.count("--prompt") == 1 and argv[argv.index("--prompt") + 1] == "Pitakpong"
+    argv = _argv_of(monkeypatch, tmp_path, hybrid.run, Path("whisper-cli"), Path("m.bin"), tmp_path / "a.wav", segs, "th", 0, None)
+    assert "--prompt" not in argv and "-mc" in argv
+
+
+def test_cli_prompt_flag_reaches_api(monkeypatch):
+    from babelscribe import api, cli
+    got = {}
+    monkeypatch.setattr(api, "transcribe_file", lambda *a, **k: got.update(k))
+    cli.main(["talk.mp4", "--prompt", "Pitakpong, babelscribe"])
+    assert got["prompt"] == "Pitakpong, babelscribe"
+    cli.main(["talk.mp4"])
+    assert not got["prompt"]
+
+
+def test_mcp_vocabulary_reaches_api(monkeypatch, tmp_path):
+    import pytest
+    pytest.importorskip("mcp.server.mcpserver")
+    import anyio
+    from babelscribe import api, mcp_server
+    got = {}
+    monkeypatch.setattr(api, "transcribe_file", lambda *a, **k: (got.update(k), {"text": ""})[1])
+    srv = mcp_server.build()
+    anyio.run(srv.call_tool, "transcribe", {"file_path": str(tmp_path / "t.mp4"), "vocabulary": "Pitakpong, babelscribe"})
+    assert got["prompt"] == "Pitakpong, babelscribe"
+
+
 def test_writers_wrap_long_subtitle_lines(tmp_path: Path):
     segs = [{
         "start": 0.0,
@@ -190,9 +260,9 @@ def test_writers_split_long_subtitles_into_multiple_cues(tmp_path: Path):
         assert len(subtitle_lines) <= 2
 
     subtitle_text = " ".join(
-    line
-    for cue in cues
-    for line in cue.splitlines()[2:]
+        line
+        for cue in cues
+        for line in cue.splitlines()[2:]
     )
 
     assert subtitle_text == "One two three four five six seven eight"

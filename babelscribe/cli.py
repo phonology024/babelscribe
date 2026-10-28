@@ -4,6 +4,7 @@ Vulkan, NVIDIA via CUDA, Apple via Metal) or the CPU.
   babelscribe talk.mp4                         # auto language, turbo model, best GPU -> talk.srt + talk.json
   babelscribe vo.wav -l th --text-model thai-thonburian   # hybrid: Thai fine-tune text + turbo timing
   babelscribe talk.mp4 --accurate              # slower, fewest errors: large-v3 + beam search, or the best fine-tune
+  babelscribe talk.mp4 --prompt "Pitakpong, babelscribe"   # bias spelling of names and terms
   babelscribe mcp                              # MCP server for AI apps (Claude, Codex, Gemini CLI, ...)
   babelscribe devices                          # list GPUs whisper.cpp can use
   babelscribe models                           # list models and fine-tunes"""
@@ -12,11 +13,14 @@ from __future__ import annotations
 import argparse
 import sys
 
-from . import __version__, api, backend, models
+from . import __version__, api, backend, doctor, models
 
 
 def main(argv: list[str] | None = None) -> None:
     argv = sys.argv[1:] if argv is None else argv
+    if argv[:1] == ["doctor"]:
+        doctor.main()
+        return
     if argv[:1] == ["mcp"]:                          # MCP server for AI apps (stdio)
         from .mcp_server import main as serve
         return serve()
@@ -32,6 +36,7 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--text-model", help="language fine-tune for the text (hybrid mode), e.g. thai-thonburian")
     ap.add_argument("--accurate", action="store_true",
                     help="slower but fewest errors: large-v3 with beam search, or the language's best fine-tune (hybrid)")
+    ap.add_argument("--prompt", help='names and terms to spell correctly, e.g. --prompt "Pitakpong, babelscribe" (whisper initial prompt)')
     ap.add_argument("-f", "--formats", default="srt,json", help="comma list: srt,vtt,txt,json")
     ap.add_argument(
         "--max-line-chars",
@@ -58,22 +63,17 @@ def main(argv: list[str] | None = None) -> None:
             model=a.model,
             text_model=a.text_model,
             accurate=a.accurate,
-            formats=[
-                f.strip()
-                for f in a.formats.split(",")
-                if f.strip()
-            ],
+            formats=[f.strip() for f in a.formats.split(",") if f.strip()],
             out=a.out,
             device=a.device,
             bin=a.bin,
             flavor=a.flavor,
             verbose=a.verbose,
             max_line_chars=a.max_line_chars,
+            prompt=a.prompt,
         )
-
     except FileNotFoundError as e:
         raise SystemExit(str(e))
-
 
 if __name__ == "__main__":
     main()

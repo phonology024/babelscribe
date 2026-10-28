@@ -20,7 +20,6 @@ def setup(model: str = "turbo", bin: str | None = None, flavor: str | None = Non
     return binary, timing, found
 
 
-
 def transcribe_file(
     src: str | Path,
     lang: str = "auto",
@@ -35,8 +34,8 @@ def transcribe_file(
     verbose: bool = False,
     log: Callable[[str], None] = print,
     max_line_chars: int | None = None,
+    prompt: str | None = None,
 ) -> dict:
-
     """Transcribe one audio/video file. Returns a summary dict (files written, language, device, segments, text)."""
     src = Path(src).expanduser()
     if not src.is_file():
@@ -56,13 +55,13 @@ def transcribe_file(
             timing = models.ensure(model, _quantizer(binary))
     t0 = time.time()
     log(f"transcribing with {model} on {gpu['backend']} {gpu['name']} ...")
-    segs = transcribe.run(binary, timing, src, lang, dev, beam=beam, verbose=verbose)
+    segs = transcribe.run(binary, timing, src, lang, dev, beam=beam, verbose=verbose, prompt=prompt)
     meta = {"tool": f"babelscribe {__version__}", "model": model, "lang": lang, "device": f"{gpu['backend']} {gpu['name']}"}
     if text_model:
         _, ft = models.resolve(text_model)
         tm = models.ensure(text_model, _quantizer(binary))
         log(f"text pass with {text_model} ...")
-        segs = hybrid.run(binary, tm, src, segs, ft["lang"] if ft else lang, dev, (ft or {}).get("beam"), verbose)
+        segs = hybrid.run(binary, tm, src, segs, ft["lang"] if ft else lang, dev, (ft or {}).get("beam"), verbose, prompt=prompt)
         meta["text_model"] = text_model
     base = Path(out).expanduser() if out else src.with_suffix("")
     files = writers.write(

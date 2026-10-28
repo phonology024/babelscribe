@@ -173,6 +173,7 @@ languages are the most valuable contribution.
 - **Long files that don't loop** — runs whisper with `--max-context 0`, which stops the classic "same sentence repeated forever" hallucination on long recordings.
 - **Hybrid mode for better spelling in your language** — community fine-tunes (e.g. Thai *Thonburian Whisper*) spell far better but often lose timestamps. `--text-model` takes the text from the fine-tune and the timing from `large-v3-turbo`, aligned character by character (works for languages without spaces), cut only at word boundaries, with the timing model filling any words the fine-tune skipped.
 - **`--accurate`** — slower, fewest errors: large-v3 with beam search, or for Thai and Hindi the best community fine-tune (hybrid). Chosen per language from the FLEURS benchmark above.
+- **Custom vocabulary** — `--prompt "Pitakpong, babelscribe"` gives whisper an initial prompt that biases the spelling of names and jargon. In the MCP `transcribe` tool the same thing is the `vocabulary` argument. While a prompt is set, `--max-context 0` is not passed (whisper.cpp ignores the prompt otherwise).
 - **Outputs** — `srt`, `vtt`, `txt`, `json` (segments with token timings).
 
 ## Usage
@@ -181,6 +182,7 @@ babelscribe talk.mp4 -f srt,vtt,txt,json          # all formats
 babelscribe podcast.mp3 -l en -m large-v3          # pick language and model
 babelscribe talk.mp4 -l hi --accurate              # slower, fewest errors (best model per language)
 babelscribe vo.wav -l th --text-model thai-thonburian   # hybrid: pick a Thai fine-tune yourself
+babelscribe talk.mp4 --prompt "Pitakpong, babelscribe"   # bias the spelling of names and terms
 babelscribe devices                                # GPUs whisper.cpp can see
 babelscribe models                                 # models and fine-tunes
 babelscribe talk.mp4 --bin /path/to/whisper-cli    # use your own whisper.cpp build
@@ -188,7 +190,7 @@ babelscribe talk.mp4 --bin /path/to/whisper-cli    # use your own whisper.cpp bu
 From Python:
 ```python
 from babelscribe.api import transcribe_file
-r = transcribe_file("talk.mp4", lang="auto", formats=["srt", "txt"])   # or accurate=True
+r = transcribe_file("talk.mp4", lang="auto", formats=["srt", "txt"])   # or accurate=True, prompt="names, terms"
 print(r["lang"], r["device"], r["files"]); print(r["text"][:200])
 ```
 Models download on first use to `~/.babelscribe/models` (`BABELSCRIBE_MODELS` to change). Hybrid fine-tunes are converted on your

@@ -10,7 +10,7 @@ import tempfile
 from pathlib import Path
 
 from . import align
-from .transcribe import to_wav16k
+from .transcribe import prompt_args, to_wav16k
 
 
 def chunks(time_segs: list[dict], max_len: float = 24.0) -> list[tuple[float, float, list[dict]]]:
@@ -25,13 +25,14 @@ def chunks(time_segs: list[dict], max_len: float = 24.0) -> list[tuple[float, fl
 
 
 def run(binary: Path, text_model: Path, media: Path, time_segs: list[dict], lang: str, device: int, beam: int | None,
-        verbose: bool = False, pad: float = .25) -> list[dict]:
+        verbose: bool = False, pad: float = .25, prompt: str | None = None) -> list[dict]:
     parts = chunks(time_segs)
     with tempfile.TemporaryDirectory() as d:
         wavs = []
         for i, (a, b, _) in enumerate(parts):
             w = Path(d) / f"c{i:04d}.wav"; to_wav16k(media, w, max(0.0, a - pad), b + pad, tail_silence=1.5); wavs.append(w)
-        cmd = [str(binary), "-m", str(text_model), "-l", lang, "-oj", "-mc", "0", "-dev", str(device), "-np"]
+        pa = prompt_args(prompt)   # whisper.cpp ignores --prompt while -mc is 0 (chunks are single windows, so no context loop)
+        cmd = [str(binary), "-m", str(text_model), "-l", lang, "-oj", *([] if pa else ["-mc", "0"]), "-dev", str(device), "-np", *pa]
         if beam:
             cmd += ["-bs", str(beam)]
         for w in wavs:

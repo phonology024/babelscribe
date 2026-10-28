@@ -34,14 +34,24 @@ def to_wav16k(src: Path, dst: Path, start: float | None = None, end: float | Non
     subprocess.run(cmd, check=True, stdout=sys.stderr)   # never stdout: it is the MCP channel
 
 
+def prompt_args(prompt: str | None) -> list[str]:
+    """whisper-cli `--prompt` (initial prompt: names / jargon to spell right). Empty or blank = no flag. The text is one argv item."""
+    prompt = (prompt or "").strip()
+    return ["--prompt", prompt] if prompt else []
+
+
 def run(binary: Path, model: Path, media: Path, lang: str = "auto", device: int = 0, beam: int | None = None,
-        threads: int | None = None, extra: list[str] | None = None, verbose: bool = False) -> list[dict]:
+        threads: int | None = None, extra: list[str] | None = None, verbose: bool = False,
+        prompt: str | None = None) -> list[dict]:
     with tempfile.TemporaryDirectory() as d:
         wav = Path(d) / "in.wav"
         to_wav16k(media, wav)
         out = Path(d) / "out"
-        # -mc 0: never feed previous text back as a prompt — stops the repeat-loop hallucination on long files
-        cmd = [str(binary), "-m", str(model), "-f", str(wav), "-l", lang, "-ojf", "-of", str(out), "-mc", "0", "-dev", str(device)]
+        # -mc 0: never feed previous text back as a prompt — stops the repeat-loop hallucination on long files.
+        # whisper.cpp ignores --prompt while -mc is 0, so with a prompt the context limit is left at its default.
+        pa = prompt_args(prompt)
+        cmd = [str(binary), "-m", str(model), "-f", str(wav), "-l", lang, "-ojf", "-of", str(out), *([] if pa else ["-mc", "0"]),
+               "-dev", str(device), *pa]
         if beam:
             cmd += ["-bs", str(beam)]
         if threads:
