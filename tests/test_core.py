@@ -314,3 +314,38 @@ def test_mcp_translate_reaches_api(monkeypatch, tmp_path):
     srv = mcp_server.build()
     anyio.run(srv.call_tool, "transcribe", {"file_path": str(tmp_path / "t.mp4"), "translate": True})
     assert got["translate"] is True
+
+
+def _transcribe_with_device(monkeypatch, tmp_path, device):
+    """Run transcribe_file with setup/model work stubbed out, so only device handling is exercised."""
+    import pytest
+    from babelscribe import api
+    media = tmp_path / "d.wav"
+    media.write_bytes(b"x")
+    found = [{"backend": "metal", "id": 0, "name": "Apple M4 Pro", "detail": "uma: 1"},
+             {"backend": "cpu", "id": 1, "name": "CPU", "detail": ""}]
+    monkeypatch.setattr(api, "setup", lambda *a, **k: (Path("whisper-cli"), Path("m.bin"), found))
+    monkeypatch.setattr(api.transcribe, "run", lambda *a, **k: [])
+    return api.transcribe_file(media, "en", device=device, log=lambda m: None, formats=["txt"])
+
+
+def test_device_rejects_a_non_number(monkeypatch, tmp_path):
+    import pytest
+    with pytest.raises(ValueError) as e:
+        _transcribe_with_device(monkeypatch, tmp_path, "foo")
+    assert "device must be" in str(e.value), "not a bare int() ValueError from deep inside"
+
+
+def test_device_rejects_an_id_the_driver_does_not_have(monkeypatch, tmp_path):
+    import pytest
+    for bad in (5, -1, "2"):
+        with pytest.raises(ValueError) as e:
+            _transcribe_with_device(monkeypatch, tmp_path, bad)
+        assert "no device" in str(e.value) and "Apple M4 Pro" in str(e.value), "list the ids that do exist"
+
+
+def test_device_accepts_auto_none_and_a_listed_id(monkeypatch, tmp_path):
+    assert _transcribe_with_device(monkeypatch, tmp_path, "auto")["device"].startswith("metal")
+    assert _transcribe_with_device(monkeypatch, tmp_path, None)["device"].startswith("metal")
+    assert _transcribe_with_device(monkeypatch, tmp_path, "1")["device"].startswith("cpu")
+    assert _transcribe_with_device(monkeypatch, tmp_path, 1)["device"].startswith("cpu")
