@@ -21,8 +21,9 @@ and in Cowork sessions on your computer; claude.ai chat cannot start local serve
 - **Sends:** nothing. No telemetry or uploads. The transcript text is returned only to Claude, in your conversation.
 
 ## Tools
-`transcribe` (writes subtitle/text files), `find_media` (lists media files in Downloads, Videos, Desktop, Music,
-Documents), `list_devices`, `list_languages_and_models`.
+`transcribe` (writes subtitle/text files), `transcribe_folder` (every audio/video in a folder, one summary back),
+`find_media` (lists media files in Downloads, Videos, Desktop, Music, Documents), `list_devices`,
+`list_languages_and_models`.
 
 ## Privacy Policy
 See https://phonology024.github.io/babelscribe/privacy.html — no data collection, no third-party sharing, local storage
