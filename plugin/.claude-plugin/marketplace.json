@@ -1,0 +1,17 @@
+{
+  "name": "babelscribe",
+  "description": "Local speech-to-text for Claude: subtitles and transcripts from any audio or video file, on your own GPU.",
+  "owner": {
+    "name": "phonology024",
+    "url": "https://github.com/phonology024"
+  },
+  "plugins": [
+    {
+      "name": "babelscribe",
+      "source": "./",
+      "description": "Turn audio and video files into subtitles (SRT/VTT) and text in 99 languages, using your own AMD, NVIDIA, Intel or Apple GPU. Runs locally; nothing is uploaded.",
+      "category": "productivity",
+      "tags": ["transcription", "subtitles", "speech-to-text", "whisper", "offline", "gpu"]
+    }
+  ]
+}
