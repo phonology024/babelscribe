@@ -60,8 +60,93 @@ def test_mcp_server_tools(tmp_path):
     assert "talk.mp4" in json.dumps(out, default=str) and "notes.txt" not in json.dumps(out, default=str)
 
 
+def _tool_payload(result):
+    """call_tool returns a CallToolResult; the tool's dict is the JSON in its first text block."""
+    import json
+    return json.loads(result.content[0].text)
+
+
+def test_mcp_transcribe_folder_batches_every_media_file(tmp_path, monkeypatch):
+    import pytest
+    pytest.importorskip("mcp.server.mcpserver")
+    import anyio, json
+    from babelscribe import api, mcp_server
+
+    calls = []
+
+    def fake_transcribe(src, *a, **k):
+        calls.append((Path(src).name, k.get("out")))
+        return {"files": [str(Path(src).with_suffix(".srt"))], "lang": "en", "segments": 1, "seconds": 0.1, "text": "hi"}
+    monkeypatch.setattr(api, "transcribe_file", fake_transcribe)
+
+    sub = tmp_path / "nested"
+    sub.mkdir()
+    for name in ("a.mp4", "b.mp3", "notes.txt"):
+        (tmp_path / name).write_bytes(b"x")
+    (sub / "c.mov").write_bytes(b"x")
+
+    srv = mcp_server.build()
+
+    async def go(**kwargs):
+        return await srv.call_tool("transcribe_folder", {"folder": str(tmp_path), "formats": "srt", **kwargs})
+    out = _tool_payload(anyio.run(go))
+
+    assert "transcribe_folder" in {t.name for t in anyio.run(srv.list_tools)}
+    assert sorted(c[0] for c in calls) == ["a.mp4", "b.mp3"], "non-media and sub-folders are skipped by default"
+    assert (out["total"], out["succeeded"], out["failed"]) == (2, 2, 0)
+    assert all(f["ok"] for f in out["files"])
+
+
+def test_mcp_transcribe_folder_recursive_and_continues_after_failure(tmp_path, monkeypatch):
+    import pytest
+    pytest.importorskip("mcp.server.mcpserver")
+    import anyio, json
+    from babelscribe import api, mcp_server
+
+    seen = []
+
+    def fake_transcribe(src, *a, **k):
+        seen.append(Path(src).name)
+        if Path(src).name == "bad.mp4":
+            raise RuntimeError("whisper-cli failed (1)")
+        return {"files": [], "lang": "en", "segments": 1, "seconds": 0.1, "text": "hi"}
+    monkeypatch.setattr(api, "transcribe_file", fake_transcribe)
+
+    sub = tmp_path / "nested"
+    sub.mkdir()
+    (tmp_path / "bad.mp4").write_bytes(b"x")
+    (sub / "good.mp3").write_bytes(b"x")
+
+    srv = mcp_server.build()
+
+    async def go():
+        return await srv.call_tool("transcribe_folder", {"folder": str(tmp_path), "recursive": True})
+    out = _tool_payload(anyio.run(go))
+
+    assert sorted(seen) == ["bad.mp4", "good.mp3"], "a failing file must not stop the batch"
+    assert (out["total"], out["succeeded"], out["failed"]) == (2, 1, 1)
+    failed = next(f for f in out["files"] if not f["ok"])
+    assert "whisper-cli failed" in failed["error"]
+
+
+def test_mcp_transcribe_folder_rejects_a_file(tmp_path):
+    import pytest
+    pytest.importorskip("mcp.server.mcpserver")
+    import anyio
+    from babelscribe import mcp_server
+
+    target = tmp_path / "one.mp4"
+    target.write_bytes(b"x")
+    srv = mcp_server.build()
+
+    async def go():
+        return await srv.call_tool("transcribe_folder", {"folder": str(target)})
+    with pytest.raises(Exception) as exc:
+        anyio.run(go)
+    assert "not a folder" in str(exc.value.__cause__)
+
+
 def _argv_of(monkeypatch, tmp_path, runner, *args, **kw):
-    """Run a whisper-cli caller with ffmpeg and subprocess mocked; return the argv it built."""
     import json, subprocess
     from babelscribe import transcribe
     seen = []

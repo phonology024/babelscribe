@@ -24,6 +24,19 @@ def _guard_stdout():
     return proto
 
 
+async def _report_progress(ctx, progress: float, total: float | None, message: str) -> None:
+    """Send an MCP progress notification when a client request is in flight.
+
+    ctx.report_progress needs the request context; calling a tool directly (tests, scripts) has none and
+    raises ValueError, which must not abort the transcription itself."""
+    if ctx is None:
+        return
+    try:
+        await ctx.report_progress(progress, total, message)
+    except ValueError:   # no request context: nothing to notify
+        pass
+
+
 def build():
     import anyio
     from mcp.server.mcpserver import Context, MCPServer
@@ -85,6 +98,57 @@ def build():
         if len(text) > TEXT_LIMIT:
             result["note"] = f"transcript truncated to {TEXT_LIMIT} characters; the full text is in the files listed"
         return result
+
+    # Whole-folder batch: "subtitle everything in this folder" in one request. One file failing must not
+    # abort the rest, so failures are collected per file and reported alongside the successes.
+    @srv.tool(title="Transcribe every audio/video in a folder", annotations=ToolAnnotations(
+        read_only_hint=False, destructive_hint=False, idempotent_hint=True, open_world_hint=True))
+    async def transcribe_folder(folder: str, language: str = "auto", accurate: bool = False,
+                                formats: str = "srt,txt", output_dir: str = "", vocabulary: str = "",
+                                translate: bool = False, recursive: bool = False,
+                                ctx: Context | None = None) -> dict:
+        """Transcribe every audio and video file in a folder, one at a time.
+
+        folder: absolute path to the folder holding the media files.
+        language: ISO code such as en, th, ja, es, hi — or "auto" to detect each file separately.
+        accurate: slower, fewest errors (large-v3 with beam search, or the best fine-tune for Thai / Hindi).
+        formats: comma list from srt, vtt, txt, json.
+        output_dir: folder for the output files; empty = next to each media file.
+        vocabulary: names and terms to spell correctly, e.g. "Pitakpong, babelscribe"; empty = none.
+        translate: true = write every transcript translated to English (uses large-v3; much slower).
+        recursive: true = also transcribe media in sub-folders.
+        Returns the counts plus one entry per file (path, files written, language, seconds) — a failure is
+        reported in its own entry and the batch continues with the next file."""
+        root = Path(folder).expanduser()
+        if not root.is_dir():
+            raise ValueError(f"not a folder: {root}")
+        found = root.rglob("*") if recursive else root.glob("*")
+        media = sorted(p for p in found if p.is_file() and p.suffix.lower() in MEDIA)
+        out_root = Path(output_dir).expanduser() if output_dir else None
+        if out_root:
+            out_root.mkdir(parents=True, exist_ok=True)
+        fmts = [f.strip() for f in formats.split(",") if f.strip()]
+
+        results: list[dict] = []
+        for i, src in enumerate(media, 1):
+            await _report_progress(ctx, i - 1, len(media), f"transcribing {src.name} ({i}/{len(media)})")
+            out = out_root / src.stem if out_root else None
+            lines: list[str] = []
+            try:
+                r = await anyio.to_thread.run_sync(lambda: api.transcribe_file(
+                    src, language, accurate=accurate, formats=fmts, out=out,
+                    log=lambda m: lines.append(m), prompt=vocabulary, translate=translate))
+            except Exception as e:   # keep going: one bad file must not lose the rest of the batch
+                results.append({"path": str(src), "ok": False, "error": f"{type(e).__name__}: {e}"})
+                continue
+            results.append({"path": str(src), "ok": True, "files": r["files"], "language": r["lang"],
+                            "segments": r["segments"], "seconds": r["seconds"]})
+        if ctx:
+            await _report_progress(ctx, len(media), len(media), f"{len(media)} file(s) done")
+
+        ok = [r for r in results if r["ok"]]
+        return {"folder": str(root), "total": len(media), "succeeded": len(ok),
+                "failed": len(results) - len(ok), "files": results}
 
     @srv.tool(title="Find audio/video files", annotations=ToolAnnotations(read_only_hint=True, open_world_hint=False))
     def find_media(name_contains: str = "", folder: str = "", limit: int = 15) -> list[dict]:
