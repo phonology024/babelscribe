@@ -12,6 +12,22 @@ def _quantizer(binary: Path) -> Path:
     return binary.parent / ("whisper-quantize.exe" if binary.suffix == ".exe" else "whisper-quantize")
 
 
+def _device_id(device: str | int, found: list[dict]) -> int:
+    """Turn a user-supplied device into an id whisper.cpp actually reported.
+
+    `--device foo` used to escape as a bare ValueError from int(), and an id that is not in the list (5, -1)
+    was passed straight to whisper-cli. Both now fail here, before the run, with the ids that do exist."""
+    try:
+        dev = int(device)
+    except (TypeError, ValueError):
+        raise ValueError(f"device must be 'auto' or a GPU id, not {device!r}") from None
+    ids = [d["id"] for d in found]
+    if dev not in ids:
+        listed = ", ".join(f"{i} ({d['backend']} {d['name']})" for i, d in zip(ids, found)) or "none"
+        raise ValueError(f"no device {dev}; available: {listed}")
+    return dev
+
+
 def setup(model: str = "turbo", bin: str | None = None, flavor: str | None = None) -> tuple[Path, Path, list[dict]]:
     """Find (or download) whisper-cli and the model, and list the devices it can use."""
     binary = backend.find_binary(bin, flavor)
@@ -48,7 +64,7 @@ def transcribe_file(
             model = "large-v3"
             log("translate: using large-v3 (turbo does not translate)")
     binary, timing, found = setup(model, bin, flavor)
-    dev = backend.pick_device(found) if device == "auto" else int(device)
+    dev = backend.pick_device(found) if device in ("auto", None) else _device_id(device, found)
     gpu = next((d for d in found if d["id"] == dev), found[0])
     if lang == "auto":
         lang = transcribe.detected_language(binary, timing, src, dev)
