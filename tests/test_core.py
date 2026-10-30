@@ -314,3 +314,31 @@ def test_mcp_translate_reaches_api(monkeypatch, tmp_path):
     srv = mcp_server.build()
     anyio.run(srv.call_tool, "transcribe", {"file_path": str(tmp_path / "t.mp4"), "translate": True})
     assert got["translate"] is True
+
+
+def test_out_into_missing_folder_is_created(monkeypatch, tmp_path):
+    """-o into a folder that does not exist used to fail at the very end with a bare errno, after the whole run."""
+    from babelscribe import api, transcribe
+    media = tmp_path / "t.wav"
+    media.write_bytes(b"x")
+    monkeypatch.setattr(api, "setup", lambda *a, **k: (Path("whisper-cli"), Path("m.bin"), [{"backend": "cpu", "id": 0, "name": "CPU"}]))
+    monkeypatch.setattr(api.transcribe, "run", lambda *a, **k: [{"start": 0.0, "end": 1.0, "text": "hi", "words": []}])
+    res = api.transcribe_file(media, lang="en", out=tmp_path / "new" / "deep" / "talk", log=lambda m: None)
+    assert (tmp_path / "new" / "deep" / "talk.srt").is_file()
+    assert res["segments"] == 1
+
+
+def test_out_dir_is_created_before_the_slow_work(monkeypatch, tmp_path):
+    """A bad -o must fail before the model download and inference, not after them."""
+    import pytest
+    from babelscribe import api
+    media = tmp_path / "t.wav"
+    media.write_bytes(b"x")
+    called = []
+    monkeypatch.setattr(api, "setup", lambda *a, **k: called.append("setup"))
+    # A file where a folder is needed: mkdir must raise before setup runs.
+    blocked = tmp_path / "blocked"
+    blocked.write_text("x")
+    with pytest.raises((FileExistsError, NotADirectoryError, OSError)):
+        api.transcribe_file(media, lang="en", out=blocked / "sub" / "talk", log=lambda m: None)
+    assert called == []
