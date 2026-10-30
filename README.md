@@ -199,6 +199,14 @@ Models download on first use to `~/.babelscribe/models` (`BABELSCRIBE_MODELS` to
 machine from their original Hugging Face repo — install `pip install "babelscribe[finetune]"` once; converted weights are never
 redistributed, so each fine-tune keeps its own licence. Thai word boundaries: `pip install "babelscribe[thai]"`.
 
+## Docker
+No Python, ffmpeg or whisper.cpp needed — the image has them, and the model is cached in a volume:
+```bash
+docker run --rm -v "$PWD:/media" -v babelscribe-models:/models \
+  ghcr.io/phonology024/babelscribe:latest talk.mp4      # writes talk.srt next to the input
+```
+CPU by default; a Vulkan image for GPU hosts is one `--build-arg` away. Details: [docker/README.md](docker/README.md).
+
 ## Roadmap
 What's planned next (subtitle line wrapping, MCP progress for long files, folder batches, translate-to-English, more fine-tunes) is in [ROADMAP.md](ROADMAP.md) and the [open issues](https://github.com/phonology024/babelscribe/issues).
 
