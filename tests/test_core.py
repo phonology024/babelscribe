@@ -314,3 +314,82 @@ def test_mcp_translate_reaches_api(monkeypatch, tmp_path):
     srv = mcp_server.build()
     anyio.run(srv.call_tool, "transcribe", {"file_path": str(tmp_path / "t.mp4"), "translate": True})
     assert got["translate"] is True
+
+
+def _ass_events(path):
+    lines = path.read_text(encoding="utf-8").splitlines()
+    head = lines[:lines.index("[Events]")]
+    events = [ln for ln in lines if ln.startswith("Dialogue:")]
+    return "\n".join(head), events
+
+
+def test_ass_output_has_a_valid_header_and_one_event_per_cue(tmp_path: Path):
+    segs = [{"start": 0.0, "end": 2.0, "text": "Hello there world",
+             "words": [["Hello", 0.0, 0.5], [" there", 0.5, 1.0], [" world", 1.0, 2.0]]}]
+
+    (path,) = writers.write(segs, tmp_path / "k", ["ass"], {"lang": "en"})
+    head, events = _ass_events(path)
+
+    assert head.startswith("[Script Info]")
+    assert "[V4+ Styles]" in head and "Style: Default," in head
+    assert "PlayResX: 1920" in head
+    assert len(events) == 1
+    assert events[0].endswith("{\\k50}Hello{\\k50} there{\\k100} world")
+
+
+def test_ass_karaoke_tags_follow_word_timings(tmp_path: Path):
+    # A gap between "alpha" and "beta": the highlight must hold on alpha until beta starts, not run ahead.
+    segs = [{"start": 0.0, "end": 3.0, "text": "alpha beta",
+             "words": [["alpha", 0.0, 1.0], [" beta", 2.0, 3.0]]}]
+
+    (path,) = writers.write(segs, tmp_path / "gap", ["ass"], {"lang": "en"})
+    _, (event,) = _ass_events(path)
+
+    assert "{\\k200}alpha" in event, "alpha holds until beta starts at 2.0 s"
+    assert "{\\k100} beta" in event, "beta runs from 2.0 s to the cue end at 3.0 s"
+
+
+def test_ass_escapes_braces_so_they_cannot_swallow_the_line(tmp_path: Path):
+    segs = [{"start": 0.0, "end": 1.0, "text": "use {\\b1}bold", "words": []}]
+
+    (path,) = writers.write(segs, tmp_path / "braces", ["ass"], {"lang": "en"})
+    _, (event,) = _ass_events(path)
+
+    assert "{\\b1}" not in event, "a literal override tag from the transcript must not reach libass"
+    assert "｛" in event and "｝" in event
+
+
+def test_ass_without_word_timings_is_plain_and_unspoken_coloured(tmp_path: Path):
+    segs = [{"start": 0.0, "end": 1.0, "text": "no timing", "words": []}]
+
+    (path,) = writers.write(segs, tmp_path / "plain", ["ass"], {"lang": "en"})
+    _, (event,) = _ass_events(path)
+
+    assert "\\k" not in event, "never invent word timings"
+    assert event.endswith("{\\c&H00FFFFFF}no timing"), "no \\k means PrimaryColour (spoken); pin it to unspoken"
+
+
+def test_ass_splits_at_its_own_shorter_limit_not_the_subtitle_one(tmp_path: Path):
+    # 34 characters: fits one 34-char subtitle line under the 42 limit, but ASS splits at 32 because
+    # karaoke is read word by word.
+    words = [[w, i * 0.1, i * 0.1 + 0.1] for i, w in enumerate(["aaaa", " bbbb", " cccc", " dddd", " eeee", " ffff", " gggg"])]
+    segs = [{"start": 0.0, "end": 0.7, "text": "aaaa bbbb cccc dddd eeee ffff gggg", "words": words}]
+
+    (ass_path,) = writers.write(segs, tmp_path / "k", ["ass"], {"lang": "en"})
+    (srt_path,) = writers.write(segs, tmp_path / "k", ["srt"], {"lang": "en"})
+    _, events = _ass_events(ass_path)
+
+    srt_text = srt_path.read_text(encoding="utf-8")
+    assert "\n" not in srt_text.split("\n\n")[0].splitlines()[2], "SRT keeps the whole 34-char line on one line"
+    assert len(events) == 1 and "\\N" in events[0], "ASS wraps it at 32 characters into two lines"
+    for event in events:
+        assert event.count("\\N") <= 1, "an ASS event holds at most two rendered lines"
+
+
+def test_ass_mixes_with_the_other_formats(tmp_path: Path):
+    segs = [{"start": 0.0, "end": 1.0, "text": "hi", "words": [["hi", 0.0, 1.0]]}]
+
+    files = writers.write(segs, tmp_path / "all", ["srt", "ass", "json"], {"lang": "en"})
+
+    assert [f.suffix for f in files] == [".srt", ".ass", ".json"]
+    assert all(f.exists() for f in files)

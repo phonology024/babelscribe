@@ -48,3 +48,11 @@ def test_json_output_keys(tmp_path):
     (p,) = writers.write(segs, tmp_path / "x", ["json"], {"lang": "en"})
     data = json.loads(p.read_text(encoding="utf-8"))
     assert {"meta", "segments"} <= set(data)
+
+
+def test_output_formats_are_the_pinned_ones(tmp_path):
+    from babelscribe import writers
+    segs = [{"start": 0.0, "end": 1.0, "text": "hi", "words": [["hi", 0.0, 1.0]]}]
+    for fmt in ("srt", "vtt", "txt", "json", "ass"):
+        (p,) = writers.write(segs, tmp_path / fmt, [fmt], {"lang": "en"})
+        assert p.exists() and p.read_text(encoding="utf-8").strip(), fmt

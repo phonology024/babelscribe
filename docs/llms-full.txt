@@ -173,11 +173,13 @@ languages are the most valuable contribution.
 - **Long files that don't loop** — runs whisper with `--max-context 0`, which stops the classic "same sentence repeated forever" hallucination on long recordings.
 - **Hybrid mode for better spelling in your language** — community fine-tunes (e.g. Thai *Thonburian Whisper*) spell far better but often lose timestamps. `--text-model` takes the text from the fine-tune and the timing from `large-v3-turbo`, aligned character by character (works for languages without spaces), cut only at word boundaries, with the timing model filling any words the fine-tune skipped.
 - **`--accurate`** — slower, fewest errors: large-v3 with beam search, or for Thai and Hindi the best community fine-tune (hybrid). Chosen per language from the FLEURS benchmark above.
-- **Outputs** — `srt`, `vtt`, `txt`, `json` (segments with token timings).
+- **Outputs** — `srt`, `vtt`, `txt`, `json` (segments with token timings), `ass` (karaoke: each word highlights
+  as it is spoken, from the token timings — for short-form video and players that read ASS).
 
 ## Usage
 ```bash
 babelscribe talk.mp4 -f srt,vtt,txt,json          # all formats
+babelscribe reel.mp4 -f ass                        # karaoke subtitles, one highlight per word
 babelscribe podcast.mp3 -l en -m large-v3          # pick language and model
 babelscribe talk.mp4 -l hi --accurate              # slower, fewest errors (best model per language)
 babelscribe vo.wav -l th --text-model thai-thonburian   # hybrid: pick a Thai fine-tune yourself
