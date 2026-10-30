@@ -128,7 +128,9 @@ def write(
     subtitle_segs = _subtitle_cues(segs, line_limit)
 
     for f in formats:
-        p = base.with_suffix("." + f)
+        # Append the extension instead of replacing it: Path("meeting.v2").with_suffix(".srt")
+        # drops ".v2", so meeting.v1.mp4 and meeting.v2.mp4 would both write meeting.srt.
+        p = base.parent / (base.name + "." + f)
 
         if f == "srt":
             p.write_text(
