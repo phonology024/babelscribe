@@ -41,6 +41,10 @@ def transcribe_file(
     src = Path(src).expanduser()
     if not src.is_file():
         raise FileNotFoundError(f"no such file: {src}")
+    base = Path(out).expanduser() if out else src.with_suffix("")
+    # Before any download or inference: -o into a folder that does not exist used to fail at the very end with a
+    # bare "[Errno 2] ... .srt", throwing away a transcription that may have taken minutes.
+    base.parent.mkdir(parents=True, exist_ok=True)
     if translate:
         if text_model:
             raise ValueError("translate cannot be combined with a text model (fine-tunes write the source language)")
@@ -72,7 +76,6 @@ def transcribe_file(
         log(f"text pass with {text_model} ...")
         segs = hybrid.run(binary, tm, src, segs, ft["lang"] if ft else lang, dev, (ft or {}).get("beam"), verbose, prompt=prompt)
         meta["text_model"] = text_model
-    base = Path(out).expanduser() if out else src.with_suffix("")
     files = writers.write(
         segs,
         base,
