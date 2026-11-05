@@ -247,14 +247,15 @@ Releases, what goes in each, and where help is wanted. Dates are targets, not pr
 Everything below is a GitHub issue; each release is a [milestone](https://github.com/phonology024/babelscribe/milestones).
 
 ## Where we are
-- **PyPI: 0.3.2** (2026-10-06). Any audio/video → SRT / VTT / TXT / JSON, 99 languages, on AMD / NVIDIA / Intel / Apple GPU or CPU.
+- **PyPI: 0.4.0** (2026-11-05). Any audio/video → SRT / VTT / TXT / JSON, 99 languages, on AMD / NVIDIA / Intel / Apple GPU or CPU.
 - MCP server (`uvx babelscribe mcp`), one-click Claude Desktop extension, Claude Code plugin, MCP Registry listing.
 - **1,114 downloads** on [mcprush.com](https://mcprush.com) — thank you.
 
 ## Releases
 | PyPI version | Target | Theme | Contents |
 |---|---|---|---|
-| **0.4.0** | 2026-10-20 | Smart & measured | `--smart` (fast pass, redo only low-confidence parts) and `--draft`; VAD on by default; progress bar and real MCP progress ([#6](https://github.com/phonology024/babelscribe/issues/6)); transcribe.cpp text models (Qwen3-ASR, Cohere); `babelscribe bench` hardware report |
+| **0.4.0** | released 2026-11-05 | Everyday features | `babelscribe doctor` ([#10](https://github.com/phonology024/babelscribe/issues/10)); `--prompt` custom vocabulary ([#11](https://github.com/phonology024/babelscribe/issues/11)); subtitle line wrapping ([#4](https://github.com/phonology024/babelscribe/issues/4)); `--translate` ([#8](https://github.com/phonology024/babelscribe/issues/8)); karaoke / ASS output ([#17](https://github.com/phonology024/babelscribe/issues/17)); Vietnamese fine-tune option; `--device` and `-o` fixes |
+| next | TBD | Smart & measured | `--smart` (fast pass, redo only low-confidence parts) and `--draft`; VAD on by default; progress bar and real MCP progress ([#6](https://github.com/phonology024/babelscribe/issues/6)); transcribe.cpp text models (Qwen3-ASR, Cohere); `babelscribe bench` hardware report |
 | **0.4.1** | 2026-11-03 | Subtitle polish | Max characters per line, two-line cues ([#4](https://github.com/phonology024/babelscribe/issues/4)); first verified NVIDIA / Intel / Linux / macOS results ([#3](https://github.com/phonology024/babelscribe/issues/3)) |
 | **0.5.0** | 2026-11-30 | MCP power | Whole-folder batch ([#7](https://github.com/phonology024/babelscribe/issues/7)); `--translate` ([#8](https://github.com/phonology024/babelscribe/issues/8)); `babelscribe doctor` ([#10](https://github.com/phonology024/babelscribe/issues/10)); `--prompt` custom vocabulary ([#11](https://github.com/phonology024/babelscribe/issues/11)); Docker image ([#12](https://github.com/phonology024/babelscribe/issues/12)) |
 | **0.6.0** | 2027-01-15 | More languages | Arabic ([#2](https://github.com/phonology024/babelscribe/issues/2)), Vietnamese ([#1](https://github.com/phonology024/babelscribe/issues/1)), Korean ([#13](https://github.com/phonology024/babelscribe/issues/13)), Indonesian ([#14](https://github.com/phonology024/babelscribe/issues/14)), Turkish ([#15](https://github.com/phonology024/babelscribe/issues/15)); FLEURS table for the new text models ([#16](https://github.com/phonology024/babelscribe/issues/16)) |

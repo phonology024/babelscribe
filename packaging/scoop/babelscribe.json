@@ -1,5 +1,5 @@
 {
-    "version": "0.3.2",
+    "version": "0.4.0",
     "description": "Transcribe audio and video into subtitles on any GPU (Vulkan/CUDA/Metal) or CPU, in 99 languages",
     "homepage": "https://github.com/phonology024/babelscribe",
     "license": "MIT",
@@ -9,8 +9,8 @@
         "babelscribe --help    for languages, formats and accurate mode."
     ],
     "depends": "python",
-    "url": "https://files.pythonhosted.org/packages/19/8d/1bf3b810566a7263acfc676b2e49c7b160ffcbaac997608862d74aab0fd1/babelscribe-0.3.2-py3-none-any.whl",
-    "hash": "daafaf8fa8460ecbe5f8ac964e74259e15a3a9392d26e4f40302e9152e16cee2",
+    "url": "https://files.pythonhosted.org/packages/4f/c9/9320d50c6bc123baf0b96bd76749050598e32c13018eb2267fec5077a3e6/babelscribe-0.4.0-py3-none-any.whl",
+    "hash": "01fcdd2a1d6303153117f82ed2ae32097d34619549d0a568cc81c15bb4c7aaff",
     "installer": {
         "script": [
             "Push-Location \"$dir\"",
