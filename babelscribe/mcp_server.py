@@ -50,7 +50,7 @@ def build():
         file_path: absolute path to the media file (mp4, mkv, mov, mp3, wav, m4a, ...).
         language: ISO code such as en, th, ja, es, hi — or "auto" to detect.
         accurate: slower, fewest errors (large-v3 with beam search, or the best fine-tune for Thai / Hindi).
-        formats: comma list from srt, vtt, txt, json.
+        formats: comma list from srt, vtt, txt, json, ass (ass = karaoke word highlight).
         output_dir: folder for the output files; empty = next to the media file.
         vocabulary: names and terms to spell correctly, e.g. "Pitakpong, babelscribe" (whisper initial prompt); empty = none.
         translate: true = write the transcript translated to English (uses large-v3; slower than turbo).
