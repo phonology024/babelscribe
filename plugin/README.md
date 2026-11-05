@@ -3,6 +3,15 @@
 Turn audio and video files on your computer into subtitles (SRT, VTT) and plain text in any of Whisper's 99 languages,
 using your own graphics card — AMD Radeon, NVIDIA, Intel Arc or Apple Silicon — or the CPU. Everything runs locally.
 
+## Install
+
+```
+/plugin install babelscribe --marketplace phonology024/babelscribe
+```
+
+That adds the marketplace in `plugin/.claude-plugin/marketplace.json` and installs the plugin from it. From a shell,
+`claude plugin install babelscribe --marketplace phonology024/babelscribe` does the same.
+
 ## Use it
 Ask Claude, for example: *"Make English subtitles for the newest video in my Downloads"*, *"Transcribe interview.mp3"*, or
 *"ทำซับไทยให้คลิปล่าสุด แบบแม่นที่สุด"*. Claude finds the file, transcribes it on your GPU, writes `.srt` and `.txt` next to
