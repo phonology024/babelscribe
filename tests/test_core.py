@@ -182,6 +182,32 @@ def test_writers_wrap_long_vtt_lines(tmp_path: Path):
     assert text.startswith("WEBVTT\n\n")
     assert "This is a long\nsubtitle line" in text
 
+def test_writers_keep_dots_in_the_input_name(tmp_path: Path):
+    # api.transcribe_file passes src.with_suffix("") as the base, so "meeting.v2.mp4" -> "meeting.v2".
+    # Appending (not replacing) the extension keeps "meeting.v2.srt" instead of collapsing to "meeting.srt".
+    segs = [{"start": 0.0, "end": 1.0, "text": "hi", "words": []}]
+
+    files = writers.write(segs, tmp_path / "meeting.v2", ["srt", "vtt", "txt", "json"], {})
+
+    assert sorted(f.name for f in files) == [
+        "meeting.v2.json",
+        "meeting.v2.srt",
+        "meeting.v2.txt",
+        "meeting.v2.vtt",
+    ]
+    assert all(f.exists() for f in files)
+
+
+def test_writers_do_not_collide_on_dotted_names(tmp_path: Path):
+    # Two recordings of the same meeting must not overwrite each other's subtitles.
+    first = writers.write([{"start": 0.0, "end": 1.0, "text": "first", "words": []}], tmp_path / "meeting.v1", ["srt"], {})
+    second = writers.write([{"start": 0.0, "end": 1.0, "text": "second", "words": []}], tmp_path / "meeting.v2", ["srt"], {})
+
+    assert first[0] != second[0]
+    assert "first" in first[0].read_text(encoding="utf-8")
+    assert "second" in second[0].read_text(encoding="utf-8")
+
+
 def test_writers_use_smaller_default_for_thai(tmp_path: Path):
     thai_text = "สวัสดีครับวันนี้อากาศดีมากนะครับ"
 
@@ -316,6 +342,7 @@ def test_mcp_translate_reaches_api(monkeypatch, tmp_path):
     assert got["translate"] is True
 
 
+<<<<<<< HEAD
 def _ass_events(path):
     lines = path.read_text(encoding="utf-8").splitlines()
     head = lines[:lines.index("[Events]")]
@@ -393,3 +420,38 @@ def test_ass_mixes_with_the_other_formats(tmp_path: Path):
 
     assert [f.suffix for f in files] == [".srt", ".ass", ".json"]
     assert all(f.exists() for f in files)
+=======
+def _transcribe_with_device(monkeypatch, tmp_path, device):
+    """Run transcribe_file with setup/model work stubbed out, so only device handling is exercised."""
+    import pytest
+    from babelscribe import api
+    media = tmp_path / "d.wav"
+    media.write_bytes(b"x")
+    found = [{"backend": "metal", "id": 0, "name": "Apple M4 Pro", "detail": "uma: 1"},
+             {"backend": "cpu", "id": 1, "name": "CPU", "detail": ""}]
+    monkeypatch.setattr(api, "setup", lambda *a, **k: (Path("whisper-cli"), Path("m.bin"), found))
+    monkeypatch.setattr(api.transcribe, "run", lambda *a, **k: [])
+    return api.transcribe_file(media, "en", device=device, log=lambda m: None, formats=["txt"])
+
+
+def test_device_rejects_a_non_number(monkeypatch, tmp_path):
+    import pytest
+    with pytest.raises(ValueError) as e:
+        _transcribe_with_device(monkeypatch, tmp_path, "foo")
+    assert "device must be" in str(e.value), "not a bare int() ValueError from deep inside"
+
+
+def test_device_rejects_an_id_the_driver_does_not_have(monkeypatch, tmp_path):
+    import pytest
+    for bad in (5, -1, "2"):
+        with pytest.raises(ValueError) as e:
+            _transcribe_with_device(monkeypatch, tmp_path, bad)
+        assert "no device" in str(e.value) and "Apple M4 Pro" in str(e.value), "list the ids that do exist"
+
+
+def test_device_accepts_auto_none_and_a_listed_id(monkeypatch, tmp_path):
+    assert _transcribe_with_device(monkeypatch, tmp_path, "auto")["device"].startswith("metal")
+    assert _transcribe_with_device(monkeypatch, tmp_path, None)["device"].startswith("metal")
+    assert _transcribe_with_device(monkeypatch, tmp_path, "1")["device"].startswith("cpu")
+    assert _transcribe_with_device(monkeypatch, tmp_path, 1)["device"].startswith("cpu")
+>>>>>>> origin/main
