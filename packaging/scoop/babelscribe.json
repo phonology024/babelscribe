@@ -1,0 +1,37 @@
+{
+    "version": "0.3.2",
+    "description": "Transcribe audio and video into subtitles on any GPU (Vulkan/CUDA/Metal) or CPU, in 99 languages",
+    "homepage": "https://github.com/phonology024/babelscribe",
+    "license": "MIT",
+    "notes": [
+        "The first run downloads whisper-cli for your GPU and a speech model (~1.6 GB) into %USERPROFILE%\\.babelscribe.",
+        "babelscribe devices   lists the GPUs whisper.cpp can use.",
+        "babelscribe --help    for languages, formats and accurate mode."
+    ],
+    "depends": "python",
+    "url": "https://files.pythonhosted.org/packages/19/8d/1bf3b810566a7263acfc676b2e49c7b160ffcbaac997608862d74aab0fd1/babelscribe-0.3.2-py3-none-any.whl",
+    "hash": "daafaf8fa8460ecbe5f8ac964e74259e15a3a9392d26e4f40302e9152e16cee2",
+    "installer": {
+        "script": [
+            "Push-Location \"$dir\"",
+            "python -m venv babelscribe",
+            ".\\babelscribe\\Scripts\\activate",
+            "try {",
+            "    python -m pip install --no-warn-script-location \"$fname\"",
+            "}",
+            "finally {",
+            "    Remove-Item \"$fname\"",
+            "    deactivate",
+            "    Pop-Location",
+            "}"
+        ]
+    },
+    "bin": [
+        "babelscribe\\Scripts\\babelscribe.exe",
+        "babelscribe\\Scripts\\babelscribe-mcp.exe"
+    ],
+    "checkver": "github",
+    "autoupdate": {
+        "url": "https://files.pythonhosted.org/packages/py3/b/babelscribe/babelscribe-$version-py3-none-any.whl"
+    }
+}
