@@ -342,7 +342,6 @@ def test_mcp_translate_reaches_api(monkeypatch, tmp_path):
     assert got["translate"] is True
 
 
-<<<<<<< HEAD
 def _ass_events(path):
     lines = path.read_text(encoding="utf-8").splitlines()
     head = lines[:lines.index("[Events]")]
@@ -420,7 +419,8 @@ def test_ass_mixes_with_the_other_formats(tmp_path: Path):
 
     assert [f.suffix for f in files] == [".srt", ".ass", ".json"]
     assert all(f.exists() for f in files)
-=======
+
+
 def _transcribe_with_device(monkeypatch, tmp_path, device):
     """Run transcribe_file with setup/model work stubbed out, so only device handling is exercised."""
     import pytest
@@ -454,4 +454,3 @@ def test_device_accepts_auto_none_and_a_listed_id(monkeypatch, tmp_path):
     assert _transcribe_with_device(monkeypatch, tmp_path, None)["device"].startswith("metal")
     assert _transcribe_with_device(monkeypatch, tmp_path, "1")["device"].startswith("cpu")
     assert _transcribe_with_device(monkeypatch, tmp_path, 1)["device"].startswith("cpu")
->>>>>>> origin/main
