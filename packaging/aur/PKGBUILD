@@ -1,0 +1,28 @@
+# Maintainer: your name <you@example.com>
+pkgname=babelscribe
+pkgver=0.3.2
+pkgrel=1
+pkgdesc="Transcribe audio and video into subtitles on any GPU (Vulkan/CUDA/Metal) or CPU, in 99 languages"
+arch=('any')
+url="https://github.com/phonology024/babelscribe"
+license=('MIT')
+depends=('python' 'python-anyio' 'python-mcp')
+makedepends=('python-build' 'python-installer' 'python-wheel' 'python-setuptools')
+# imageio-ffmpeg is only in the AUR, so it cannot be a plain dependency of a repo-style PKGBUILD.
+optdepends=(
+  'python-imageio-ffmpeg: bundled ffmpeg, so an external ffmpeg is not needed'
+  'ffmpeg: audio/video decoding'
+  'python-pythainlp: Thai word boundaries in hybrid mode'
+)
+source=("$pkgname-$pkgver.tar.gz::https://files.pythonhosted.org/packages/source/b/$pkgname/$pkgname-$pkgver.tar.gz")
+sha256sums=('c6317bcd823fda13e2885ace070f017a44d64d502a7153b85ccb47b1e29109df')
+
+build() {
+  cd "$srcdir/$pkgname-$pkgver"
+  python -m build --wheel --no-isolation
+}
+
+package() {
+  cd "$srcdir/$pkgname-$pkgver"
+  python -m installer --destdir="$pkgdir" dist/*.whl
+}
