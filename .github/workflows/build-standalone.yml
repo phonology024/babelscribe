@@ -1,0 +1,55 @@
+# Standalone Windows build (#59): a zip with babelscribe.exe and babelscribe-mcp.exe that needs no Python.
+#   babelscribe-<version>-windows-x64.zip          unzip anywhere, run babelscribe.exe; no installer, no admin rights
+#   babelscribe-<version>-windows-x64.zip.sha256   its checksum
+# Built and tested on every change to the recipe, and attached to the GitHub release when a version tag is pushed.
+# The executables are not code-signed: Windows SmartScreen shows "unknown publisher" the first time.
+name: build-standalone
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    paths: ["packaging/standalone/**", ".github/workflows/build-standalone.yml", "pyproject.toml"]
+  workflow_dispatch:
+jobs:
+  windows:
+    runs-on: windows-latest
+    permissions: { contents: write }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Build
+        shell: bash
+        run: |
+          pip install . pyinstaller
+          pyinstaller --noconfirm --distpath dist --workpath build packaging/standalone/babelscribe.spec
+          cp LICENSE packaging/standalone/THIRD-PARTY.txt dist/babelscribe/
+      - name: Test it with no Python in the environment (real download, real transcription, MCP handshake)
+        shell: bash
+        run: |
+          curl -sSL -o jfk.wav https://github.com/ggml-org/whisper.cpp/raw/master/samples/jfk.wav
+          python packaging/standalone/smoke_test.py dist/babelscribe jfk.wav
+      - name: Zip
+        id: zip
+        shell: bash
+        run: |
+          version=$(dist/babelscribe/babelscribe.exe --version | tr -d '\r')
+          name="babelscribe-${version}-windows-x64"
+          cd dist
+          7z a -tzip -mx=9 "${name}.zip" babelscribe > /dev/null
+          sha256sum "${name}.zip" > "${name}.zip.sha256"
+          cat "${name}.zip.sha256"; ls -l "${name}.zip"
+          echo "name=${name}" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.zip.outputs.name }}
+          path: |
+            dist/${{ steps.zip.outputs.name }}.zip
+            dist/${{ steps.zip.outputs.name }}.zip.sha256
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/${{ steps.zip.outputs.name }}.zip
+            dist/${{ steps.zip.outputs.name }}.zip.sha256
