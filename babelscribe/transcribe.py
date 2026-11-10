@@ -1,13 +1,17 @@
 """Run whisper.cpp on any audio/video file and return segments [{start, end, text, words: [[text, t0, t1], ...]}]."""
 from __future__ import annotations
 
+import collections
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 from pathlib import Path
+from typing import Callable
 
 
 def ffmpeg() -> str:
@@ -40,9 +44,53 @@ def prompt_args(prompt: str | None) -> list[str]:
     return ["--prompt", prompt] if prompt else []
 
 
+def run_cli(cmd: list[str], verbose: bool = False, on_line: Callable[[str], None] | None = None,
+            tick: Callable[[], None] | None = None) -> None:
+    """Run whisper-cli and raise RuntimeError with the end of its output when it fails.
+
+    With on_line (called for every line it prints) or tick (called twice a second while it runs) the output is
+    read as it comes, which is what progress reporting needs; without them it is one plain subprocess.run."""
+    if on_line is None and tick is None:
+        p = subprocess.run(cmd, capture_output=not verbose, text=True, errors="replace")
+        if p.returncode:
+            raise RuntimeError(f"whisper-cli failed ({p.returncode}):\n{(p.stderr or '')[-2000:]}")
+        return
+    tail: collections.deque = collections.deque(maxlen=80)
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace")
+    stop = threading.Event()
+
+    def ticker():
+        while not stop.wait(0.5):
+            tick()
+    t = threading.Thread(target=ticker, daemon=True) if tick else None
+    if t:
+        t.start()
+    try:
+        for line in p.stdout:
+            tail.append(line)
+            if verbose:
+                sys.stderr.write(line)   # never stdout: it is the MCP channel
+            if on_line:
+                on_line(line)
+        code = p.wait()
+    except BaseException:
+        p.kill()
+        raise
+    finally:
+        stop.set()
+        if t:
+            t.join()
+    if tick:
+        tick()
+    if code:
+        raise RuntimeError(f"whisper-cli failed ({code}):\n{''.join(tail)[-2000:]}")
+
+
 def run(binary: Path, model: Path, media: Path, lang: str = "auto", device: int = 0, beam: int | None = None,
         threads: int | None = None, extra: list[str] | None = None, verbose: bool = False,
-        prompt: str | None = None, translate: bool = False) -> list[dict]:
+        prompt: str | None = None, translate: bool = False,
+        progress: Callable[[float], None] | None = None) -> list[dict]:
+    """progress, when given, is called with 0-100 as whisper-cli works through the file (its -pp output)."""
     with tempfile.TemporaryDirectory() as d:
         wav = Path(d) / "in.wav"
         to_wav16k(media, wav)
@@ -59,9 +107,16 @@ def run(binary: Path, model: Path, media: Path, lang: str = "auto", device: int 
         if threads:
             cmd += ["-t", str(threads)]
         cmd += extra or []
-        p = subprocess.run(cmd, capture_output=not verbose, text=True, errors="replace")
-        if p.returncode:
-            raise RuntimeError(f"whisper-cli failed ({p.returncode}):\n{(p.stderr or '')[-2000:]}")
+        if progress:
+            cmd += ["-pp"]
+
+            def on_line(line: str) -> None:
+                m = re.search(r"progress = *(\d+)%", line)
+                if m:
+                    progress(float(m.group(1)))
+            run_cli(cmd, verbose, on_line=on_line)
+        else:
+            run_cli(cmd, verbose)
         data = json.loads(Path(str(out) + ".json").read_text(encoding="utf-8", errors="replace"))
     segs = []
     for s in data.get("transcription", []):
@@ -77,6 +132,5 @@ def detected_language(binary: Path, model: Path, media: Path, device: int = 0) -
         to_wav16k(media, wav, 0, 30)
         p = subprocess.run([str(binary), "-m", str(model), "-f", str(wav), "-l", "auto", "-dl", "-dev", str(device)],
                            capture_output=True, text=True, errors="replace")
-    import re
     m = re.search(r"auto-detected language: (\w+)", p.stdout + p.stderr)
     return m.group(1) if m else "auto"

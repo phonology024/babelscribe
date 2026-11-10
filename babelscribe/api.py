@@ -157,8 +157,12 @@ def transcribe_file(
     max_line_chars: int | None = None,
     prompt: str | None = None,
     translate: bool = False,
+    progress: Callable[[float], None] | None = None,
 ) -> dict:
-    """Transcribe one audio/video file. Returns a summary dict (files written, language, device, segments, text)."""
+    """Transcribe one audio/video file. Returns a summary dict (files written, language, device, segments, text).
+
+    progress, when given, is called with how far the file is, 0 to 100 (never going back), from whisper-cli's
+    own progress output. With a text model the timing pass is the first 40 and the text pass the rest."""
     src = Path(src).expanduser()
     if not src.is_file():
         raise FileNotFoundError(f"no such file: {src}")
@@ -187,7 +191,21 @@ def transcribe_file(
             timing = models.ensure(model, _quantizer(binary))
     t0 = time.time()
     log(f"transcribing with {model} on {gpu['backend']} {gpu['name']} ...")
-    segs = transcribe.run(binary, timing, src, lang, dev, beam=beam, verbose=verbose, prompt=prompt, translate=translate)
+    more: dict = {}   # only passed when asked for, so callers and stand-ins that predate progress keep working
+    reached = [0.0]
+
+    def span(lo: float, hi: float) -> Callable[[float], None]:
+        def report(pct: float) -> None:
+            now = lo + (hi - lo) * min(max(pct, 0.0), 100.0) / 100
+            if now > reached[0]:
+                reached[0] = now
+                progress(now)
+        return report
+    first = 40.0 if text_model else 100.0
+    if progress:
+        more["progress"] = span(0.0, first)
+    segs = transcribe.run(binary, timing, src, lang, dev, beam=beam, verbose=verbose, prompt=prompt,
+                          translate=translate, **more)
     meta = {"tool": f"babelscribe {__version__}", "model": model, "lang": lang, "device": f"{gpu['backend']} {gpu['name']}"}
     if translate:
         meta["translate"] = "en"
@@ -195,7 +213,10 @@ def transcribe_file(
         _, ft = models.resolve(text_model)
         tm = models.ensure(text_model, _quantizer(binary))
         log(f"text pass with {text_model} ...")
-        segs = hybrid.run(binary, tm, src, segs, ft["lang"] if ft else lang, dev, (ft or {}).get("beam"), verbose, prompt=prompt)
+        if progress:
+            more["progress"] = span(first, 100.0)
+        segs = hybrid.run(binary, tm, src, segs, ft["lang"] if ft else lang, dev, (ft or {}).get("beam"), verbose,
+                          prompt=prompt, **more)
         meta["text_model"] = text_model
     files = writers.write(
         segs,
@@ -204,6 +225,8 @@ def transcribe_file(
         meta,
         max_line_chars=max_line_chars,
     )
+    if progress:
+        span(100.0, 100.0)(100.0)
     took = time.time() - t0
     log(f"{len(segs)} segments in {took:.1f}s -> " + ", ".join(str(f) for f in files))
     return {**meta, "files": [str(f) for f in files], "segments": len(segs), "seconds": round(took, 1),
