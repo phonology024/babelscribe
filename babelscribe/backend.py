@@ -24,7 +24,7 @@ CACHE = Path(os.environ.get("BABELSCRIBE_HOME", Path.home() / ".babelscribe"))
 BINARY_TAG = "v0.4.0"
 # sha256 of each zip of BINARY_TAG. The download is checked against it before anything is unpacked or run.
 # To move to newer binaries: change BINARY_TAG and copy the digests from that release's SHA256SUMS file;
-# tests/test_core.py::test_digest_table_matches_the_pinned_release compares the two when there is a network.
+# tests/test_binary_verify.py compares the two when there is a network.
 SHA256 = {
     "whisper-cli-linux-x64-cpu.zip": "b060b82b996c879b8289012abd25cf1e6d124252bf4cd9c6779f3166f37aa6e2",
     "whisper-cli-linux-x64-cuda.zip": "cb54539a9b18aa0210fd6bcd2e58cf2b79872c1cc73fe98b0d9c3e40da2b83f0",
