@@ -1,0 +1,8 @@
+# The build context is the repository root (docker build -f docker/Dockerfile .). The image only needs
+# pyproject.toml, README.md, LICENSE and babelscribe/, so everything else stays out of the context.
+*
+!pyproject.toml
+!README.md
+!LICENSE
+!babelscribe
+**/__pycache__

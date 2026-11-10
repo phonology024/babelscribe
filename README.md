@@ -37,8 +37,13 @@ transcribe files on **your** computer with **your** GPU. Ask in plain words — 
 my Downloads"* — and the app finds the file, transcribes it, writes `.srt` / `.txt` next to it, and can then proofread names,
 translate or summarise the text for you.
 
-Tools: `transcribe` (file → subtitles + text), `find_media` (newest audio/video in Downloads, Videos, Desktop, …),
-`list_devices`, `list_languages_and_models`.
+Tools: `transcribe` (file → subtitles + text), `transcribe_folder` (every audio/video in a folder, one summary
+back), `find_media` (newest audio/video in Downloads, Videos, Desktop, …), `list_devices`,
+`list_languages_and_models`.
+
+`transcribe_folder` goes on after a file fails and lists the failure in the summary. Subtitles land next to each
+file, or under `output_dir` with the same sub-folders. Two files that would share a subtitle name (`talk.mp4` and
+`talk.mp3`) keep their full name: `talk.mp4.srt`, `talk.mp3.srt`.
 
 **Claude Desktop (one click):** download `babelscribe.mcpb` from the [latest release](https://github.com/phonology024/babelscribe/releases/latest)
 and double-click it (or *Settings → Extensions → Install extension*).
@@ -200,6 +205,15 @@ print(r["lang"], r["device"], r["files"]); print(r["text"][:200])
 Models download on first use to `~/.babelscribe/models` (`BABELSCRIBE_MODELS` to change). Hybrid fine-tunes are converted on your
 machine from their original Hugging Face repo — install `pip install "babelscribe[finetune]"` once; converted weights are never
 redistributed, so each fine-tune keeps its own licence. Thai word boundaries: `pip install "babelscribe[thai]"`.
+
+## Docker
+No Python, ffmpeg or whisper.cpp on the host — the image has them, and the model is cached in a volume. There is no
+published image yet, so build it from a checkout, then run it on the folder that holds your media:
+```bash
+docker build -t babelscribe -f docker/Dockerfile .
+docker run --rm -v "$PWD:/media" -v babelscribe-models:/models babelscribe talk.mp4   # writes talk.srt next to the input
+```
+CPU by default, linux/amd64; a Vulkan image for GPU hosts is one `--build-arg` away. Details: [docker/README.md](docker/README.md).
 
 ## Roadmap
 What's planned next (subtitle line wrapping, MCP progress for long files, folder batches, translate-to-English, more fine-tunes) is in [ROADMAP.md](ROADMAP.md) and the [open issues](https://github.com/phonology024/babelscribe/issues).
