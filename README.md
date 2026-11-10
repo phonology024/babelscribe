@@ -39,7 +39,7 @@ translate or summarise the text for you.
 
 Tools: `transcribe` (file → subtitles + text), `transcribe_folder` (every audio/video in a folder, one summary
 back), `convert_subtitles` (re-wrap or re-export from the saved JSON, no transcription), `burn_subtitles` (the video with
-the subtitles drawn on it), `find_media` (newest audio/video in Downloads, Videos, Desktop, …), `list_devices`,
+the subtitles drawn on it), `translate_subtitles` (into any language, through an LLM on your computer), `find_media` (newest audio/video in Downloads, Videos, Desktop, …), `list_devices`,
 `list_languages_and_models`.
 
 `transcribe_folder` goes on after a file fails and lists the failure in the summary. Subtitles land next to each
@@ -197,6 +197,7 @@ babelscribe talk.mp4 -l hi --accurate              # slower, fewest errors (best
 babelscribe vo.wav -l th --text-model thai-thonburian   # hybrid: pick a Thai fine-tune yourself
 babelscribe talk.mp4 --prompt "Pitakpong, babelscribe"   # bias the spelling of names and terms
 babelscribe talk.mp4 --translate                   # subtitles translated to English
+babelscribe talk.mp4 --translate-to th             # also talk.th.srt: any language, through your local LLM
 babelscribe convert talk.json -f srt,ass --max-line-chars 20   # re-wrap / re-export, no transcription
 babelscribe clip.mp4 --burn --style shorts         # also clip.subbed.mp4: the video with the captions drawn on
 babelscribe devices                                # GPUs whisper.cpp can see
@@ -218,6 +219,26 @@ babelscribe convert talk.json -f srt,vtt,ass     # every format gets the correct
 for: `--max-duration 7` (cut subtitles that stay up longer), `--min-duration 1` and `--max-cps 17` (keep short or
 fast subtitles up longer, never into the next one). In MCP it is the `convert_subtitles` tool, which is why the
 MCP tools now write a `.json` by default.
+
+**Translate into any language, with your own LLM.** `--translate` is whisper's own translator and only writes
+English. For any other direction (English to Thai, Japanese to Spanish, ...) babelscribe can hand the finished
+subtitles to an LLM running on your computer: Ollama, LM Studio, llama-server, or anything else with an
+OpenAI-compatible API. babelscribe downloads no model for this; it uses the one you already run.
+```bash
+babelscribe talk.mp4 --translate-to th                      # talk.srt as usual, plus talk.th.srt
+babelscribe translate talk.json --to ja -f srt,vtt          # later, from the saved JSON (or from any .srt / .vtt)
+babelscribe talk.mp4 --translate-to es --llm http://127.0.0.1:11434/v1 --llm-model gemma3
+```
+Only the text is translated: every sentence keeps its own start and end time, and the lines are wrapped again by
+the rules of the target language (shorter lines for Thai, Japanese and Chinese). The original files are not
+changed. Without `--llm`, the usual local ports are tried (llama-server 8080, Ollama 11434, LM Studio 1234), or
+set `BABELSCRIBE_LLM`. If nothing answers, babelscribe says so before it starts transcribing. The endpoint must
+be on this computer; `--allow-remote` is the explicit switch for sending the text to another machine.
+
+Measured: a 3 min 18 s English recording into Thai with Gemma (26B, Q4) in llama-server on a Radeon RX 9070 XT:
+17 s to transcribe, 38 s to translate. Translation quality is the model's: a small model translates fast and
+loosely, so read the result before you publish it. In MCP it is `translate_to` on `transcribe`, and the
+`translate_subtitles` tool.
 
 **Burn the subtitles into the video.** For TikTok, Reels and Shorts the result you post is the video with the
 captions on it, not an `.srt`:
@@ -282,13 +303,17 @@ them to each `v*` release. Point `BABELSCRIBE_RELEASES` at another URL to self-h
 หรือเลือก Thonburian Whisper เอง: `--text-model thai-thonburian`
 
 ## Privacy Policy
-babelscribe runs entirely on your own computer. Last updated 2026-10-06.
+babelscribe runs entirely on your own computer. Last updated 2026-11-10.
 
 - **Data collection:** none. babelscribe has no telemetry, analytics, accounts or crash reporting, and never uploads your
   audio, video, transcripts or file names anywhere.
 - **What it processes and where:** the media file you choose is converted and transcribed locally; subtitles and text are
   written to your disk (next to the file, or the folder you choose). Through MCP, the transcript text is returned to the AI
   app that called the tool — what that app does with it is governed by that app's own privacy policy.
+- **Optional translation (`--translate-to`, off unless you ask):** the subtitle text is sent to the LLM endpoint you
+  run, which must be on this computer (`127.0.0.1` / `localhost`). It goes to another machine only if you pass
+  `--allow-remote` yourself (for the MCP server: `BABELSCRIBE_LLM_ALLOW_REMOTE=1` in its settings; an AI app cannot
+  switch it on). Audio and video are never sent.
 - **Network access (downloads only):** on first use it downloads the `whisper-cli` program from this project's GitHub
   releases, speech models from Hugging Face (`huggingface.co/ggerganov/whisper.cpp`, and for `--accurate` Thai/Hindi the
   fine-tune's own repository), and Python packages from PyPI when installed with pip/uv. These are plain downloads;

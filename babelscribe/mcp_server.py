@@ -53,6 +53,12 @@ def _tool_error(e: BaseException):
     return ToolError(text if plain else f"{type(e).__name__}: {text}")
 
 
+def _remote_llm_allowed() -> bool:
+    """An assistant must not be able to send the user's transcript to another machine by passing a URL: only the
+    person who configures the server can allow that, with BABELSCRIBE_LLM_ALLOW_REMOTE=1 in its environment."""
+    return os.environ.get("BABELSCRIBE_LLM_ALLOW_REMOTE", "").strip().lower() in ("1", "true", "yes")
+
+
 def _no_exit(fn):
     try:
         return fn()
@@ -118,7 +124,7 @@ def build():
         read_only_hint=False, destructive_hint=False, idempotent_hint=True, open_world_hint=True))
     async def transcribe(file_path: str, language: str = "auto", accurate: bool = False, formats: str = "srt,txt,json",
                          output_dir: str = "", vocabulary: str = "",
-                         translate: bool = False, ctx: Context | None = None) -> dict:
+                         translate: bool = False, translate_to: str = "", ctx: Context | None = None) -> dict:
         """Transcribe a local audio or video file into subtitles / text.
 
         file_path: absolute path to the media file (mp4, mkv, mov, mp3, wav, m4a, ...).
@@ -129,15 +135,31 @@ def build():
         output_dir: folder for the output files; empty = next to the media file.
         vocabulary: names and terms to spell correctly, e.g. "Pitakpong, babelscribe" (whisper initial prompt); empty = none.
         translate: true = write the transcript translated to English (uses large-v3; slower than turbo).
+        translate_to: a language code (th, ja, es, ...) = also write NAME.<code>.srt, translated by the LLM running
+            on the user's computer (Ollama, LM Studio, llama-server). Empty = no translation. Without a local LLM
+            the transcription is still returned, with a note; you can then translate the text yourself.
         Returns the files written, detected language, device used, and the transcript text."""
         src = Path(file_path).expanduser()
         out = Path(output_dir).expanduser() / src.stem if output_dir else None
         if out:
             out.parent.mkdir(parents=True, exist_ok=True)
         fmts = [f.strip() for f in formats.split(",") if f.strip()]
+        if translate_to and "json" not in fmts:
+            fmts.append("json")
         result = await _run(ctx, lambda log, pct: api.transcribe_file(
             src, language, accurate=accurate, formats=fmts, out=out, log=log, prompt=vocabulary, translate=translate,
             progress=pct))
+        if translate_to and not isinstance(result, BaseException):
+            from . import llm_translate
+            saved = next(f for f in result["files"] if f.endswith(".json"))
+            more = await _run(ctx, lambda log, pct: llm_translate.translate_file(
+                saved, translate_to, formats=[f for f in fmts if f != "json"] or ["srt"],
+                allow_remote=_remote_llm_allowed(), log=log, progress=pct))
+            if isinstance(more, BaseException):
+                result["translation_note"] = f"not translated: {more}"
+            else:
+                result["files"] += more["files"]
+                result["translated"] = {"lang": more["lang"], "model": more["model"], "files": more["files"]}
         if not isinstance(result, BaseException):
             await _report_progress(ctx, 100, 100, "done")
         if isinstance(result, BaseException):
@@ -214,6 +236,30 @@ def build():
         out = Path(output_dir).expanduser() / src.with_suffix("").name if output_dir else None
         return _no_exit(lambda: convert.convert_file(
             src, [f.strip() for f in formats.split(",") if f.strip()], out=out, max_line_chars=max_line_chars or None))
+
+    # translate_subtitles writes new NAME.<lang>.* files; the text goes to an LLM on this computer only (see below)
+    @srv.tool(title="Translate subtitles with a local LLM", annotations=ToolAnnotations(
+        read_only_hint=False, destructive_hint=False, idempotent_hint=False, open_world_hint=False))
+    async def translate_subtitles(path: str, target: str, formats: str = "srt", llm_url: str = "", model: str = "",
+                                  ctx: Context | None = None) -> dict:
+        """Translate finished subtitles into another language with the LLM running on the user's own computer
+        (Ollama, LM Studio, llama-server, ...). Timing is kept; the original file is not changed.
+
+        path: absolute path to the .json written by transcribe (best), or an .srt / .vtt.
+        target: language code or name: th, ja, es, de, "Thai", ...
+        formats: comma list from srt, vtt, txt, json, ass for the translated files (NAME.<code>.srt, ...).
+        llm_url: OpenAI-compatible endpoint, e.g. http://127.0.0.1:11434/v1; empty = the usual local ports.
+        model: model name to ask for; empty = the first one the endpoint lists.
+        Returns the files written, the number of subtitles, the language code, and the model used. If no local
+        LLM is running, the error says how to start one; you can also translate the text yourself instead."""
+        from . import llm_translate
+        result = await _run(ctx, lambda log, pct: llm_translate.translate_file(
+            path, target, llm_url or None, model or None, [f.strip() for f in formats.split(",") if f.strip()],
+            allow_remote=_remote_llm_allowed(), log=log, progress=pct))
+        if isinstance(result, BaseException):
+            raise _tool_error(result) from None
+        await _report_progress(ctx, 100, 100, "done")
+        return result
 
     # burn_subtitles writes one new video file next to the input (or at output_path); the input is only read
     @srv.tool(title="Burn subtitles into a video", annotations=ToolAnnotations(
