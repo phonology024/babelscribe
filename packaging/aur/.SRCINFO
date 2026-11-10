@@ -1,0 +1,20 @@
+pkgbase = babelscribe
+	pkgdesc = Transcribe audio and video into subtitles on any GPU (Vulkan/CUDA/Metal) or CPU, in 99 languages
+	pkgver = 0.4.0
+	pkgrel = 1
+	url = https://github.com/phonology024/babelscribe
+	arch = any
+	license = MIT
+	makedepends = python-build
+	makedepends = python-installer
+	makedepends = python-wheel
+	makedepends = python-setuptools
+	depends = python
+	depends = python-anyio
+	depends = python-mcp
+	depends = ffmpeg
+	optdepends = python-pythainlp: Thai word boundaries in hybrid mode
+	source = babelscribe-0.4.0.tar.gz::https://files.pythonhosted.org/packages/source/b/babelscribe/babelscribe-0.4.0.tar.gz
+	sha256sums = 34aff766e6fa3d6c025afd8fedefdc70aef33f523c7cc5af5053284ffc205a1e
+
+pkgname = babelscribe

@@ -1,0 +1,27 @@
+# Maintainer: phonology024 <https://github.com/phonology024/babelscribe/issues>
+pkgname=babelscribe
+pkgver=0.4.0
+pkgrel=1
+pkgdesc="Transcribe audio and video into subtitles on any GPU (Vulkan/CUDA/Metal) or CPU, in 99 languages"
+arch=('any')
+url="https://github.com/phonology024/babelscribe"
+license=('MIT')
+# ffmpeg is a hard dependency: upstream gets it from imageio-ffmpeg, which is only in the AUR, and without
+# either one every transcription stops at "ffmpeg not found".
+depends=('python' 'python-anyio' 'python-mcp' 'ffmpeg')
+makedepends=('python-build' 'python-installer' 'python-wheel' 'python-setuptools')
+optdepends=(
+  'python-pythainlp: Thai word boundaries in hybrid mode'
+)
+source=("$pkgname-$pkgver.tar.gz::https://files.pythonhosted.org/packages/source/b/$pkgname/$pkgname-$pkgver.tar.gz")
+sha256sums=('34aff766e6fa3d6c025afd8fedefdc70aef33f523c7cc5af5053284ffc205a1e')
+
+build() {
+  cd "$srcdir/$pkgname-$pkgver"
+  python -m build --wheel --no-isolation
+}
+
+package() {
+  cd "$srcdir/$pkgname-$pkgver"
+  python -m installer --destdir="$pkgdir" dist/*.whl
+}
