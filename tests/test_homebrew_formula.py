@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-FORMULA = Path(__file__).resolve().parent.parent / "packaging" / "homebrew" / "babelscribe.rb"
+FORMULA = Path(__file__).resolve().parent.parent / "HomebrewFormula" / "babelscribe.rb"
 
 
 @pytest.fixture(scope="module")

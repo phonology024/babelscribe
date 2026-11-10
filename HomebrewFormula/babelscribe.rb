@@ -3,11 +3,17 @@ class Babelscribe < Formula
 
   desc "Transcribe audio and video into subtitles on any GPU or CPU, in 99 languages"
   homepage "https://github.com/phonology024/babelscribe"
-  url "https://files.pythonhosted.org/packages/b9/79/f75cbb6fadaf80b96bc373fa207661b1a8eefdba3c5651f2ec493bfd3604/babelscribe-0.3.2.tar.gz"
-  sha256 "c6317bcd823fda13e2885ace070f017a44d64d502a7153b85ccb47b1e29109df"
+  url "https://files.pythonhosted.org/packages/b6/d2/81bebdb3952a83cf433dc9b11a3208e386ead33feadd70fad75e70faa6a6/babelscribe-0.4.0.tar.gz"
+  sha256 "34aff766e6fa3d6c025afd8fedefdc70aef33f523c7cc5af5053284ffc205a1e"
   license "MIT"
 
+  depends_on "pkgconf" => :build
+  depends_on "rust" => :build
+  depends_on "ffmpeg"
+  depends_on "openssl@3"
   depends_on "python@3.12"
+
+  uses_from_macos "libffi"
 
   resource "annotated-types" do
     url "https://files.pythonhosted.org/packages/5f/56/a8120250d128bed162cd73c76d45f6ef9991f3e068f62a8ee060afa3104a/annotated_types-0.8.0.tar.gz"

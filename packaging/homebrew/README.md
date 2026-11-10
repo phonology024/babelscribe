@@ -1,48 +1,54 @@
 # Homebrew formula
 
-`packaging/homebrew/babelscribe.rb` is the formula, kept here so it is versioned with the release it packages.
-Homebrew core does not carry `python-anyio`, `python-mcp` or `python-imageio-ffmpeg`, so the formula vendors
-all 29 Python dependencies as `resource` blocks, which is what `Language::Python::Virtualenv` expects.
+The formula is [`HomebrewFormula/babelscribe.rb`](../../HomebrewFormula/babelscribe.rb) at the repository root.
+It lives there, not in this folder, because `brew tap` only looks in `Formula/`, `HomebrewFormula/` or the root
+of a repository.
 
-## Install from this file (no tap needed)
+Homebrew core does not carry `anyio`, `mcp` or `imageio-ffmpeg` as formulae, so all 29 Python dependencies are
+vendored as `resource` blocks, which is what `Language::Python::Virtualenv` expects. They are built from source,
+which is why the formula needs `rust` and `pkgconf` at build time and `openssl@3`. `ffmpeg` is a normal
+dependency: the `imageio-ffmpeg` sdist carries no ffmpeg binary, and babelscribe looks on `PATH` first.
 
-```bash
-brew install --build-from-source packaging/homebrew/babelscribe.rb
-```
-
-For a permanent install, put the file in a tap:
+## Install
 
 ```bash
 brew tap phonology024/babelscribe https://github.com/phonology024/babelscribe
+brew trust phonology024/babelscribe      # current Homebrew refuses formulae from a tap it has not been told to trust
 brew install phonology024/babelscribe/babelscribe
 ```
 
-## Regenerating the resource blocks after a release
+The first install builds the Rust-based dependencies (`cryptography`, `pydantic-core`, `rpds-py`) and takes a
+few minutes.
 
-Do not hand-edit them. `brew update-python-resources` resolves the dependency tree and writes the `url`/`sha256`
-for every package:
+## After a release
+
+The sdist only exists once the release is on PyPI, so this is a follow-up step:
 
 ```bash
-# put the new version + sha256 in the formula first, then
-brew update-python-resources packaging/homebrew/babelscribe.rb
-brew style packaging/homebrew/babelscribe.rb    # must report "no offenses detected"
+# put the new url + sha256 in the formula (https://pypi.org/pypi/babelscribe/json, the sdist entry), then
+brew update-python-resources phonology024/babelscribe/babelscribe   # only needed when dependencies changed
+brew style phonology024/babelscribe/babelscribe                      # must report "no offenses detected"
 ```
 
-Get the `sha256` from `https://pypi.org/pypi/babelscribe/json` (`urls[].digests.sha256` for the sdist).
+`tests/test_homebrew_formula.py` fails when the formula's version is not the package's `__version__`.
 
 ## Verified
 
-- `brew style` — no offenses.
-- `brew update-python-resources` resolved all 29 dependencies from PyPI and generated the blocks.
-- The resulting dependency set installs and runs: a virtualenv on Homebrew's `python@3.12` with
-  `pip install babelscribe==0.3.2` yields a working `babelscribe --version` → `0.3.2`.
+In the `homebrew/brew` container (Linux x86_64, Homebrew updated on 2026-11-10), with the formula in a local tap:
 
-**Not verified:** `brew install` and `brew audit` themselves. Both refuse to run on the machine this was
-prepared on (`Your Command Line Tools are too outdated` — CLT 16.4 vs the Xcode 27 that Homebrew 7 wants),
-which is a property of that host, not of the formula. Run both on a current macOS before submitting upstream.
+| Command | Result |
+|---|---|
+| `brew style` | no offenses detected |
+| `brew install --build-from-source` | `babelscribe/0.4.0: 1,033 files, 23.4MB, built in 5 minutes` |
+| `brew test` | passed |
+| `brew audit --strict` | no problems reported |
+| `babelscribe --version`, `babelscribe doctor` | `0.4.0`; Python 3.12 from the formula's venv; `FFmpeg: OK` |
+
+**Not verified:** macOS. The same formula on a Mac uses the system libffi and Apple's toolchain, and nobody has
+run it there yet. `brew update-python-resources` was not re-run for 0.4.0 (the dependency list did not change
+from 0.3.2, and the install above used these exact resources). No transcription was run in the container.
 
 ## Note for homebrew-core
 
-If this ever goes to homebrew-core, `brew audit --new-formula` also wants a `test do` block that exercises
-more than `--version`; the current one only checks the binary starts. That is deliberate: a real transcription
-in the test block would download a 1.6 GB model during `brew test`.
+`brew audit --new-formula` wants a `test do` block that does more than `--version`. The current one is
+deliberately cheap: a real transcription in `brew test` would download a model.
