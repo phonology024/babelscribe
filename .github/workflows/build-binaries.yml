@@ -5,6 +5,9 @@
 #   linux-x64-cuda      NVIDIA (CUDA) on Linux
 #   macos-arm64-metal   Apple Silicon
 #   *-cpu               any machine without a usable GPU
+#   linux-arm64-cpu     Raspberry Pi 5, ARM servers, Docker on Apple Silicon   } built from the first release after
+#   macos-x64-cpu       Intel Macs                                             } v0.4.0. babelscribe starts using them
+#                       when backend.py lists them (ASSETS, and the pinned digests) for a release that has them.
 name: build-binaries
 on:
   push:
@@ -27,6 +30,11 @@ jobs:
           - { os: ubuntu-22.04,   name: linux-x64-vulkan,   cmake: "-DGGML_VULKAN=ON" }
           - { os: ubuntu-22.04,   name: linux-x64-cuda,     cmake: "-DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES='61;70;75;80;86;89;90'", container: "nvidia/cuda:12.6.3-devel-ubuntu22.04" }
           - { os: ubuntu-22.04,   name: linux-x64-cpu,      cmake: "" }
+          # arm64 Linux: Raspberry Pi 5, ARM servers, Docker on Apple Silicon. GGML_NATIVE=OFF for the same reason
+          # as on x64: a native build targets the CI machine's CPU (Neoverse) and can crash on a Cortex-A76.
+          - { os: ubuntu-22.04-arm, name: linux-arm64-cpu,  cmake: "-DGGML_NATIVE=OFF" }
+          # Intel Macs. CPU only (Accelerate); the x64 portable flags below apply to it as well.
+          - { os: macos-15-intel, name: macos-x64-cpu,      cmake: "-DGGML_METAL=OFF -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0" }
           # macos-14 runners are retired ("configuration is not supported"); the deployment target keeps the
           # binary usable on macOS 14, which is what the macos-14 build required.
           - { os: macos-15,       name: macos-arm64-metal,  cmake: "-DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0" }
