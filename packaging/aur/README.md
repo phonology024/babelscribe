@@ -15,14 +15,13 @@ makepkg -si                    # builds, then installs with pacman
 | Package | Why |
 |---|---|
 | `python`, `python-anyio`, `python-mcp` | runtime imports; all three are in the `extra` repo |
+| `ffmpeg` | decoding every input file; in `extra`. A hard dependency, so a default install can transcribe |
 | `python-build`, `python-installer`, `python-wheel`, `python-setuptools` | build time only |
-| `ffmpeg` (optdepends) | decoding; without it, set `BABELSCRIBE_*` to a whisper.cpp build and let it use a system ffmpeg |
-| `python-imageio-ffmpeg` (optdepends) | the bundled ffmpeg the Python package normally uses — **only in the AUR**, which is why it is not a hard dependency |
 | `python-pythainlp` (optdepends) | Thai word boundaries in hybrid mode |
 
-`python-imageio-ffmpeg` is the one dependency that is not in an official Arch repo. Making it a hard
-dependency would force this PKGBUILD into the AUR as `babelscribe` with an AUR-only dep, which is allowed but
-slows down every install for a feature most users do not need. `ffmpeg` from `extra` covers the common case.
+On PyPI the package depends on `imageio-ffmpeg`, which bundles an ffmpeg binary. That package is only in the
+AUR, and babelscribe looks for `ffmpeg` on `PATH` first anyway, so this PKGBUILD depends on Arch's own `ffmpeg`
+instead and does not need `python-imageio-ffmpeg` at all.
 
 ## Updating for a new release
 
@@ -34,13 +33,21 @@ slows down every install for a feature most users do not need. `ffmpeg` from `ex
    makepkg --printsrcinfo > .SRCINFO
    ```
 
-CI keeps this honest: `tests/test_aur_pkgbuild.py` fails when `pkgver` or the checksum drifts from what PyPI
-says the current release is.
+**Every version bump has to touch this folder**, because `tests/test_aur_pkgbuild.py` fails when `pkgver` is
+not the package's `__version__`. The sdist only exists after the release is on PyPI, so the order is: release,
+then update `pkgver` + `sha256sums` + `.SRCINFO` here.
+
+What the tests check: `pkgver` equals `__version__`, `.SRCINFO` agrees with `PKGBUILD`, the checksum is a real
+64-hex digest, and, when PyPI is reachable, that the digest is the one PyPI publishes for that sdist. Without
+network that last test is skipped, so an offline run does not prove the checksum.
 
 ## Verified
 
-Built and installed on `archlinux:latest` (as a `linux/amd64` container on an Apple Silicon host), then run
-end to end: `makepkg` produced `babelscribe-0.3.2-1-any.pkg.tar.zst`, `pacman -U` installed it, and
-`babelscribe tone.wav -m tiny -f srt,txt` downloaded whisper-cli and the model and wrote valid subtitles.
-Note that the container build proves the PKGBUILD is correct, not that it has been tested on a physical Arch
-install with a GPU.
+Built and installed in an `archlinux:latest` container (linux/amd64) on 2026-11-10, then run end to end:
+`makepkg -s` produced `babelscribe-0.4.0-1-any.pkg.tar.zst`, `pacman -U` installed it together with `ffmpeg`,
+`python-anyio` and `python-mcp` from `extra`, and `babelscribe talk.wav -m tiny -l en -f srt --flavor cpu`
+downloaded whisper-cli and the model and wrote correct subtitles for a spoken sentence. `.SRCINFO` is byte for
+byte what `makepkg --printsrcinfo` printed there.
+
+A container build proves the PKGBUILD is correct. It does not prove a physical Arch install with a GPU works:
+the container has none, so only the CPU build ran.

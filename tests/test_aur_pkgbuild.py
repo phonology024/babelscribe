@@ -2,7 +2,8 @@
 
 A stale pkgver or checksum in an AUR package is the classic packaging bug: the PKGBUILD looks fine, and every
 user gets "ERROR: One or more files did not pass the validity check" until someone notices. This checks the
-fields that must match the current version in pyproject.toml, without needing network access.
+fields that must match the current version in pyproject.toml. One test asks PyPI for the published digest and is
+skipped when PyPI cannot be reached.
 """
 import re
 from pathlib import Path
@@ -55,6 +56,29 @@ def test_runtime_deps_are_declared(pkgbuild):
     deps = re.search(r"^depends=\((.*?)\)$", pkgbuild, re.MULTILINE | re.DOTALL).group(1)
     names = {d.strip().strip("'\"") for d in deps.split()}
     assert {"python", "python-anyio", "python-mcp"} <= names
+    # Upstream gets ffmpeg from imageio-ffmpeg (AUR only). Without a hard ffmpeg dependency a default install
+    # stops at "ffmpeg not found" on the first file.
+    assert "ffmpeg" in names
+
+
+def test_no_placeholder_maintainer(pkgbuild):
+    assert "example.com" not in pkgbuild and "your name" not in pkgbuild
+
+
+def test_checksum_is_the_one_pypi_publishes(pkgbuild):
+    """The only check that needs the network; skipped offline, and until the release is on PyPI."""
+    import json
+    import urllib.error
+    import urllib.request
+    ver = re.search(r"^pkgver=(\S+)$", pkgbuild, re.MULTILINE).group(1)
+    digest = re.search(r"^sha256sums=\('([0-9a-f]{64})'\)$", pkgbuild, re.MULTILINE).group(1)
+    try:
+        with urllib.request.urlopen(f"https://pypi.org/pypi/babelscribe/{ver}/json", timeout=20) as r:
+            files = json.load(r)["urls"]
+    except (urllib.error.URLError, OSError) as e:
+        pytest.skip(f"PyPI not reachable or {ver} not published yet: {e}")
+    sdist = next(f for f in files if f["packagetype"] == "sdist")
+    assert digest == sdist["digests"]["sha256"], f"sha256sums is not the digest of {sdist['filename']} on PyPI"
 
 
 def test_srcinfo_matches_the_pkgbuild(pkgbuild):

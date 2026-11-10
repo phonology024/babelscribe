@@ -1,21 +1,20 @@
-# Maintainer: your name <you@example.com>
+# Maintainer: phonology024 <https://github.com/phonology024/babelscribe/issues>
 pkgname=babelscribe
-pkgver=0.3.2
+pkgver=0.4.0
 pkgrel=1
 pkgdesc="Transcribe audio and video into subtitles on any GPU (Vulkan/CUDA/Metal) or CPU, in 99 languages"
 arch=('any')
 url="https://github.com/phonology024/babelscribe"
 license=('MIT')
-depends=('python' 'python-anyio' 'python-mcp')
+# ffmpeg is a hard dependency: upstream gets it from imageio-ffmpeg, which is only in the AUR, and without
+# either one every transcription stops at "ffmpeg not found".
+depends=('python' 'python-anyio' 'python-mcp' 'ffmpeg')
 makedepends=('python-build' 'python-installer' 'python-wheel' 'python-setuptools')
-# imageio-ffmpeg is only in the AUR, so it cannot be a plain dependency of a repo-style PKGBUILD.
 optdepends=(
-  'python-imageio-ffmpeg: bundled ffmpeg, so an external ffmpeg is not needed'
-  'ffmpeg: audio/video decoding'
   'python-pythainlp: Thai word boundaries in hybrid mode'
 )
 source=("$pkgname-$pkgver.tar.gz::https://files.pythonhosted.org/packages/source/b/$pkgname/$pkgname-$pkgver.tar.gz")
-sha256sums=('c6317bcd823fda13e2885ace070f017a44d64d502a7153b85ccb47b1e29109df')
+sha256sums=('34aff766e6fa3d6c025afd8fedefdc70aef33f523c7cc5af5053284ffc205a1e')
 
 build() {
   cd "$srcdir/$pkgname-$pkgver"
