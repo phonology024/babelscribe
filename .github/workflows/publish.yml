@@ -1,0 +1,60 @@
+# On a version tag: upload the package to PyPI, then publish server.json to the MCP Registry.
+# The two used to be separate and raced: the registry rejects a version that is not on PyPI yet.
+#   pypi      trusted publishing (GitHub OIDC), no token stored. One-time setup: RELEASING.md.
+#   registry  waits until PyPI serves this version, however it got there (this workflow or a manual upload),
+#             so it can be re-run on its own after a manual upload.
+name: publish
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  pypi:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions: { id-token: write, contents: read }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: The tag is the package version
+        run: |
+          want="${GITHUB_REF_NAME#v}"
+          got=$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml)
+          echo "tag $want, pyproject $got"
+          test "$want" = "$got"
+      - name: Build sdist and wheel
+        run: |
+          pip install -q build twine
+          python -m build
+          twine check dist/*
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with: { skip-existing: true }   # a manual upload of the same version is not an error
+
+  registry:
+    needs: pypi
+    # also after a failed or skipped pypi job: what matters is whether the version is on PyPI (checked below)
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    permissions: { id-token: write, contents: read }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Wait until PyPI serves this version
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml)
+          for i in $(seq 1 40); do
+            if curl -sf "https://pypi.org/pypi/babelscribe/$version/json" >/dev/null; then
+              echo "babelscribe $version is on PyPI"; exit 0
+            fi
+            echo "not on PyPI yet ($i/40)"; sleep 15
+          done
+          echo "::error::babelscribe $version is not on PyPI after 10 minutes. Upload it, then re-run this job."
+          exit 1
+      - name: Install mcp-publisher
+        run: curl -sL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" | tar xz mcp-publisher
+      - name: Publish
+        run: |
+          ./mcp-publisher login github-oidc
+          ./mcp-publisher publish
