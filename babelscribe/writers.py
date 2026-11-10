@@ -72,16 +72,19 @@ def _default_max_line_chars(meta: dict) -> int:
 def _subtitle_cues(
     segs: list[dict],
     max_line_chars: int,
+    max_lines: int = 2,
 ) -> list[dict]:
     """Split transcription segments into readable subtitle cues.
 
-    Each subtitle cue contains at most two lines. Long segments are
+    Each subtitle cue contains at most max_lines lines (two unless asked otherwise). Long segments are
     divided using Whisper word timings so that each new cue keeps
     accurate start/end timestamps. A cue also keeps its words grouped
     per line, which the karaoke writer needs and the others ignore.
     """
     if max_line_chars <= 0:
         raise ValueError("max_line_chars must be greater than 0")
+    if max_lines <= 0:
+        raise ValueError("max_lines must be greater than 0")
 
     cues = []
 
@@ -130,9 +133,9 @@ def _subtitle_cues(
         if current_line:
             lines.append(current_line)
 
-        # Combine at most two lines into each subtitle cue.
-        for i in range(0, len(lines), 2):
-            cue_lines = lines[i:i + 2]
+        # Combine at most max_lines lines into each subtitle cue.
+        for i in range(0, len(lines), max_lines):
+            cue_lines = lines[i:i + max_lines]
 
             first_word = cue_lines[0][0]
             last_word = cue_lines[-1][-1]
@@ -149,6 +152,59 @@ def _subtitle_cues(
                 "lines": cue_lines,
             })
 
+    return cues
+
+
+def _cue_from_lines(cue_lines: list[list]) -> dict:
+    return {
+        "start": cue_lines[0][0][1],
+        "end": cue_lines[-1][-1][2],
+        "text": "\n".join("".join(w[0] for w in line).strip() for line in cue_lines),
+        "lines": cue_lines,
+    }
+
+
+def _reading_rules(cues: list[dict], max_cps: float | None = None, min_duration: float | None = None,
+                   max_duration: float | None = None) -> list[dict]:
+    """Opt-in reading-speed rules, applied to finished cues. Each one only uses time that is really there.
+
+    max_duration: a cue on screen longer than this is cut where its lines break, or between words when it is one
+                  line, into pieces that each fit. A cue without word timings cannot be cut and is kept.
+    min_duration: a cue shorter than this stays up longer, at most until the next cue starts.
+    max_cps:      a cue with more characters per second than this stays up longer, at most until the next cue
+                  starts. Cutting would not help (the same words in the same time), so a cue that is still too
+                  fast after that is kept as it is."""
+    for name, value in (("max_cps", max_cps), ("min_duration", min_duration), ("max_duration", max_duration)):
+        if value is not None and value <= 0:
+            raise ValueError(f"{name} must be greater than 0")
+    if max_duration:
+        cut: list[dict] = []
+        todo = list(cues)
+        while todo:
+            c = todo.pop(0)
+            lines = c.get("lines") or []
+            words = [w for line in lines for w in line]
+            if c["end"] - c["start"] <= max_duration or len(words) < 2:
+                cut.append(c)
+                continue
+            if len(lines) > 1:                       # first choice: one cue per line, the wrapping stays as it was
+                todo = [_cue_from_lines([line]) for line in lines] + todo
+                continue
+            # one line that is still too long: cut before the first word that would end past the limit
+            k = next((i for i, w in enumerate(words) if w[2] - words[0][1] > max_duration), len(words) // 2)
+            k = min(max(k, 1), len(words) - 1)
+            todo = [_cue_from_lines([words[:k]]), _cue_from_lines([words[k:]])] + todo
+        cues = cut
+    if max_cps or min_duration:
+        cues = [dict(c) for c in cues]
+        for i, c in enumerate(cues):
+            want = c["end"] - c["start"]
+            if min_duration:
+                want = max(want, min_duration)
+            if max_cps:
+                want = max(want, len(c["text"].replace("\n", "")) / max_cps)
+            room = cues[i + 1]["start"] if i + 1 < len(cues) else float("inf")
+            c["end"] = max(c["end"], min(c["start"] + want, room))
     return cues
 
 
@@ -184,8 +240,13 @@ def write(
     formats: list[str],
     meta: dict,
     max_line_chars: int | None = None,
+    max_lines: int = 2,
+    max_cps: float | None = None,
+    min_duration: float | None = None,
+    max_duration: float | None = None,
 ) -> list[Path]:
     out = []
+    rules = dict(max_cps=max_cps, min_duration=min_duration, max_duration=max_duration)
 
     line_limit = (
         max_line_chars
@@ -193,7 +254,7 @@ def write(
         else _default_max_line_chars(meta)
     )
 
-    subtitle_segs = _subtitle_cues(segs, line_limit)
+    subtitle_segs = _reading_rules(_subtitle_cues(segs, line_limit, max_lines), **rules)
 
     for f in formats:
         # Append the extension instead of replacing it: Path("meeting.v2").with_suffix(".srt")
@@ -239,7 +300,7 @@ def write(
             )
 
         elif f == "ass":
-            karaoke = _subtitle_cues(segs, min(line_limit, ASS_MAX_LINE_CHARS))
+            karaoke = _reading_rules(_subtitle_cues(segs, min(line_limit, ASS_MAX_LINE_CHARS), max_lines), **rules)
             p.write_text(
                 ASS_HEADER
                 + "".join(

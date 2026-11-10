@@ -38,7 +38,7 @@ my Downloads"* — and the app finds the file, transcribes it, writes `.srt` / `
 translate or summarise the text for you.
 
 Tools: `transcribe` (file → subtitles + text), `transcribe_folder` (every audio/video in a folder, one summary
-back), `find_media` (newest audio/video in Downloads, Videos, Desktop, …), `list_devices`,
+back), `convert_subtitles` (re-wrap or re-export from the saved JSON, no transcription), `find_media` (newest audio/video in Downloads, Videos, Desktop, …), `list_devices`,
 `list_languages_and_models`.
 
 `transcribe_folder` goes on after a file fails and lists the failure in the summary. Subtitles land next to each
@@ -196,6 +196,7 @@ babelscribe talk.mp4 -l hi --accurate              # slower, fewest errors (best
 babelscribe vo.wav -l th --text-model thai-thonburian   # hybrid: pick a Thai fine-tune yourself
 babelscribe talk.mp4 --prompt "Pitakpong, babelscribe"   # bias the spelling of names and terms
 babelscribe talk.mp4 --translate                   # subtitles translated to English
+babelscribe convert talk.json -f srt,ass --max-line-chars 20   # re-wrap / re-export, no transcription
 babelscribe devices                                # GPUs whisper.cpp can see
 babelscribe models                                 # models and fine-tunes
 babelscribe talk.mp4 --bin /path/to/whisper-cli    # use your own whisper.cpp build
@@ -203,6 +204,18 @@ babelscribe talk.mp4 --bin /path/to/whisper-cli    # use your own whisper.cpp bu
 With several files or a folder, a file that fails does not stop the rest: the run ends with a summary line
 (`12 done, 0 skipped, 1 failed`) and a non-zero exit code if anything failed. `-o` is then an output folder, and
 two files that would share a subtitle name (`talk.mp4` and `talk.mp3`) keep their full name.
+
+**Fix and re-export.** Transcribing is the slow part; how the subtitles look is the part you redo. Keep the JSON
+and the rest takes no time:
+```bash
+babelscribe talk.mp4 -f json,srt                 # once
+# correct names or words in the "text" fields of talk.json, then:
+babelscribe convert talk.json -f srt,vtt,ass     # every format gets the corrected text, with its timing
+```
+`convert` also takes `--max-line-chars`, `--max-lines 1`, and three reading-speed rules that are off unless asked
+for: `--max-duration 7` (cut subtitles that stay up longer), `--min-duration 1` and `--max-cps 17` (keep short or
+fast subtitles up longer, never into the next one). In MCP it is the `convert_subtitles` tool, which is why the
+MCP tools now write a `.json` by default.
 
 From Python:
 ```python
