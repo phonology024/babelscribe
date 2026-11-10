@@ -1,6 +1,6 @@
 # Contributing to babelscribe
 
-Looking for something to pick up? See [ROADMAP.md](ROADMAP.md) (releases and a *Need help?* table) or the [`need help`](https://github.com/phonology024/babelscribe/labels/need%20help) label.
+Looking for something to pick up? See [ROADMAP.md](ROADMAP.md) (releases and a *Need help?* table) or the [`help wanted`](https://github.com/phonology024/babelscribe/labels/help%20wanted) label.
 
 Thanks for helping! The most valuable contributions are small and concrete:
 
