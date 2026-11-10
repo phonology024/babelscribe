@@ -1,5 +1,5 @@
 [project]
 name = "babelscribe-mcpb"
-version = "0.3.2"
+version = "0.4.0"
 requires-python = ">=3.10"
-dependencies = ["babelscribe>=0.3.2"]
+dependencies = ["babelscribe>=0.4.0"]

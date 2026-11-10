@@ -1,7 +1,7 @@
 {
   "name": "babelscribe",
   "displayName": "babelscribe — local subtitles & transcripts",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "description": "Turn audio and video files on your computer into subtitles (SRT/VTT) and text in 99 languages, using your own AMD, NVIDIA, Intel or Apple GPU. Runs locally; nothing is uploaded.",
   "author": { "name": "phonology024", "url": "https://github.com/phonology024" },
   "homepage": "https://phonology024.github.io/babelscribe/",

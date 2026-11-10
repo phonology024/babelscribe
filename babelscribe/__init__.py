@@ -1,2 +1,2 @@
 """babelscribe — any language, any GPU speech-to-text built on whisper.cpp."""
-__version__ = "0.3.2"
+__version__ = "0.4.0"
