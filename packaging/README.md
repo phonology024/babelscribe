@@ -19,7 +19,7 @@ console scripts in `pyproject.toml`.
 
 Nothing in the repo needs to change for either route.
 
-## winget — cannot be done for this package, and here is why
+## winget — why it could not be done from the PyPI package
 
 The issue asks for `winget install babelscribe`. That is not expressible today, for a structural reason rather than a
 lack of effort.
@@ -47,13 +47,57 @@ Three ways this is normally handled, and why none fit here:
 This was checked rather than assumed: a code search of `microsoft/winget-pkgs` for `pip install` and
 `files.pythonhosted.org` returns **zero** manifests, and known pip tools (`pipx`, `poetry`) are not present.
 
-**If a Windows standalone build is ever wanted**, the smallest path is a PyInstaller one-file build per architecture
-attached to the GitHub release, and then a `zip`/`portable` manifest pointing at it. That is a real feature with real
-maintenance cost, so it belongs in its own issue rather than in the packaging one.
+## Standalone build (no Python) — built by CI, which also unblocks winget
+
+`standalone/` holds the recipe for `babelscribe-<version>-windows-x64.zip`: `babelscribe.exe` and
+`babelscribe-mcp.exe` in one folder with Python and every library inside (PyInstaller, one-folder mode).
+`.github/workflows/build-standalone.yml` builds it, tests it, and attaches it to the GitHub release when a version tag
+is pushed.
+
+| Measured on Windows 11 | |
+|---|---|
+| Folder size | 146 MB, of which 101 MB is ffmpeg (the same ffmpeg the pip install brings) |
+| `babelscribe.exe --version` | 0.15 to 0.25 s |
+| First run with an empty cache (downloads whisper-cli and the tiny model, transcribes an 11 s clip) | 5 s |
+
+One-folder was chosen over one-file because a one-file executable unpacks all 146 MB to a temp folder on every start.
+The python.org embeddable runtime plus wheels would be about the same size (ffmpeg dominates) and needs its own
+launcher executables, so it was not pursued.
+
+`standalone/smoke_test.py` is the test CI runs: it starts both programs with an environment that has no Python (no
+`PATH` entry, no `PYTHON*` variables) and an empty babelscribe home, then checks `--version`, a real first-run
+transcription, and an MCP handshake plus tool list over stdio.
+
+Not included, on purpose:
+- **Code signing.** The executables are unsigned, so SmartScreen shows "unknown publisher" the first time. A
+  certificate costs money every year; that is the maintainer's decision.
+- **The fine-tune converter** (`--text-model`, and `--accurate` for Thai / Hindi): it needs torch and transformers
+  (about 2.5 GB). In the standalone build those options stop with the usual "needs extras" message; use the pip
+  install for them.
+
+**winget, once a release carries the zip.** winget can install a zip of portable executables, so the manifest
+becomes a few lines per release (`wingetcreate new <zip url>` writes it and opens the PR against
+`microsoft/winget-pkgs`):
+
+```yaml
+InstallerType: zip
+NestedInstallerType: portable
+NestedInstallerFiles:
+  - RelativeFilePath: babelscribe\babelscribe.exe
+    PortableCommandAlias: babelscribe
+  - RelativeFilePath: babelscribe\babelscribe-mcp.exe
+    PortableCommandAlias: babelscribe-mcp
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/phonology024/babelscribe/releases/download/v<version>/babelscribe-<version>-windows-x64.zip
+    InstallerSha256: <from the .sha256 file next to the zip>
+```
+
+The Scoop manifest can then point at the same zip and drop its Python dependency.
 
 ## Testing note
 
-Neither manifest can be exercised on this machine: there is no Windows and no PowerShell here. What *was* verified:
+The Scoop manifest was written on a machine with no Windows. What *was* verified:
 
 - Scoop manifest valid against the official schema ✅
 - Sha256 matches the live PyPI wheel ✅
