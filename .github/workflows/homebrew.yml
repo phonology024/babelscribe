@@ -1,0 +1,47 @@
+name: homebrew
+# Installs the formula for real on macOS, because nobody maintaining it has a Mac. Runs only when the formula
+# (or this file) changes: it builds the Rust-based dependencies from source and takes several minutes.
+on:
+  pull_request:
+    paths: ["HomebrewFormula/**", ".github/workflows/homebrew.yml"]
+  push:
+    branches: [main]
+    paths: ["HomebrewFormula/**", ".github/workflows/homebrew.yml"]
+  workflow_dispatch:
+jobs:
+  install:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, macos-15-intel]   # Apple Silicon and Intel
+    runs-on: ${{ matrix.os }}
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      HOMEBREW_NO_INSTALL_CLEANUP: "1"
+      HOMEBREW_NO_ANALYTICS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      # The Intel runner image ships its own python.org Python 3.12 linked into /usr/local/bin, exactly where
+      # Homebrew links python@3.12. brew link then fails and the formula's Python ends up without a usable pip.
+      # A user's Mac does not have these links unless they installed python.org's Python themselves.
+      - name: Remove the runner's own Python 3.12 links (Intel image)
+        if: runner.arch == 'X64'
+        run: |
+          cd /usr/local/bin
+          rm -f 2to3-3.12 idle3.12 pip3.12 pydoc3.12 python3.12 python3.12-config
+      - name: Put the formula in a local tap
+        run: |
+          tap="$(brew --repository)/Library/Taps/local/homebrew-babelscribe"
+          mkdir -p "$tap/Formula"
+          cp HomebrewFormula/babelscribe.rb "$tap/Formula/"
+          git -C "$tap" init -q && git -C "$tap" add -A
+          git -C "$tap" -c user.name=ci -c user.email=ci@example.invalid commit -qm formula
+          brew trust local/babelscribe || true   # only newer Homebrew has (and needs) this
+      - run: brew style local/babelscribe/babelscribe
+      - run: brew install --build-from-source local/babelscribe/babelscribe
+      - run: brew test local/babelscribe/babelscribe
+      - run: brew audit --strict local/babelscribe/babelscribe
+      - name: Run the installed command
+        run: |
+          babelscribe --version
+          babelscribe doctor
