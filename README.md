@@ -180,6 +180,7 @@ languages are the most valuable contribution.
 - **`--accurate`** — slower, fewest errors: large-v3 with beam search, or for Thai and Hindi the best community fine-tune (hybrid). Chosen per language from the FLEURS benchmark above.
 - **Custom vocabulary** — `--prompt "Pitakpong, babelscribe"` gives whisper an initial prompt that biases the spelling of names and jargon. In the MCP `transcribe` tool the same thing is the `vocabulary` argument. While a prompt is set, `--max-context 0` is not passed (whisper.cpp ignores the prompt otherwise).
 - **Translate to English** — `--translate` writes the transcript translated to English (whisper's translate task, any source language). It uses `large-v3` because turbo was not trained to translate, and cannot be combined with `--text-model`. In the MCP `transcribe` tool it is the `translate` argument.
+- **Progress** — in a terminal the CLI draws a progress bar per file (`--no-progress` turns it off; it is never drawn into a pipe or a log). MCP clients get a notification every 5 seconds with the real percentage (`progress` of `total` 100 for one file; files done plus the fraction of the current one for a folder). From Python: `transcribe_file(..., progress=callback)`, called with 0 to 100.
 - **Outputs** — `srt`, `vtt`, `txt`, `json` (segments with token timings), `ass` (karaoke: each word highlights
   as it is spoken, from the token timings — for short-form video and players that read ASS).
 

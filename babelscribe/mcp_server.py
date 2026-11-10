@@ -73,17 +73,20 @@ def build():
         "summarise from the returned text."))
 
     async def _run(ctx, job, progress=None, total=None, prefix=""):
-        """Run job(log) in a worker thread, sending a progress notification every 5 s so clients do not time out
-        on a long file. Returns the job's result. A failure (including SystemExit, see _tool_error) is returned
-        as a value, not raised: raised inside the task group it would arrive wrapped in an ExceptionGroup and the
-        caller would see "unhandled errors in a TaskGroup" instead of the message."""
+        """Run job(log, pct) in a worker thread, sending a progress notification every 5 s so clients do not time
+        out on a long file. job passes pct to transcribe_file(progress=...), so each notification carries how
+        far the file really is: 0-100 of 100 for one file, or files done + the fraction of the current one out
+        of total for a folder. Returns the job's result. A failure (including SystemExit, see _tool_error) is
+        returned as a value, not raised: raised inside the task group it would arrive wrapped in an
+        ExceptionGroup and the caller would see "unhandled errors in a TaskGroup" instead of the message."""
         lines: list[str] = []
         done = anyio.Event()
         t0 = time.time()
+        at = [0.0]   # percent of the current file, written by the worker thread
 
         def work():
             try:
-                return job(lambda m: (lines.append(m), print(m)))
+                return job(lambda m: (lines.append(m), print(m)), lambda pct: at.__setitem__(0, pct))
             except (Exception, SystemExit) as e:
                 return e
 
@@ -92,8 +95,10 @@ def build():
                 with anyio.move_on_after(HEARTBEAT):
                     await done.wait()
                 if not done.is_set():
-                    await _report_progress(ctx, time.time() - t0 if progress is None else progress, total,
-                                           prefix + (lines[-1] if lines else "starting ..."))
+                    note = f"{at[0]:.0f}% after {time.time() - t0:.0f} s"
+                    await _report_progress(ctx, at[0] if progress is None else progress + at[0] / 100,
+                                           100 if progress is None else total,
+                                           f"{prefix}{note} · " + (lines[-1] if lines else "starting ..."))
 
         async with anyio.create_task_group() as tg:
             tg.start_soon(heartbeat)
@@ -123,8 +128,11 @@ def build():
         if out:
             out.parent.mkdir(parents=True, exist_ok=True)
         fmts = [f.strip() for f in formats.split(",") if f.strip()]
-        result = await _run(ctx, lambda log: api.transcribe_file(
-            src, language, accurate=accurate, formats=fmts, out=out, log=log, prompt=vocabulary, translate=translate))
+        result = await _run(ctx, lambda log, pct: api.transcribe_file(
+            src, language, accurate=accurate, formats=fmts, out=out, log=log, prompt=vocabulary, translate=translate,
+            progress=pct))
+        if not isinstance(result, BaseException):
+            await _report_progress(ctx, 100, 100, "done")
         if isinstance(result, BaseException):
             raise _tool_error(result) if isinstance(result, SystemExit) else result
         text = result.pop("text", "")
@@ -167,9 +175,9 @@ def build():
             for i, src in enumerate(media, 1):
                 tag = f"{src.name} ({i}/{len(media)})"
                 await _report_progress(ctx, i - 1, len(media), f"transcribing {tag}")
-                r = await _run(ctx, lambda log: api.transcribe_file(
+                r = await _run(ctx, lambda log, pct: api.transcribe_file(
                     src, language, accurate=accurate, formats=fmts, out=bases[src], log=log, prompt=vocabulary,
-                    translate=translate), progress=i - 1, total=len(media), prefix=f"{tag}: ")
+                    translate=translate, progress=pct), progress=i - 1, total=len(media), prefix=f"{tag}: ")
                 if isinstance(r, BaseException):   # keep going: one bad file must not lose the rest of the batch.
                     # SystemExit counts too: a bad format or unknown model is how the CLI paths report a problem.
                     results.append({"path": str(src), "ok": False, "error": f"{type(r).__name__}: {r}"})

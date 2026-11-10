@@ -727,7 +727,7 @@ def test_mcp_progress_keeps_coming_during_one_long_file(tmp_path, monkeypatch):
     assert out["succeeded"] == 1
     during = [m for p, t, m in sent if m.startswith("long.mp4 (1/1): ")]
     assert len(during) >= 2, sent
-    assert during[-1] == "long.mp4 (1/1): transcribing with turbo ..."
+    assert during[-1].endswith("transcribing with turbo ...")
     assert all(t == 1 for _, t, _ in sent), "progress stays on the file-count scale so a client can show a bar"
 
 
