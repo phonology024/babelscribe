@@ -223,7 +223,13 @@ Add one entry to `FINETUNES` in `babelscribe/models.py` (Hugging Face repo, lang
 
 ## Prebuilt binaries
 `.github/workflows/build-binaries.yml` builds `whisper-cli` + `whisper-quantize` for every row of the table above and attaches
-them to each `v*` release. Point `BABELSCRIBE_RELEASES` at another URL to self-host.
+them to each `v*` release, with a `SHA256SUMS` file.
+
+Each babelscribe version downloads the binaries of one fixed release (`BINARY_TAG` in `babelscribe/backend.py`), not
+"latest", and checks the zip's sha256 before unpacking it. A download that does not match is deleted and nothing is
+run. `babelscribe doctor` shows which release the cached binary came from and whether its files changed since.
+Point `BABELSCRIBE_RELEASES` at another URL to self-host: a mirror of the official zips is checked the same way; a
+mirror with your own builds needs `BABELSCRIBE_SKIP_VERIFY=1`.
 
 ## ภาษาไทย
 ใช้ผ่าน Claude Desktop ได้โดยไม่ต้องพิมพ์คำสั่ง: โหลด `babelscribe.mcpb` จากหน้า Releases แล้วดับเบิลคลิก จากนั้นพิมพ์ในแชทว่า *"ทำซับไทยให้คลิปล่าสุดในโฟลเดอร์ดาวน์โหลด"*

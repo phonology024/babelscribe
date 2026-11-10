@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -60,7 +61,13 @@ def ensure(name: str, quantizer: Path | None = None) -> Path:
     if not ft:
         print(f"downloading model {name} ({GENERAL[name]}) ...")
         tmp = p.with_suffix(".part")
-        urllib.request.urlretrieve(GGML.format(name=name), tmp)
+        try:
+            urllib.request.urlretrieve(GGML.format(name=name), tmp)   # raises when shorter than Content-Length
+        except BaseException as e:   # also Ctrl+C: never leave half a model behind under any name
+            tmp.unlink(missing_ok=True)
+            if isinstance(e, urllib.error.ContentTooShortError):
+                raise SystemExit(f"the download of model {name} was cut short; nothing was kept. Run it again.")
+            raise
         tmp.replace(p)
         return p
     return convert_finetune(name, ft, p, quantizer)

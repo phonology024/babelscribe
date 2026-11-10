@@ -618,6 +618,7 @@ def test_fetch_binary_explains_a_404_from_a_mirror(monkeypatch, tmp_path):
     import pytest
     monkeypatch.setattr(backend, "RELEASES", "https://example.invalid/mirror")
     monkeypatch.setattr(backend, "CACHE", tmp_path)
+    monkeypatch.setattr(backend, "asset_name", lambda flavor=None: "whisper-cli-linux-x64-cpu.zip")
 
     def gone(url):
         raise urllib.error.HTTPError(url, 404, "Not Found", None, None)
