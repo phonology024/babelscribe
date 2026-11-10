@@ -216,7 +216,7 @@ docker run --rm -v "$PWD:/media" -v babelscribe-models:/models babelscribe talk.
 CPU by default, linux/amd64; a Vulkan image for GPU hosts is one `--build-arg` away. Details: [docker/README.md](docker/README.md).
 
 ## Roadmap
-What's planned next (subtitle line wrapping, MCP progress for long files, folder batches, translate-to-English, more fine-tunes) is in [ROADMAP.md](ROADMAP.md) and the [open issues](https://github.com/phonology024/babelscribe/issues).
+What's planned next (real progress percentages, folders on the command line, verified downloads, more fine-tunes, burn-in subtitles, a desktop app) is in [ROADMAP.md](ROADMAP.md) and the [open issues](https://github.com/phonology024/babelscribe/issues).
 
 ## Add a language fine-tune
 Add one entry to `FINETUNES` in `babelscribe/models.py` (Hugging Face repo, language code, whether it needs beam search) and open a PR.
