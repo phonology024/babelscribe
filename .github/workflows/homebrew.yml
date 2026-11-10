@@ -21,6 +21,14 @@ jobs:
       HOMEBREW_NO_ANALYTICS: "1"
     steps:
       - uses: actions/checkout@v4
+      # The Intel runner image ships its own python.org Python 3.12 linked into /usr/local/bin, exactly where
+      # Homebrew links python@3.12. brew link then fails and the formula's Python ends up without a usable pip.
+      # A user's Mac does not have these links unless they installed python.org's Python themselves.
+      - name: Remove the runner's own Python 3.12 links (Intel image)
+        if: runner.arch == 'X64'
+        run: |
+          cd /usr/local/bin
+          rm -f 2to3-3.12 idle3.12 pip3.12 pydoc3.12 python3.12 python3.12-config
       - name: Put the formula in a local tap
         run: |
           tap="$(brew --repository)/Library/Taps/local/homebrew-babelscribe"
