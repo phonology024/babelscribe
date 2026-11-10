@@ -729,3 +729,98 @@ def test_mcp_progress_keeps_coming_during_one_long_file(tmp_path, monkeypatch):
     assert len(during) >= 2, sent
     assert during[-1] == "long.mp4 (1/1): transcribing with turbo ..."
     assert all(t == 1 for _, t, _ in sent), "progress stays on the file-count scale so a client can show a bar"
+
+
+def _batch(tmp_path, monkeypatch, names, argv, bad=()):
+    """Run the CLI on real files with a transcribe_file stub that still writes through writers.write, so a wrong
+    output path shows up on disk. Returns (exit code, files handed to transcribe_file in order)."""
+    from babelscribe import api, cli
+    called = []
+
+    def fake(src, formats=None, out=None, log=print, **k):
+        called.append(Path(src).name)
+        if Path(src).name in bad:
+            raise RuntimeError("whisper-cli failed")
+        base = Path(out) if out else Path(src).with_suffix("")
+        base.parent.mkdir(parents=True, exist_ok=True)
+        segs = [{"start": 0.0, "end": 1.0, "text": Path(src).name, "words": []}]
+        files = writers.write(segs, base, formats, {"lang": "en"})
+        return {"files": [str(f) for f in files], "lang": "en", "segments": 1, "seconds": 0.0, "text": ""}
+    monkeypatch.setattr(api, "transcribe_file", fake)
+    for n in names:
+        (tmp_path / n).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / n).write_bytes(b"x")
+    monkeypatch.chdir(tmp_path)
+    try:
+        cli.main(argv)
+    except SystemExit as e:
+        return e.code, called
+    return 0, called
+
+
+def test_cli_takes_several_files(tmp_path, monkeypatch, capsys):
+    code, called = _batch(tmp_path, monkeypatch, ["a.mp4", "b.mp3"], ["a.mp4", "b.mp3", "-f", "srt"])
+    assert code == 0 and called == ["a.mp4", "b.mp3"]
+    assert (tmp_path / "a.srt").is_file() and (tmp_path / "b.srt").is_file()
+    assert "2 done, 0 skipped, 0 failed" in capsys.readouterr().out
+
+
+def test_cli_takes_a_folder_and_only_goes_deeper_with_r(tmp_path, monkeypatch):
+    names = ["rec/a.mp4", "rec/notes.txt", "rec/sub/b.wav"]
+    code, called = _batch(tmp_path, monkeypatch, names, ["rec", "-f", "srt"])
+    assert code == 0 and called == ["a.mp4"]            # notes.txt is not media, sub/ needs -r
+    code, called = _batch(tmp_path, monkeypatch, names, ["rec", "-r", "-f", "srt", "-o", "subs"])
+    assert code == 0 and called == ["a.mp4", "b.wav"]
+    assert (tmp_path / "subs" / "a.srt").is_file() and (tmp_path / "subs" / "sub" / "b.srt").is_file()
+
+
+def test_cli_skip_existing_leaves_finished_files(tmp_path, monkeypatch, capsys):
+    names = ["rec/a.mp4", "rec/b.mp4"]
+    (tmp_path / "rec").mkdir()
+    (tmp_path / "rec" / "a.srt").write_text("mine", encoding="utf-8")
+    code, called = _batch(tmp_path, monkeypatch, names, ["rec", "-f", "srt", "--skip-existing"])
+    assert code == 0 and called == ["b.mp4"]
+    assert (tmp_path / "rec" / "a.srt").read_text(encoding="utf-8") == "mine"
+    assert "1 done, 1 skipped, 0 failed" in capsys.readouterr().out
+    # every requested format must be there: a.srt alone does not make a.mp4 done for srt + json
+    code, called = _batch(tmp_path, monkeypatch, names, ["rec", "-f", "srt,json", "--skip-existing"])
+    assert "a.mp4" in called
+
+
+def test_cli_one_failing_file_in_the_middle_does_not_stop_the_rest(tmp_path, monkeypatch, capsys):
+    code, called = _batch(tmp_path, monkeypatch, ["a.mp4", "b.mp4", "c.mp4"], ["a.mp4", "b.mp4", "c.mp4", "-f", "srt"],
+                          bad={"b.mp4"})
+    out = capsys.readouterr().out
+    assert code == 1 and called == ["a.mp4", "b.mp4", "c.mp4"]
+    assert (tmp_path / "c.srt").is_file() and "2 done, 0 skipped, 1 failed" in out and "b.mp4" in out
+
+
+def test_cli_batch_reports_a_missing_input_and_an_empty_folder(tmp_path, monkeypatch):
+    code, called = _batch(tmp_path, monkeypatch, ["a.mp4"], ["a.mp4", "gone.mp4"])
+    assert "gone.mp4" in str(code) and called == []      # nothing runs when one name is wrong
+    (tmp_path / "empty" / "sub").mkdir(parents=True)
+    code, called = _batch(tmp_path, monkeypatch, ["empty/sub/a.mp4"], ["empty"])
+    assert "no audio or video files found" in str(code) and "-r" in str(code)
+
+
+def test_cli_one_file_still_takes_o_as_a_base_path(tmp_path, monkeypatch):
+    code, called = _batch(tmp_path, monkeypatch, ["a.mp4"], ["a.mp4", "-f", "srt", "-o", "out/name"])
+    assert code == 0 and (tmp_path / "out" / "name.srt").is_file()
+
+
+def test_batch_runs_setup_once_for_all_files(tmp_path, monkeypatch):
+    """Listing the devices loads the model; a folder must pay that once, and nothing may be kept afterwards."""
+    from babelscribe import api, backend, models, transcribe
+    probes = []
+    monkeypatch.setattr(backend, "find_binary", lambda *a, **k: tmp_path / "whisper-cli")
+    monkeypatch.setattr(models, "ensure", lambda *a, **k: tmp_path / "m.bin")
+    monkeypatch.setattr(backend, "probe_or_refetch", lambda b, m, f=None: (
+        probes.append(1) or b, [{"id": 0, "backend": "cpu", "name": "CPU"}]))
+    monkeypatch.setattr(transcribe, "run", lambda *a, **k: [{"start": 0.0, "end": 1.0, "text": "hi", "words": []}])
+    for n in ("a.wav", "b.wav", "c.wav"):
+        (tmp_path / n).write_bytes(b"x")
+    done = api.transcribe_many([tmp_path], lang="en", formats=["srt"], log=lambda m: None)
+    assert done["succeeded"] == 3 and len(probes) == 1
+    api.transcribe_file(tmp_path / "a.wav", lang="en", formats=["srt"], log=lambda m: None)
+    assert len(probes) == 2 and api._shared is None
+

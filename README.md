@@ -186,6 +186,9 @@ languages are the most valuable contribution.
 ## Usage
 ```bash
 babelscribe talk.mp4 -f srt,vtt,txt,json          # all formats
+babelscribe a.mp4 b.mp3 c.wav                      # several files in one run
+babelscribe ./recordings                           # every audio/video file in a folder (-r: sub-folders too)
+babelscribe ./recordings -o ./subs --skip-existing # write into a folder; leave files that are already done
 babelscribe reel.mp4 -f ass                        # karaoke subtitles, one highlight per word
 babelscribe podcast.mp3 -l en -m large-v3          # pick language and model
 babelscribe talk.mp4 -l hi --accurate              # slower, fewest errors (best model per language)
@@ -196,11 +199,19 @@ babelscribe devices                                # GPUs whisper.cpp can see
 babelscribe models                                 # models and fine-tunes
 babelscribe talk.mp4 --bin /path/to/whisper-cli    # use your own whisper.cpp build
 ```
+With several files or a folder, a file that fails does not stop the rest: the run ends with a summary line
+(`12 done, 0 skipped, 1 failed`) and a non-zero exit code if anything failed. `-o` is then an output folder, and
+two files that would share a subtitle name (`talk.mp4` and `talk.mp3`) keep their full name.
+
 From Python:
 ```python
 from babelscribe.api import transcribe_file
 r = transcribe_file("talk.mp4", lang="auto", formats=["srt", "txt"])   # or accurate=True, prompt="names, terms"
 print(r["lang"], r["device"], r["files"]); print(r["text"][:200])
+
+from babelscribe.api import transcribe_many
+done = transcribe_many(["a.mp4", "./recordings"], recursive=True, formats=["srt"])   # other options as above
+print(done["succeeded"], done["failed"])
 ```
 Models download on first use to `~/.babelscribe/models` (`BABELSCRIBE_MODELS` to change). Hybrid fine-tunes are converted on your
 machine from their original Hugging Face repo — install `pip install "babelscribe[finetune]"` once; converted weights are never

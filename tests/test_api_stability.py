@@ -7,7 +7,9 @@ import pytest
 from babelscribe import api, cli
 
 CLI_FLAGS = {"-l", "--lang", "-m", "--model", "--text-model", "--accurate", "--prompt", "-f", "--formats",
-             "-o", "--out", "--device", "--bin", "--flavor", "-v", "--verbose", "--version"}
+             "-o", "--out", "--device", "--bin", "--flavor", "-v", "--verbose", "--version",
+             "-r", "--recursive", "--skip-existing"}
+TRANSCRIBE_MANY_ARGS = {"inputs", "recursive", "out_dir", "skip_existing", "formats", "log"}
 TRANSCRIBE_FILE_ARGS = {"src", "lang", "model", "text_model", "accurate", "formats", "out", "device", "bin",
                         "flavor", "verbose", "log", "prompt"}
 MCP_TRANSCRIBE_ARGS = {"file_path", "language", "accurate", "formats", "output_dir", "vocabulary"}
@@ -18,6 +20,10 @@ def test_transcribe_file_keeps_public_arguments():
     params = inspect.signature(api.transcribe_file).parameters
     assert TRANSCRIBE_FILE_ARGS <= set(params)
     assert all(p.default is not inspect.Parameter.empty for n, p in params.items() if n not in ("src",))
+
+
+def test_transcribe_many_keeps_public_arguments():
+    assert TRANSCRIBE_MANY_ARGS <= set(inspect.signature(api.transcribe_many).parameters)
 
 
 def test_cli_keeps_public_flags(capsys):

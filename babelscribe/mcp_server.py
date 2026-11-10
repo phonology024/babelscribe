@@ -11,7 +11,8 @@ import sys
 import time
 from pathlib import Path
 
-MEDIA = {".mp4", ".mkv", ".mov", ".avi", ".webm", ".m4v", ".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg", ".opus", ".wma"}
+from .api import MEDIA   # one list of media extensions for the CLI and the server
+
 HEARTBEAT = 5        # seconds between progress notifications while a file is being transcribed
 TEXT_LIMIT = 30000   # characters of transcript returned to the model; the full text is always in the files
 
@@ -38,20 +39,6 @@ async def _report_progress(ctx, progress, total, message) -> None:
         await ctx.report_progress(progress, total, message)
     except ValueError:   # no request context: nothing to notify
         pass
-
-
-def _output_bases(media, root, out_root):
-    """Where each file's subtitles go, as {media path: output path without extension}. Never two files on one path.
-
-    Next to the media by default; under out_root with the same sub-folders when given, so b/talk.mp4 does not
-    land on a/talk.mp4. talk.mp4 and talk.mp3 in one folder would both write talk.srt, so files whose base
-    collides keep their full name instead: talk.mp4.srt and talk.mp3.srt."""
-    def base(p, stem):
-        return (out_root / p.relative_to(root).parent if out_root else p.parent) / stem
-    seen = {}
-    for p in media:
-        seen.setdefault(str(base(p, p.stem)).lower(), []).append(p)   # lower(): Windows and macOS ignore case
-    return {p: base(p, p.stem if len(group) == 1 else p.name) for group in seen.values() for p in group}
 
 
 def _tool_error(e: SystemExit):
@@ -170,24 +157,25 @@ def build():
         root = Path(folder).expanduser()
         if not root.is_dir():
             raise ValueError(f"not a folder: {root}")
-        found = root.rglob("*") if recursive else root.glob("*")
-        media = sorted(p for p in found if p.is_file() and p.suffix.lower() in MEDIA)
-        bases = _output_bases(media, root, Path(output_dir).expanduser() if output_dir else None)
+        pairs = api.collect_media([root], recursive)
+        media = [p for p, _ in pairs]
+        bases = api.output_bases(pairs, output_dir or None)
         fmts = [f.strip() for f in formats.split(",") if f.strip()]
 
         results: list[dict] = []
-        for i, src in enumerate(media, 1):
-            tag = f"{src.name} ({i}/{len(media)})"
-            await _report_progress(ctx, i - 1, len(media), f"transcribing {tag}")
-            r = await _run(ctx, lambda log: api.transcribe_file(
-                src, language, accurate=accurate, formats=fmts, out=bases[src], log=log, prompt=vocabulary,
-                translate=translate), progress=i - 1, total=len(media), prefix=f"{tag}: ")
-            if isinstance(r, BaseException):   # keep going: one bad file must not lose the rest of the batch.
-                # SystemExit counts too: a bad format or unknown model is how the CLI paths report a problem.
-                results.append({"path": str(src), "ok": False, "error": f"{type(r).__name__}: {r}"})
-                continue
-            results.append({"path": str(src), "ok": True, "files": r["files"], "language": r["lang"],
-                            "segments": r["segments"], "seconds": r["seconds"]})
+        with api.shared_setup():   # find the binary, model and devices once for the whole folder
+            for i, src in enumerate(media, 1):
+                tag = f"{src.name} ({i}/{len(media)})"
+                await _report_progress(ctx, i - 1, len(media), f"transcribing {tag}")
+                r = await _run(ctx, lambda log: api.transcribe_file(
+                    src, language, accurate=accurate, formats=fmts, out=bases[src], log=log, prompt=vocabulary,
+                    translate=translate), progress=i - 1, total=len(media), prefix=f"{tag}: ")
+                if isinstance(r, BaseException):   # keep going: one bad file must not lose the rest of the batch.
+                    # SystemExit counts too: a bad format or unknown model is how the CLI paths report a problem.
+                    results.append({"path": str(src), "ok": False, "error": f"{type(r).__name__}: {r}"})
+                    continue
+                results.append({"path": str(src), "ok": True, "files": r["files"], "language": r["lang"],
+                                "segments": r["segments"], "seconds": r["seconds"]})
         await _report_progress(ctx, len(media), len(media), f"{len(media)} file(s) done")
 
         ok = [r for r in results if r["ok"]]
