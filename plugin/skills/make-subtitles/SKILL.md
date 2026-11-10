@@ -18,6 +18,9 @@ Use the babelscribe tools; everything runs on the user's own computer and GPU.
 4. **Report back** the files written and the device used, and show a short excerpt — not the whole transcript.
 5. **Offer the follow-ups this enables:** fix misspelled names or terms in the .srt (keep every timestamp line
    unchanged), translate the subtitles into another language as a new file, or summarise the content.
+   For a translation with correct timing and line lengths, call `translate_subtitles` with the `.json` and the
+   target language: it uses the LLM running on the user's own computer (Ollama, LM Studio, llama-server). If none
+   is running, the error says so; then translate the text yourself, keeping every timestamp line unchanged.
 6. **Captions on the video itself** (TikTok, Reels, Shorts, "burn in", "hardcode"): after `transcribe`, call
    `burn_subtitles` with the video and the `.json` it wrote. `style`: `plain`, `karaoke` (each word lights up) or
    `shorts` (big, a few words at a time; the one to use for vertical video). It writes `NAME.subbed.mp4` and leaves
