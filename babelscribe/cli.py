@@ -38,7 +38,7 @@ def main(argv: list[str] | None = None) -> None:
                     help="slower but fewest errors: large-v3 with beam search, or the language's best fine-tune (hybrid)")
     ap.add_argument("--prompt", help='names and terms to spell correctly, e.g. --prompt "Pitakpong, babelscribe" (whisper initial prompt)')
     ap.add_argument("--translate", action="store_true", help="translate the speech to English (uses large-v3; not with --text-model)")
-    ap.add_argument("-f", "--formats", default="srt,json", help="comma list: srt,vtt,txt,json")
+    ap.add_argument("-f", "--formats", default="srt,json", help="comma list: srt,vtt,txt,json,ass")
     ap.add_argument(
         "--max-line-chars",
         type=int,

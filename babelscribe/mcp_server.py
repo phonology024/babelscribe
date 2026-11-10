@@ -24,6 +24,22 @@ def _guard_stdout():
     return proto
 
 
+def _tool_error(e: SystemExit):
+    """The CLI reports problems (no prebuilt binary for this platform, unknown model, bad format) by raising
+    SystemExit. Inside the server that must come back as a tool error the client can read, never as the server
+    process going away. ToolError because the SDK only forwards the text of a ToolError; any other exception
+    reaches the client as a bare "Error executing tool"."""
+    from mcp.server.mcpserver.exceptions import ToolError
+    return ToolError(str(e) or "babelscribe stopped without a message")
+
+
+def _no_exit(fn):
+    try:
+        return fn()
+    except SystemExit as e:
+        raise _tool_error(e) from None
+
+
 def build():
     import anyio
     from mcp.server.mcpserver import Context, MCPServer
@@ -50,7 +66,7 @@ def build():
         file_path: absolute path to the media file (mp4, mkv, mov, mp3, wav, m4a, ...).
         language: ISO code such as en, th, ja, es, hi — or "auto" to detect.
         accurate: slower, fewest errors (large-v3 with beam search, or the best fine-tune for Thai / Hindi).
-        formats: comma list from srt, vtt, txt, json.
+        formats: comma list from srt, vtt, txt, json, ass (ass = karaoke word highlight).
         output_dir: folder for the output files; empty = next to the media file.
         vocabulary: names and terms to spell correctly, e.g. "Pitakpong, babelscribe" (whisper initial prompt); empty = none.
         translate: true = write the transcript translated to English (uses large-v3; slower than turbo).
@@ -71,15 +87,23 @@ def build():
                 if ctx and not done.is_set():
                     await ctx.report_progress(time.time() - t0, None, lines[-1] if lines else "starting ...")
 
+        def work():   # runs in a worker thread
+            try:
+                return api.transcribe_file(
+                    src, language, accurate=accurate, formats=fmts, out=out, log=lambda m: (lines.append(m), print(m)),
+                    prompt=vocabulary, translate=translate)
+            except SystemExit as e:   # carried out of the task group by hand: raised inside it, it would arrive
+                return e              # wrapped in an ExceptionGroup and lose its message
+
         result: dict = {}
         async with anyio.create_task_group() as tg:
             tg.start_soon(heartbeat)
             try:
-                result = await anyio.to_thread.run_sync(lambda: api.transcribe_file(
-                    src, language, accurate=accurate, formats=fmts, out=out, log=lambda m: (lines.append(m), print(m)),
-                    prompt=vocabulary, translate=translate))
+                result = await anyio.to_thread.run_sync(work)
             finally:
                 done.set()
+        if isinstance(result, SystemExit):
+            raise _tool_error(result)
         text = result.pop("text", "")
         result["text"] = text[:TEXT_LIMIT]
         if len(text) > TEXT_LIMIT:
@@ -110,7 +134,7 @@ def build():
     @srv.tool(title="List GPUs", annotations=ToolAnnotations(read_only_hint=True, open_world_hint=True))
     def list_devices() -> dict:
         """GPUs whisper.cpp can use on this computer and which one babelscribe picks automatically."""
-        _, _, found = api.setup()
+        _, _, found = _no_exit(api.setup)
         return {"devices": found, "auto_pick": backend.pick_device(found)}
 
     @srv.tool(title="List languages and models", annotations=ToolAnnotations(read_only_hint=True, open_world_hint=False))
