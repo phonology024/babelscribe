@@ -62,6 +62,26 @@ jobs:
           cp whisper.cpp/LICENSE pkg/LICENSE-whisper.cpp
           cd pkg && 7z a ../whisper-cli-${{ matrix.name }}.zip . >/dev/null 2>&1 || zip -r ../whisper-cli-${{ matrix.name }}.zip .
 
+      # A binary that cannot transcribe must not reach a release: run the freshly built whisper-cli on a real
+      # file before it is uploaded. Not the CUDA build: it cannot start without an NVIDIA driver, and the
+      # runners have none.
+      - uses: actions/checkout@v4
+        if: ${{ !contains(matrix.name, 'cuda') }}
+        with: { path: babelscribe-src }
+      - uses: actions/setup-python@v5
+        if: ${{ !contains(matrix.name, 'cuda') }}
+        with: { python-version: "3.12" }
+      - name: Transcribe a real file with this build
+        if: ${{ !contains(matrix.name, 'cuda') }}
+        shell: bash
+        env:
+          BABELSCRIBE_HOME: ${{ runner.temp }}/babelscribe-home
+          PYTHONUTF8: "1"
+        run: |
+          pip install -q ./babelscribe-src
+          exe=pkg/whisper-cli; [ -f pkg/whisper-cli.exe ] && exe=pkg/whisper-cli.exe
+          python babelscribe-src/tests/smoke/real_transcription.py whisper.cpp/samples/jfk.wav --bin "$exe" --no-mcp
+
       - uses: actions/upload-artifact@v4
         with: { name: "whisper-cli-${{ matrix.name }}", path: "whisper-cli-${{ matrix.name }}.zip" }
 

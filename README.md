@@ -70,6 +70,9 @@ and double-click it (or *Settings → Extensions → Install extension*).
 (`timeout` is in milliseconds and only some apps read it.) Already installed with pip? Use `"command": "babelscribe", "args": ["mcp"]`.
 Web-only chat apps (e.g. grok.com, chatgpt.com) can only reach servers on the internet, not your computer, so they can't use your GPU or files.
 
+The MCP tools use the `turbo` model (1.6 GB). On a small machine set `BABELSCRIBE_MODEL` in the server's
+environment to pick another one, e.g. `"env": {"BABELSCRIBE_MODEL": "small"}` in the JSON above.
+
 ## Benchmark: real talks, human captions as the answer key
 Four TED / TEDx talks, scored against the **human-made captions in the spoken language** (`bench/bench.py`, reproducible).
 Error = word error rate (WER) for space-separated languages, character error rate (CER) for Japanese and Thai.

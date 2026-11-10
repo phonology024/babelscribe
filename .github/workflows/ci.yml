@@ -13,3 +13,30 @@ jobs:
         with: { python-version: "${{ matrix.python }}" }
       - run: pip install -e . pytest
       - run: pytest -q tests
+
+  # One real transcription per OS: the prebuilt whisper-cli, the tiny model, every output format, then the MCP
+  # server through a real stdio client. The unit tests above mock subprocess and ffmpeg, so only this job
+  # notices a broken whisper-cli argument list, a writer that writes nothing, or a server that cannot answer.
+  smoke:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      BABELSCRIBE_HOME: ${{ github.workspace }}/.babelscribe-ci
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: actions/cache@v4
+        with:
+          path: .babelscribe-ci
+          key: smoke-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('babelscribe/backend.py', 'babelscribe/models.py') }}
+      - run: pip install -e .
+      - name: Sample audio (whisper.cpp samples/jfk.wav, 11 s)
+        shell: bash
+        run: curl -sSfL -o jfk.wav https://github.com/ggml-org/whisper.cpp/raw/v1.9.4/samples/jfk.wav
+      - run: python tests/smoke/real_transcription.py jfk.wav
+
