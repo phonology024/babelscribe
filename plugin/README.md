@@ -18,11 +18,11 @@ Ask Claude, for example: *"Make English subtitles for the newest video in my Dow
 it, and can then fix names, translate the subtitles or summarise them. Use accurate mode for the fewest errors; it is much
 better for Thai and Hindi.
 
-Requires [uv](https://docs.astral.sh/uv/) (the MCP server starts with `uvx babelscribe==0.3.2 mcp`). Works in Claude Code
+Requires [uv](https://docs.astral.sh/uv/) (the MCP server starts with `uvx babelscribe==0.4.0 mcp`). Works in Claude Code
 and in Cowork sessions on your computer; claude.ai chat cannot start local servers.
 
 ## What it runs, downloads and sends
-- **Runs:** the `babelscribe` Python package (MIT) from PyPI, pinned to 0.3.2, as a local MCP server over stdio. It runs
+- **Runs:** the `babelscribe` Python package (MIT) from PyPI, pinned to 0.4.0, as a local MCP server over stdio. It runs
   ffmpeg (bundled via imageio-ffmpeg) and whisper.cpp's `whisper-cli` on your machine.
 - **Downloads on first use:** `whisper-cli` for your OS/GPU from https://github.com/phonology024/babelscribe/releases,
   Whisper models from https://huggingface.co/ggerganov/whisper.cpp, and in accurate mode the Thai or Hindi fine-tune from
