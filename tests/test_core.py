@@ -3,9 +3,43 @@ from pathlib import Path
 from babelscribe import align, backend, writers
 
 
-def test_asset_name_is_known_flavour():
-    name = backend.asset_name()
-    assert name.startswith("whisper-cli-") and name.endswith(".zip")
+def test_asset_name_is_known_flavour(monkeypatch):
+    # Only assert the shape on a platform that actually has a build; see the next test for the rest.
+    for system, arch in (("Windows", "AMD64"), ("Linux", "x86_64"), ("Darwin", "arm64")):
+        monkeypatch.setattr(backend.platform, "system", lambda s=system: s)
+        monkeypatch.setattr(backend.platform, "machine", lambda a=arch: a)
+        name = backend.asset_name()
+        assert name.startswith("whisper-cli-") and name.endswith(".zip")
+
+
+def test_asset_name_refuses_a_platform_that_was_never_built(monkeypatch):
+    """Linux arm64 and Intel macOS got a bare HTTP 404 from a name nothing was published under."""
+    import pytest
+    monkeypatch.setattr(backend.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(backend.platform, "machine", lambda: "aarch64")
+    with pytest.raises(SystemExit) as e:
+        backend.asset_name("cpu")
+    msg = str(e.value)
+    assert "no prebuilt whisper-cli for linux-arm64-cpu" in msg
+    assert "--bin" in msg, "say how to work around it, not just that it failed"
+
+
+def test_asset_name_matches_the_assets_the_release_actually_publishes(monkeypatch):
+    """The names must stay in step with .github/workflows/build-binaries.yml."""
+    published = {"whisper-cli-linux-x64-cpu.zip", "whisper-cli-linux-x64-cuda.zip",
+                 "whisper-cli-linux-x64-vulkan.zip", "whisper-cli-macos-arm64-metal.zip",
+                 "whisper-cli-windows-x64-cpu.zip", "whisper-cli-windows-x64-vulkan.zip"}
+    made = set()
+    for system, machines in (("Windows", ["AMD64"]), ("Linux", ["x86_64"]), ("Darwin", ["arm64"])):
+        for machine in machines:
+            monkeypatch.setattr(backend.platform, "system", lambda s=system: s)
+            monkeypatch.setattr(backend.platform, "machine", lambda m=machine: m)
+            for flavor in ("cpu", "vulkan", "cuda", "metal"):
+                try:
+                    made.add(backend.asset_name(flavor))
+                except SystemExit:
+                    pass
+    assert made == published
 
 
 def test_pick_device_prefers_discrete():
@@ -182,6 +216,32 @@ def test_writers_wrap_long_vtt_lines(tmp_path: Path):
     assert text.startswith("WEBVTT\n\n")
     assert "This is a long\nsubtitle line" in text
 
+def test_writers_keep_dots_in_the_input_name(tmp_path: Path):
+    # api.transcribe_file passes src.with_suffix("") as the base, so "meeting.v2.mp4" -> "meeting.v2".
+    # Appending (not replacing) the extension keeps "meeting.v2.srt" instead of collapsing to "meeting.srt".
+    segs = [{"start": 0.0, "end": 1.0, "text": "hi", "words": []}]
+
+    files = writers.write(segs, tmp_path / "meeting.v2", ["srt", "vtt", "txt", "json"], {})
+
+    assert sorted(f.name for f in files) == [
+        "meeting.v2.json",
+        "meeting.v2.srt",
+        "meeting.v2.txt",
+        "meeting.v2.vtt",
+    ]
+    assert all(f.exists() for f in files)
+
+
+def test_writers_do_not_collide_on_dotted_names(tmp_path: Path):
+    # Two recordings of the same meeting must not overwrite each other's subtitles.
+    first = writers.write([{"start": 0.0, "end": 1.0, "text": "first", "words": []}], tmp_path / "meeting.v1", ["srt"], {})
+    second = writers.write([{"start": 0.0, "end": 1.0, "text": "second", "words": []}], tmp_path / "meeting.v2", ["srt"], {})
+
+    assert first[0] != second[0]
+    assert "first" in first[0].read_text(encoding="utf-8")
+    assert "second" in second[0].read_text(encoding="utf-8")
+
+
 def test_writers_use_smaller_default_for_thai(tmp_path: Path):
     thai_text = "สวัสดีครับวันนี้อากาศดีมากนะครับ"
 
@@ -314,3 +374,188 @@ def test_mcp_translate_reaches_api(monkeypatch, tmp_path):
     srv = mcp_server.build()
     anyio.run(srv.call_tool, "transcribe", {"file_path": str(tmp_path / "t.mp4"), "translate": True})
     assert got["translate"] is True
+
+
+def test_out_into_missing_folder_is_created(monkeypatch, tmp_path):
+    """-o into a folder that does not exist used to fail at the very end with a bare errno, after the whole run."""
+    from babelscribe import api, transcribe
+    media = tmp_path / "t.wav"
+    media.write_bytes(b"x")
+    monkeypatch.setattr(api, "setup", lambda *a, **k: (Path("whisper-cli"), Path("m.bin"), [{"backend": "cpu", "id": 0, "name": "CPU"}]))
+    monkeypatch.setattr(api.transcribe, "run", lambda *a, **k: [{"start": 0.0, "end": 1.0, "text": "hi", "words": []}])
+    res = api.transcribe_file(media, lang="en", out=tmp_path / "new" / "deep" / "talk", log=lambda m: None)
+    assert (tmp_path / "new" / "deep" / "talk.srt").is_file()
+    assert res["segments"] == 1
+
+
+def test_out_dir_is_created_before_the_slow_work(monkeypatch, tmp_path):
+    """A bad -o must fail before the model download and inference, not after them."""
+    import pytest
+    from babelscribe import api
+    media = tmp_path / "t.wav"
+    media.write_bytes(b"x")
+    called = []
+    monkeypatch.setattr(api, "setup", lambda *a, **k: called.append("setup"))
+    # A file where a folder is needed: mkdir must raise before setup runs.
+    blocked = tmp_path / "blocked"
+    blocked.write_text("x")
+    with pytest.raises((FileExistsError, NotADirectoryError, OSError)):
+        api.transcribe_file(media, lang="en", out=blocked / "sub" / "talk", log=lambda m: None)
+    assert called == []
+
+
+def _ass_events(path):
+    lines = path.read_text(encoding="utf-8").splitlines()
+    head = lines[:lines.index("[Events]")]
+    events = [ln for ln in lines if ln.startswith("Dialogue:")]
+    return "\n".join(head), events
+
+
+def test_ass_output_has_a_valid_header_and_one_event_per_cue(tmp_path: Path):
+    segs = [{"start": 0.0, "end": 2.0, "text": "Hello there world",
+             "words": [["Hello", 0.0, 0.5], [" there", 0.5, 1.0], [" world", 1.0, 2.0]]}]
+
+    (path,) = writers.write(segs, tmp_path / "k", ["ass"], {"lang": "en"})
+    head, events = _ass_events(path)
+
+    assert head.startswith("[Script Info]")
+    assert "[V4+ Styles]" in head and "Style: Default," in head
+    assert "PlayResX: 1920" in head
+    assert len(events) == 1
+    assert events[0].endswith("{\\k50}Hello{\\k50} there{\\k100} world")
+
+
+def test_ass_karaoke_tags_follow_word_timings(tmp_path: Path):
+    # A gap between "alpha" and "beta": the highlight must hold on alpha until beta starts, not run ahead.
+    segs = [{"start": 0.0, "end": 3.0, "text": "alpha beta",
+             "words": [["alpha", 0.0, 1.0], [" beta", 2.0, 3.0]]}]
+
+    (path,) = writers.write(segs, tmp_path / "gap", ["ass"], {"lang": "en"})
+    _, (event,) = _ass_events(path)
+
+    assert "{\\k200}alpha" in event, "alpha holds until beta starts at 2.0 s"
+    assert "{\\k100} beta" in event, "beta runs from 2.0 s to the cue end at 3.0 s"
+
+
+def test_ass_escapes_braces_so_they_cannot_swallow_the_line(tmp_path: Path):
+    segs = [{"start": 0.0, "end": 1.0, "text": "use {\\b1}bold", "words": []}]
+
+    (path,) = writers.write(segs, tmp_path / "braces", ["ass"], {"lang": "en"})
+    _, (event,) = _ass_events(path)
+
+    assert "{\\b1}" not in event, "a literal override tag from the transcript must not reach libass"
+    assert "｛" in event and "｝" in event
+
+
+def test_ass_without_word_timings_is_plain_and_unspoken_coloured(tmp_path: Path):
+    segs = [{"start": 0.0, "end": 1.0, "text": "no timing", "words": []}]
+
+    (path,) = writers.write(segs, tmp_path / "plain", ["ass"], {"lang": "en"})
+    _, (event,) = _ass_events(path)
+
+    assert "\\k" not in event, "never invent word timings"
+    assert event.endswith("{\\c&H00FFFFFF}no timing"), "no \\k means PrimaryColour (spoken); pin it to unspoken"
+
+
+def test_ass_splits_at_its_own_shorter_limit_not_the_subtitle_one(tmp_path: Path):
+    # 34 characters: fits one 34-char subtitle line under the 42 limit, but ASS splits at 32 because
+    # karaoke is read word by word.
+    words = [[w, i * 0.1, i * 0.1 + 0.1] for i, w in enumerate(["aaaa", " bbbb", " cccc", " dddd", " eeee", " ffff", " gggg"])]
+    segs = [{"start": 0.0, "end": 0.7, "text": "aaaa bbbb cccc dddd eeee ffff gggg", "words": words}]
+
+    (ass_path,) = writers.write(segs, tmp_path / "k", ["ass"], {"lang": "en"})
+    (srt_path,) = writers.write(segs, tmp_path / "k", ["srt"], {"lang": "en"})
+    _, events = _ass_events(ass_path)
+
+    srt_text = srt_path.read_text(encoding="utf-8")
+    assert "\n" not in srt_text.split("\n\n")[0].splitlines()[2], "SRT keeps the whole 34-char line on one line"
+    assert len(events) == 1 and "\\N" in events[0], "ASS wraps it at 32 characters into two lines"
+    for event in events:
+        assert event.count("\\N") <= 1, "an ASS event holds at most two rendered lines"
+
+
+def test_ass_mixes_with_the_other_formats(tmp_path: Path):
+    segs = [{"start": 0.0, "end": 1.0, "text": "hi", "words": [["hi", 0.0, 1.0]]}]
+
+    files = writers.write(segs, tmp_path / "all", ["srt", "ass", "json"], {"lang": "en"})
+
+    assert [f.suffix for f in files] == [".srt", ".ass", ".json"]
+    assert all(f.exists() for f in files)
+
+
+def _transcribe_with_device(monkeypatch, tmp_path, device):
+    """Run transcribe_file with setup/model work stubbed out, so only device handling is exercised."""
+    import pytest
+    from babelscribe import api
+    media = tmp_path / "d.wav"
+    media.write_bytes(b"x")
+    found = [{"backend": "metal", "id": 0, "name": "Apple M4 Pro", "detail": "uma: 1"},
+             {"backend": "cpu", "id": 1, "name": "CPU", "detail": ""}]
+    monkeypatch.setattr(api, "setup", lambda *a, **k: (Path("whisper-cli"), Path("m.bin"), found))
+    monkeypatch.setattr(api.transcribe, "run", lambda *a, **k: [])
+    return api.transcribe_file(media, "en", device=device, log=lambda m: None, formats=["txt"])
+
+
+def test_device_rejects_a_non_number(monkeypatch, tmp_path):
+    import pytest
+    with pytest.raises(ValueError) as e:
+        _transcribe_with_device(monkeypatch, tmp_path, "foo")
+    assert "device must be" in str(e.value), "not a bare int() ValueError from deep inside"
+
+
+def test_device_rejects_an_id_the_driver_does_not_have(monkeypatch, tmp_path):
+    import pytest
+    for bad in (5, -1, "2"):
+        with pytest.raises(ValueError) as e:
+            _transcribe_with_device(monkeypatch, tmp_path, bad)
+        assert "no device" in str(e.value) and "Apple M4 Pro" in str(e.value), "list the ids that do exist"
+
+
+def test_device_accepts_auto_none_and_a_listed_id(monkeypatch, tmp_path):
+    assert _transcribe_with_device(monkeypatch, tmp_path, "auto")["device"].startswith("metal")
+    assert _transcribe_with_device(monkeypatch, tmp_path, None)["device"].startswith("metal")
+    assert _transcribe_with_device(monkeypatch, tmp_path, "1")["device"].startswith("cpu")
+    assert _transcribe_with_device(monkeypatch, tmp_path, 1)["device"].startswith("cpu")
+
+
+def test_asset_name_leaves_a_self_hosted_mirror_alone(monkeypatch):
+    """README: 'Point BABELSCRIBE_RELEASES at another URL to self-host'. A mirror can carry builds the project
+    does not publish (linux-arm64 is the likely one), so the table of published assets must not veto it."""
+    monkeypatch.setattr(backend, "RELEASES", "https://example.invalid/mirror")
+    monkeypatch.setattr(backend.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(backend.platform, "machine", lambda: "aarch64")
+    assert backend.asset_name("cpu") == "whisper-cli-linux-arm64-cpu.zip"
+
+
+def test_fetch_binary_explains_a_404_from_a_mirror(monkeypatch, tmp_path):
+    import urllib.error
+    import pytest
+    monkeypatch.setattr(backend, "RELEASES", "https://example.invalid/mirror")
+    monkeypatch.setattr(backend, "CACHE", tmp_path)
+
+    def gone(url):
+        raise urllib.error.HTTPError(url, 404, "Not Found", None, None)
+    monkeypatch.setattr(backend.urllib.request, "urlopen", gone)
+    with pytest.raises(SystemExit) as e:
+        backend.fetch_binary("cpu")
+    assert "404" in str(e.value) and "--bin" in str(e.value)
+
+
+def test_mcp_tool_error_instead_of_exit_on_an_unsupported_platform(monkeypatch, tmp_path):
+    """The CLI reports 'no prebuilt whisper-cli' with SystemExit, raised in a worker thread under the MCP server.
+    The client must get a tool error with that text; the server must keep running."""
+    import pytest
+    pytest.importorskip("mcp.server.mcpserver")
+    import anyio
+    from babelscribe import api, mcp_server
+
+    def unsupported(*a, **k):
+        raise SystemExit("no prebuilt whisper-cli for linux-arm64-cpu; available: ...")
+    monkeypatch.setattr(api, "transcribe_file", unsupported)
+    monkeypatch.setattr(api, "setup", unsupported)
+    srv = mcp_server.build()
+    for tool, args in (("transcribe", {"file_path": str(tmp_path / "a.wav")}), ("list_devices", {})):
+        with pytest.raises(Exception) as e:      # Exception, not BaseException: SystemExit would not be caught here
+            anyio.run(srv.call_tool, tool, args)
+        assert "no prebuilt whisper-cli for linux-arm64-cpu" in str(e.value)
+    assert anyio.run(srv.call_tool, "list_languages_and_models", {})   # still answering
