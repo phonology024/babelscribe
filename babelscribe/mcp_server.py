@@ -24,6 +24,18 @@ def _guard_stdout():
     return proto
 
 
+def _no_exit(fn):
+    """Run fn, turning SystemExit into a ToolError. The CLI reports problems (no prebuilt binary for this
+    platform, unknown model, bad format) by raising SystemExit; inside the server that must come back as a tool
+    error the client can read, never as the server process going away. ToolError rather than RuntimeError
+    because the SDK only forwards the text of a ToolError; any other exception becomes "Error executing tool"."""
+    from mcp.server.mcpserver.exceptions import ToolError
+    try:
+        return fn()
+    except SystemExit as e:
+        raise ToolError(str(e) or "babelscribe stopped without a message") from None
+
+
 def build():
     import anyio
     from mcp.server.mcpserver import Context, MCPServer
@@ -75,9 +87,9 @@ def build():
         async with anyio.create_task_group() as tg:
             tg.start_soon(heartbeat)
             try:
-                result = await anyio.to_thread.run_sync(lambda: api.transcribe_file(
+                result = await anyio.to_thread.run_sync(lambda: _no_exit(lambda: api.transcribe_file(
                     src, language, accurate=accurate, formats=fmts, out=out, log=lambda m: (lines.append(m), print(m)),
-                    prompt=vocabulary, translate=translate))
+                    prompt=vocabulary, translate=translate)))
             finally:
                 done.set()
         text = result.pop("text", "")
@@ -110,7 +122,7 @@ def build():
     @srv.tool(title="List GPUs", annotations=ToolAnnotations(read_only_hint=True, open_world_hint=True))
     def list_devices() -> dict:
         """GPUs whisper.cpp can use on this computer and which one babelscribe picks automatically."""
-        _, _, found = api.setup()
+        _, _, found = _no_exit(api.setup)
         return {"devices": found, "auto_pick": backend.pick_device(found)}
 
     @srv.tool(title="List languages and models", annotations=ToolAnnotations(read_only_hint=True, open_world_hint=False))

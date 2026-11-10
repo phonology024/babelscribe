@@ -516,3 +516,46 @@ def test_device_accepts_auto_none_and_a_listed_id(monkeypatch, tmp_path):
     assert _transcribe_with_device(monkeypatch, tmp_path, None)["device"].startswith("metal")
     assert _transcribe_with_device(monkeypatch, tmp_path, "1")["device"].startswith("cpu")
     assert _transcribe_with_device(monkeypatch, tmp_path, 1)["device"].startswith("cpu")
+
+
+def test_asset_name_leaves_a_self_hosted_mirror_alone(monkeypatch):
+    """README: 'Point BABELSCRIBE_RELEASES at another URL to self-host'. A mirror can carry builds the project
+    does not publish (linux-arm64 is the likely one), so the table of published assets must not veto it."""
+    monkeypatch.setattr(backend, "RELEASES", "https://example.invalid/mirror")
+    monkeypatch.setattr(backend.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(backend.platform, "machine", lambda: "aarch64")
+    assert backend.asset_name("cpu") == "whisper-cli-linux-arm64-cpu.zip"
+
+
+def test_fetch_binary_explains_a_404_from_a_mirror(monkeypatch, tmp_path):
+    import urllib.error
+    import pytest
+    monkeypatch.setattr(backend, "RELEASES", "https://example.invalid/mirror")
+    monkeypatch.setattr(backend, "CACHE", tmp_path)
+
+    def gone(url):
+        raise urllib.error.HTTPError(url, 404, "Not Found", None, None)
+    monkeypatch.setattr(backend.urllib.request, "urlopen", gone)
+    with pytest.raises(SystemExit) as e:
+        backend.fetch_binary("cpu")
+    assert "404" in str(e.value) and "--bin" in str(e.value)
+
+
+def test_mcp_tool_error_instead_of_exit_on_an_unsupported_platform(monkeypatch, tmp_path):
+    """The CLI reports 'no prebuilt whisper-cli' with SystemExit, raised in a worker thread under the MCP server.
+    The client must get a tool error with that text; the server must keep running."""
+    import pytest
+    pytest.importorskip("mcp.server.mcpserver")
+    import anyio
+    from babelscribe import api, mcp_server
+
+    def unsupported(*a, **k):
+        raise SystemExit("no prebuilt whisper-cli for linux-arm64-cpu; available: ...")
+    monkeypatch.setattr(api, "transcribe_file", unsupported)
+    monkeypatch.setattr(api, "setup", unsupported)
+    srv = mcp_server.build()
+    for tool, args in (("transcribe", {"file_path": str(tmp_path / "a.wav")}), ("list_devices", {})):
+        with pytest.raises(Exception) as e:      # Exception, not BaseException: SystemExit would not be caught here
+            anyio.run(srv.call_tool, tool, args)
+        assert "no prebuilt whisper-cli for linux-arm64-cpu" in str(e.value)
+    assert anyio.run(srv.call_tool, "list_languages_and_models", {})   # still answering

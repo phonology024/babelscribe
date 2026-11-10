@@ -11,13 +11,15 @@ import platform
 import re
 import shutil
 import subprocess
+import urllib.error
 import urllib.request
 import zipfile
 from pathlib import Path
 
 CACHE = Path(os.environ.get("BABELSCRIBE_HOME", Path.home() / ".babelscribe"))
 # Prebuilt binaries are produced by .github/workflows/build-binaries.yml and attached to a GitHub release.
-RELEASES = os.environ.get("BABELSCRIBE_RELEASES", "https://github.com/phonology024/babelscribe/releases/latest/download")
+DEFAULT_RELEASES = "https://github.com/phonology024/babelscribe/releases/latest/download"
+RELEASES = os.environ.get("BABELSCRIBE_RELEASES", DEFAULT_RELEASES)
 EXE = "whisper-cli.exe" if os.name == "nt" else "whisper-cli"
 
 
@@ -35,7 +37,9 @@ def asset_name(flavor: str | None = None) -> str:
     system = {"Windows": "windows", "Linux": "linux", "Darwin": "macos"}[platform.system()]
     arch = "arm64" if platform.machine().lower() in ("arm64", "aarch64") else "x64"
     flavor = flavor or ("metal" if system == "macos" else "vulkan")
-    if (system, arch, flavor) not in ASSETS:
+    # A self-hosted mirror (BABELSCRIBE_RELEASES) may carry builds this project does not publish, so only the
+    # default URL is checked against the table; a mirror is asked for the composed name as before.
+    if RELEASES == DEFAULT_RELEASES and (system, arch, flavor) not in ASSETS:
         have = ", ".join(f"{s}-{a}-{f}" for s, a, f in sorted(ASSETS))
         raise SystemExit(
             f"no prebuilt whisper-cli for {system}-{arch}-{flavor}; available: {have}.\n"
@@ -65,7 +69,13 @@ def fetch_binary(flavor: str | None = None) -> Path:
     name = asset_name(flavor)
     dest = CACHE / "bin" / name[:-4]
     print(f"downloading {name} ...")
-    data = urllib.request.urlopen(f"{RELEASES}/{name}").read()
+    try:
+        data = urllib.request.urlopen(f"{RELEASES}/{name}").read()
+    except urllib.error.HTTPError as e:
+        if e.code != 404:
+            raise
+        raise SystemExit(f"{RELEASES}/{name} was not found (HTTP 404). Publish that file on the mirror, or build "
+                         f"whisper.cpp for this machine and pass --bin PATH/whisper-cli.")
     zipfile.ZipFile(io.BytesIO(data)).extractall(dest)
     exe = next(dest.rglob(EXE))
     if os.name != "nt":
