@@ -37,8 +37,9 @@ transcribe files on **your** computer with **your** GPU. Ask in plain words — 
 my Downloads"* — and the app finds the file, transcribes it, writes `.srt` / `.txt` next to it, and can then proofread names,
 translate or summarise the text for you.
 
-Tools: `transcribe` (file → subtitles + text), `find_media` (newest audio/video in Downloads, Videos, Desktop, …),
-`list_devices`, `list_languages_and_models`.
+Tools: `transcribe` (file → subtitles + text), `transcribe_folder` (every audio/video in a folder, one summary
+back), `find_media` (newest audio/video in Downloads, Videos, Desktop, …), `list_devices`,
+`list_languages_and_models`.
 
 **Claude Desktop (one click):** download `babelscribe.mcpb` from the [latest release](https://github.com/phonology024/babelscribe/releases/latest)
 and double-click it (or *Settings → Extensions → Install extension*).

@@ -94,6 +94,92 @@ def test_mcp_server_tools(tmp_path):
     assert "talk.mp4" in json.dumps(out, default=str) and "notes.txt" not in json.dumps(out, default=str)
 
 
+def _tool_payload(result):
+    """call_tool returns a CallToolResult; the tool's dict is the JSON in its first text block."""
+    import json
+    return json.loads(result.content[0].text)
+
+
+def test_mcp_transcribe_folder_batches_every_media_file(tmp_path, monkeypatch):
+    import pytest
+    pytest.importorskip("mcp.server.mcpserver")
+    import anyio, json
+    from babelscribe import api, mcp_server
+
+    calls = []
+
+    def fake_transcribe(src, *a, **k):
+        calls.append((Path(src).name, k.get("out")))
+        return {"files": [str(Path(src).with_suffix(".srt"))], "lang": "en", "segments": 1, "seconds": 0.1, "text": "hi"}
+    monkeypatch.setattr(api, "transcribe_file", fake_transcribe)
+
+    sub = tmp_path / "nested"
+    sub.mkdir()
+    for name in ("a.mp4", "b.mp3", "notes.txt"):
+        (tmp_path / name).write_bytes(b"x")
+    (sub / "c.mov").write_bytes(b"x")
+
+    srv = mcp_server.build()
+
+    async def go(**kwargs):
+        return await srv.call_tool("transcribe_folder", {"folder": str(tmp_path), "formats": "srt", **kwargs})
+    out = _tool_payload(anyio.run(go))
+
+    assert "transcribe_folder" in {t.name for t in anyio.run(srv.list_tools)}
+    assert sorted(c[0] for c in calls) == ["a.mp4", "b.mp3"], "non-media and sub-folders are skipped by default"
+    assert (out["total"], out["succeeded"], out["failed"]) == (2, 2, 0)
+    assert all(f["ok"] for f in out["files"])
+
+
+def test_mcp_transcribe_folder_recursive_and_continues_after_failure(tmp_path, monkeypatch):
+    import pytest
+    pytest.importorskip("mcp.server.mcpserver")
+    import anyio, json
+    from babelscribe import api, mcp_server
+
+    seen = []
+
+    def fake_transcribe(src, *a, **k):
+        seen.append(Path(src).name)
+        if Path(src).name == "bad.mp4":
+            raise RuntimeError("whisper-cli failed (1)")
+        return {"files": [], "lang": "en", "segments": 1, "seconds": 0.1, "text": "hi"}
+    monkeypatch.setattr(api, "transcribe_file", fake_transcribe)
+
+    sub = tmp_path / "nested"
+    sub.mkdir()
+    (tmp_path / "bad.mp4").write_bytes(b"x")
+    (sub / "good.mp3").write_bytes(b"x")
+
+    srv = mcp_server.build()
+
+    async def go():
+        return await srv.call_tool("transcribe_folder", {"folder": str(tmp_path), "recursive": True})
+    out = _tool_payload(anyio.run(go))
+
+    assert sorted(seen) == ["bad.mp4", "good.mp3"], "a failing file must not stop the batch"
+    assert (out["total"], out["succeeded"], out["failed"]) == (2, 1, 1)
+    failed = next(f for f in out["files"] if not f["ok"])
+    assert "whisper-cli failed" in failed["error"]
+
+
+def test_mcp_transcribe_folder_rejects_a_file(tmp_path):
+    import pytest
+    pytest.importorskip("mcp.server.mcpserver")
+    import anyio
+    from babelscribe import mcp_server
+
+    target = tmp_path / "one.mp4"
+    target.write_bytes(b"x")
+    srv = mcp_server.build()
+
+    async def go():
+        return await srv.call_tool("transcribe_folder", {"folder": str(target)})
+    with pytest.raises(Exception) as exc:
+        anyio.run(go)
+    assert "not a folder" in str(exc.value.__cause__)
+
+
 def _argv_of(monkeypatch, tmp_path, runner, *args, **kw):
     """Run a whisper-cli caller with ffmpeg and subprocess mocked; return the argv it built."""
     import json, subprocess
@@ -559,3 +645,87 @@ def test_mcp_tool_error_instead_of_exit_on_an_unsupported_platform(monkeypatch, 
             anyio.run(srv.call_tool, tool, args)
         assert "no prebuilt whisper-cli for linux-arm64-cpu" in str(e.value)
     assert anyio.run(srv.call_tool, "list_languages_and_models", {})   # still answering
+
+
+def test_mcp_server_module_imports_without_the_sdk_types():
+    """`babelscribe mcp` on Python 3.9 must reach its "needs Python 3.10+" message, so importing the module
+    cannot evaluate 3.10-only syntax such as `float | None` at module level. CI runs this on 3.9."""
+    import importlib
+    from babelscribe import mcp_server
+    importlib.reload(mcp_server)
+
+
+def _folder_run(tmp_path, monkeypatch, names, fake=None, **kwargs):
+    """Call transcribe_folder on real files with a transcribe_file stub that still writes through writers.write,
+    so output-path mistakes show up on disk instead of being hidden by a mock."""
+    import pytest
+    pytest.importorskip("mcp.server.mcpserver")
+    import anyio
+    from babelscribe import api, mcp_server
+
+    def write_like_the_real_one(src, *a, out=None, formats=None, log=print, **k):
+        base = Path(out) if out else Path(src).with_suffix("")
+        base.parent.mkdir(parents=True, exist_ok=True)
+        segs = [{"start": 0.0, "end": 1.0, "text": Path(src).name, "words": []}]
+        files = writers.write(segs, base, formats, {"language": "en"})
+        return {"files": [str(f) for f in files], "lang": "en", "segments": 1, "seconds": 0.0, "text": ""}
+    monkeypatch.setattr(api, "transcribe_file", fake or write_like_the_real_one)
+    for n in names:
+        (tmp_path / "in" / n).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / "in" / n).write_bytes(b"x")
+    srv = mcp_server.build()
+    return _tool_payload(anyio.run(lambda: srv.call_tool(
+        "transcribe_folder", {"folder": str(tmp_path / "in"), "formats": "srt", **kwargs})))
+
+
+def test_mcp_transcribe_folder_never_writes_two_files_to_one_path(tmp_path, monkeypatch):
+    """a/talk.mp4, a/talk.mp3 and b/talk.mp4 used to report succeeded: 3 and leave one talk.srt on disk."""
+    names = ["a/talk.mp4", "a/talk.mp3", "b/talk.mp4", "b/other.wav"]
+    for kwargs in ({"recursive": True}, {"recursive": True, "output_dir": str(tmp_path / "out")}):
+        out = _folder_run(tmp_path, monkeypatch, names, **kwargs)
+        written = [f for r in out["files"] for f in r["files"]]
+        assert out["succeeded"] == 4 and len(set(written)) == 4
+        for f in written:   # each subtitle holds its own source's text, so nothing was overwritten
+            assert Path(f).is_file()
+        texts = sorted(Path(f).read_text(encoding="utf-8").splitlines()[2] for f in written)
+        assert texts == ["other.wav", "talk.mp3", "talk.mp4", "talk.mp4"]
+        root = tmp_path / ("out" if "output_dir" in kwargs else "in")
+        assert sorted(str(Path(f).relative_to(root)).replace("\\", "/") for f in written) == [
+            "a/talk.mp3.srt", "a/talk.mp4.srt", "b/other.srt", "b/talk.srt"]
+
+
+def test_mcp_transcribe_folder_survives_systemexit_in_one_file(tmp_path, monkeypatch):
+    """writers.write and models.resolve raise SystemExit, which `except Exception` does not catch."""
+    def fake(src, *a, **k):
+        if Path(src).name == "bad.mp4":
+            raise SystemExit("unknown format: docx")
+        return {"files": [], "lang": "en", "segments": 1, "seconds": 0.0, "text": ""}
+    out = _folder_run(tmp_path, monkeypatch, ["bad.mp4", "good.mp4"], fake=fake)
+    assert (out["succeeded"], out["failed"]) == (1, 1)
+    assert "unknown format: docx" in next(f for f in out["files"] if not f["ok"])["error"]
+
+
+def test_mcp_progress_keeps_coming_during_one_long_file(tmp_path, monkeypatch):
+    """A client times out when nothing arrives for a while, so a folder with one long file needs the same
+    heartbeat `transcribe` has, not only a notification between files."""
+    import pytest
+    pytest.importorskip("mcp.server.mcpserver")
+    import time
+    from babelscribe import mcp_server
+    monkeypatch.setattr(mcp_server, "HEARTBEAT", 0.05)
+    sent = []
+
+    async def record(ctx, progress, total, message):
+        sent.append((progress, total, message))
+    monkeypatch.setattr(mcp_server, "_report_progress", record)
+
+    def slow(src, *a, log=print, **k):
+        log("transcribing with turbo ...")
+        time.sleep(0.4)
+        return {"files": [], "lang": "en", "segments": 1, "seconds": 0.4, "text": ""}
+    out = _folder_run(tmp_path, monkeypatch, ["long.mp4"], fake=slow)
+    assert out["succeeded"] == 1
+    during = [m for p, t, m in sent if m.startswith("long.mp4 (1/1): ")]
+    assert len(during) >= 2, sent
+    assert during[-1] == "long.mp4 (1/1): transcribing with turbo ..."
+    assert all(t == 1 for _, t, _ in sent), "progress stays on the file-count scale so a client can show a bar"

@@ -46,6 +46,10 @@
       "description": "Transcribe a local audio/video file into subtitles (.srt) and text"
     },
     {
+      "name": "transcribe_folder",
+      "description": "Transcribe every audio/video file in a folder and return one summary"
+    },
+    {
       "name": "find_media",
       "description": "Find audio/video files in Downloads, Videos, Desktop, Music, Documents"
     },

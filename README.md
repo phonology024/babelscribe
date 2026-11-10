@@ -37,8 +37,13 @@ transcribe files on **your** computer with **your** GPU. Ask in plain words — 
 my Downloads"* — and the app finds the file, transcribes it, writes `.srt` / `.txt` next to it, and can then proofread names,
 translate or summarise the text for you.
 
-Tools: `transcribe` (file → subtitles + text), `find_media` (newest audio/video in Downloads, Videos, Desktop, …),
-`list_devices`, `list_languages_and_models`.
+Tools: `transcribe` (file → subtitles + text), `transcribe_folder` (every audio/video in a folder, one summary
+back), `find_media` (newest audio/video in Downloads, Videos, Desktop, …), `list_devices`,
+`list_languages_and_models`.
+
+`transcribe_folder` goes on after a file fails and lists the failure in the summary. Subtitles land next to each
+file, or under `output_dir` with the same sub-folders. Two files that would share a subtitle name (`talk.mp4` and
+`talk.mp3`) keep their full name: `talk.mp4.srt`, `talk.mp3.srt`.
 
 **Claude Desktop (one click):** download `babelscribe.mcpb` from the [latest release](https://github.com/phonology024/babelscribe/releases/latest)
 and double-click it (or *Settings → Extensions → Install extension*).
