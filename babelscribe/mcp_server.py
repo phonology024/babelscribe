@@ -41,19 +41,22 @@ async def _report_progress(ctx, progress, total, message) -> None:
         pass
 
 
-def _tool_error(e: SystemExit):
+def _tool_error(e: BaseException):
     """The CLI reports problems (no prebuilt binary for this platform, unknown model, bad format) by raising
     SystemExit. Inside the server that must come back as a tool error the client can read, never as the server
     process going away. ToolError because the SDK only forwards the text of a ToolError; any other exception
-    reaches the client as a bare "Error executing tool"."""
+    reaches the client as a bare "Error executing tool", so "no such file" and "whisper-cli failed" must be
+    wrapped as well or the assistant cannot tell the user what went wrong."""
     from mcp.server.mcpserver.exceptions import ToolError
-    return ToolError(str(e) or "babelscribe stopped without a message")
+    text = str(e) or "babelscribe stopped without a message"
+    plain = isinstance(e, (SystemExit, FileNotFoundError, ValueError, RuntimeError))
+    return ToolError(text if plain else f"{type(e).__name__}: {text}")
 
 
 def _no_exit(fn):
     try:
         return fn()
-    except SystemExit as e:
+    except (Exception, SystemExit) as e:
         raise _tool_error(e) from None
 
 
@@ -67,7 +70,9 @@ def build():
     srv = MCPServer("babelscribe", version=__version__, instructions=(
         "Local speech-to-text on the user's own GPU (AMD/NVIDIA/Intel/Apple) for 99 languages. Needs a file path on "
         "this computer: if the user only names or describes a file, call find_media first. Subtitles (.srt) and text "
-        "(.txt) are written next to the media file unless output_dir is given. Use accurate=true when the user wants "
+        "(.txt) are written next to the media file unless output_dir is given, plus a .json with the word timings: "
+        "to fix names or change the line width afterwards, edit the text in that .json and call convert_subtitles "
+        "instead of transcribing again. Use accurate=true when the user wants "
         "the fewest mistakes (slower); it is much better for Thai and Hindi. The first run downloads the model "
         "(~1.6 GB), so it can take a few minutes. After transcribing you can proofread names, translate, or "
         "summarise from the returned text."))
@@ -110,7 +115,7 @@ def build():
     # transcribe writes new .srt/.txt files (re-running rewrites its own output); first use downloads whisper-cli and the model
     @srv.tool(title="Transcribe audio/video to subtitles", annotations=ToolAnnotations(
         read_only_hint=False, destructive_hint=False, idempotent_hint=True, open_world_hint=True))
-    async def transcribe(file_path: str, language: str = "auto", accurate: bool = False, formats: str = "srt,txt",
+    async def transcribe(file_path: str, language: str = "auto", accurate: bool = False, formats: str = "srt,txt,json",
                          output_dir: str = "", vocabulary: str = "",
                          translate: bool = False, ctx: Context | None = None) -> dict:
         """Transcribe a local audio or video file into subtitles / text.
@@ -118,7 +123,8 @@ def build():
         file_path: absolute path to the media file (mp4, mkv, mov, mp3, wav, m4a, ...).
         language: ISO code such as en, th, ja, es, hi — or "auto" to detect.
         accurate: slower, fewest errors (large-v3 with beam search, or the best fine-tune for Thai / Hindi).
-        formats: comma list from srt, vtt, txt, json, ass (ass = karaoke word highlight).
+        formats: comma list from srt, vtt, txt, json, ass (ass = karaoke word highlight). Keep json: it is what
+            convert_subtitles reads to re-wrap or re-export later without transcribing again.
         output_dir: folder for the output files; empty = next to the media file.
         vocabulary: names and terms to spell correctly, e.g. "Pitakpong, babelscribe" (whisper initial prompt); empty = none.
         translate: true = write the transcript translated to English (uses large-v3; slower than turbo).
@@ -134,7 +140,7 @@ def build():
         if not isinstance(result, BaseException):
             await _report_progress(ctx, 100, 100, "done")
         if isinstance(result, BaseException):
-            raise _tool_error(result) if isinstance(result, SystemExit) else result
+            raise _tool_error(result) from None
         text = result.pop("text", "")
         result["text"] = text[:TEXT_LIMIT]
         if len(text) > TEXT_LIMIT:
@@ -146,7 +152,7 @@ def build():
     @srv.tool(title="Transcribe every audio/video in a folder", annotations=ToolAnnotations(
         read_only_hint=False, destructive_hint=False, idempotent_hint=True, open_world_hint=True))
     async def transcribe_folder(folder: str, language: str = "auto", accurate: bool = False,
-                                formats: str = "srt,txt", output_dir: str = "", vocabulary: str = "",
+                                formats: str = "srt,txt,json", output_dir: str = "", vocabulary: str = "",
                                 translate: bool = False, recursive: bool = False,
                                 ctx: Context | None = None) -> dict:
         """Transcribe every audio and video file in a folder, one at a time.
@@ -164,7 +170,7 @@ def build():
         same subtitle name (talk.mp4 and talk.mp3) keep their full name: talk.mp4.srt, talk.mp3.srt."""
         root = Path(folder).expanduser()
         if not root.is_dir():
-            raise ValueError(f"not a folder: {root}")
+            raise _tool_error(ValueError(f"not a folder: {root}"))
         pairs = api.collect_media([root], recursive)
         media = [p for p, _ in pairs]
         bases = api.output_bases(pairs, output_dir or None)
@@ -189,6 +195,24 @@ def build():
         ok = [r for r in results if r["ok"]]
         return {"folder": str(root), "total": len(media), "succeeded": len(ok),
                 "failed": len(results) - len(ok), "files": results}
+
+    @srv.tool(title="Re-export subtitles from a transcript JSON", annotations=ToolAnnotations(
+        read_only_hint=False, destructive_hint=False, idempotent_hint=True, open_world_hint=False))
+    def convert_subtitles(json_path: str, formats: str = "srt", max_line_chars: int = 0, output_dir: str = "") -> dict:
+        """Write subtitle files again from a babelscribe .json, without transcribing again (instant, no GPU).
+
+        Use it to change the line width or add a format, or after correcting names and words: edit the "text"
+        of the segments in the JSON, then call this, and every format gets the corrected text with its timing.
+        json_path: absolute path to the .json written by transcribe (formats must have included json).
+        formats: comma list from srt, vtt, txt, json, ass.
+        max_line_chars: maximum characters per subtitle line; 0 = the default for the language.
+        output_dir: folder for the output files; empty = next to the JSON.
+        Returns the files written, the number of segments, and how many had edited text."""
+        from . import convert
+        src = Path(json_path).expanduser()
+        out = Path(output_dir).expanduser() / src.with_suffix("").name if output_dir else None
+        return _no_exit(lambda: convert.convert_file(
+            src, [f.strip() for f in formats.split(",") if f.strip()], out=out, max_line_chars=max_line_chars or None))
 
     @srv.tool(title="Find audio/video files", annotations=ToolAnnotations(read_only_hint=True, open_world_hint=False))
     def find_media(name_contains: str = "", folder: str = "", limit: int = 15) -> list[dict]:

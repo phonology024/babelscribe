@@ -6,9 +6,9 @@ Applies from 1.0. Before 1.0 (0.x) minor versions may still change things, but w
 
 | Surface | Public | Not public |
 |---|---|---|
-| CLI | command names (`babelscribe FILE`, `devices`, `models`, `doctor`, `mcp`) and their flags | the exact wording of `--help` and log lines |
+| CLI | command names (`babelscribe FILE`, `convert`, `devices`, `models`, `doctor`, `mcp`) and their flags | the exact wording of `--help` and log lines |
 | Python | `babelscribe.api.transcribe_file` and `babelscribe.api.transcribe_many` (their keyword arguments and returned keys) | every other module (`backend`, `models`, `transcribe`, `hybrid`, `align`, `writers`, `doctor`) |
-| MCP | tool names and their argument names/types: `transcribe`, `transcribe_folder`, `find_media`, `list_devices`, `list_languages_and_models` | tool descriptions, the text of the instructions |
+| MCP | tool names and their argument names/types: `transcribe`, `transcribe_folder`, `convert_subtitles`, `find_media`, `list_devices`, `list_languages_and_models` | tool descriptions, the text of the instructions |
 | Files | `srt`, `vtt`, `txt`, `json`, `ass` outputs (the `json` keys `meta` and `segments`) | model and binary cache layout under `~/.babelscribe`; the ASS `Style:` line, whose colours and font are meant to be edited |
 
 ## Rules (semantic versioning)

@@ -13,7 +13,8 @@ TRANSCRIBE_MANY_ARGS = {"inputs", "recursive", "out_dir", "skip_existing", "form
 TRANSCRIBE_FILE_ARGS = {"src", "lang", "model", "text_model", "accurate", "formats", "out", "device", "bin",
                         "flavor", "verbose", "log", "prompt", "progress"}
 MCP_TRANSCRIBE_ARGS = {"file_path", "language", "accurate", "formats", "output_dir", "vocabulary"}
-MCP_TOOLS = {"transcribe", "find_media", "list_devices", "list_languages_and_models"}
+MCP_TOOLS = {"transcribe", "transcribe_folder", "convert_subtitles", "find_media", "list_devices",
+             "list_languages_and_models"}
 
 
 def test_transcribe_file_keeps_public_arguments():

@@ -12,7 +12,7 @@ Use the babelscribe tools; everything runs on the user's own computer and GPU.
      otherwise `auto`.
    - Set `accurate: true` when the user wants the fewest mistakes, for subtitles they will publish, or whenever the
      language is Thai or Hindi — it is several times slower but roughly halves errors for those two.
-   - `formats` defaults to `srt,txt`; add `vtt` for web players or `json` for word timings.
+   - `formats` defaults to `srt,txt,json`; add `vtt` for web players. The `json` holds the word timings: to fix names or re-wrap later, edit its text and call `convert_subtitles` instead of transcribing again.
 3. **Tell the user what to expect** before a long run: the first use downloads the speech model (~1.6 GB) and can take
    a few minutes; after that, about 20x real time on a modern GPU (a 10-minute video in ~30 s), slower with `accurate`.
 4. **Report back** the files written and the device used, and show a short excerpt — not the whole transcript.
