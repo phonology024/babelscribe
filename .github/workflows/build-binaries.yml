@@ -27,7 +27,9 @@ jobs:
           - { os: ubuntu-22.04,   name: linux-x64-vulkan,   cmake: "-DGGML_VULKAN=ON" }
           - { os: ubuntu-22.04,   name: linux-x64-cuda,     cmake: "-DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES='61;70;75;80;86;89;90'", container: "nvidia/cuda:12.6.3-devel-ubuntu22.04" }
           - { os: ubuntu-22.04,   name: linux-x64-cpu,      cmake: "" }
-          - { os: macos-14,       name: macos-arm64-metal,  cmake: "-DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON" }
+          # macos-14 runners are retired ("configuration is not supported"); the deployment target keeps the
+          # binary usable on macOS 14, which is what the macos-14 build required.
+          - { os: macos-15,       name: macos-arm64-metal,  cmake: "-DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0" }
     runs-on: ${{ matrix.os }}
     container: ${{ matrix.container }}
     steps:
@@ -61,6 +63,26 @@ jobs:
           find build -type f \( -name 'whisper-cli' -o -name 'whisper-cli.exe' -o -name 'whisper-quantize' -o -name 'whisper-quantize.exe' -o -name '*.dll' \) -exec cp {} pkg/ \;
           cp whisper.cpp/LICENSE pkg/LICENSE-whisper.cpp
           cd pkg && 7z a ../whisper-cli-${{ matrix.name }}.zip . >/dev/null 2>&1 || zip -r ../whisper-cli-${{ matrix.name }}.zip .
+
+      # A binary that cannot transcribe must not reach a release: run the freshly built whisper-cli on a real
+      # file before it is uploaded. Not the CUDA build: it cannot start without an NVIDIA driver, and the
+      # runners have none.
+      - uses: actions/checkout@v4
+        if: ${{ !contains(matrix.name, 'cuda') }}
+        with: { path: babelscribe-src }
+      - uses: actions/setup-python@v5
+        if: ${{ !contains(matrix.name, 'cuda') }}
+        with: { python-version: "3.12" }
+      - name: Transcribe a real file with this build
+        if: ${{ !contains(matrix.name, 'cuda') }}
+        shell: bash
+        env:
+          BABELSCRIBE_HOME: ${{ runner.temp }}/babelscribe-home
+          PYTHONUTF8: "1"
+        run: |
+          pip install -q ./babelscribe-src
+          exe=pkg/whisper-cli; [ -f pkg/whisper-cli.exe ] && exe=pkg/whisper-cli.exe
+          python babelscribe-src/tests/smoke/real_transcription.py whisper.cpp/samples/jfk.wav --bin "$exe" --no-mcp
 
       - uses: actions/upload-artifact@v4
         with: { name: "whisper-cli-${{ matrix.name }}", path: "whisper-cli-${{ matrix.name }}.zip" }

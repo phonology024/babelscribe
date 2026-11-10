@@ -1,6 +1,7 @@
 """One function the CLI and the MCP server share: media file in -> subtitle/transcript files out."""
 from __future__ import annotations
 
+import os
 import time
 from pathlib import Path
 from typing import Callable
@@ -36,10 +37,15 @@ def setup(model: str = "turbo", bin: str | None = None, flavor: str | None = Non
     return binary, timing, found
 
 
+# The model used when none is named. BABELSCRIBE_MODEL changes it for callers that cannot pass one: the MCP tools
+# have no model argument, so this is how a small machine (or CI) makes an AI app use "small" or "tiny".
+DEFAULT_MODEL = os.environ.get("BABELSCRIBE_MODEL") or "turbo"
+
+
 def transcribe_file(
     src: str | Path,
     lang: str = "auto",
-    model: str = "turbo",
+    model: str = DEFAULT_MODEL,
     text_model: str | None = None,
     accurate: bool = False,
     formats: list[str] | None = None,
