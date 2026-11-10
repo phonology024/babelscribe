@@ -202,12 +202,13 @@ machine from their original Hugging Face repo — install `pip install "babelscr
 redistributed, so each fine-tune keeps its own licence. Thai word boundaries: `pip install "babelscribe[thai]"`.
 
 ## Docker
-No Python, ffmpeg or whisper.cpp needed — the image has them, and the model is cached in a volume:
+No Python, ffmpeg or whisper.cpp on the host — the image has them, and the model is cached in a volume. There is no
+published image yet, so build it from a checkout, then run it on the folder that holds your media:
 ```bash
-docker run --rm -v "$PWD:/media" -v babelscribe-models:/models \
-  ghcr.io/phonology024/babelscribe:latest talk.mp4      # writes talk.srt next to the input
+docker build -t babelscribe -f docker/Dockerfile .
+docker run --rm -v "$PWD:/media" -v babelscribe-models:/models babelscribe talk.mp4   # writes talk.srt next to the input
 ```
-CPU by default; a Vulkan image for GPU hosts is one `--build-arg` away. Details: [docker/README.md](docker/README.md).
+CPU by default, linux/amd64; a Vulkan image for GPU hosts is one `--build-arg` away. Details: [docker/README.md](docker/README.md).
 
 ## Roadmap
 What's planned next (subtitle line wrapping, MCP progress for long files, folder batches, translate-to-English, more fine-tunes) is in [ROADMAP.md](ROADMAP.md) and the [open issues](https://github.com/phonology024/babelscribe/issues).

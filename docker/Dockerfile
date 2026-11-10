@@ -1,6 +1,6 @@
 # babelscribe in a container: whisper.cpp, ffmpeg and the speech model, no host setup.
 #
-#   docker build -t babelscribe .
+#   docker build -t babelscribe -f docker/Dockerfile .      (from the repository root)
 #   docker run --rm -v "$PWD:/media" -v babelscribe-models:/models babelscribe talk.mp4
 #
 # The binary is baked in; the model (~1.6 GB) is downloaded on first run into the /models volume, so it
@@ -13,10 +13,11 @@ RUN apt-get update -qq \
  && apt-get install -y -qq --no-install-recommends libgomp1 ca-certificates unzip \
  && rm -rf /var/lib/apt/lists/*
 
-# Pinned: the image is a released artefact, so it should not follow PyPI. The CI workflow passes the version
-# from pyproject.toml so a tag always builds the matching release.
-ARG BABELSCRIBE_VERSION=0.3.2
-RUN pip install --no-cache-dir "babelscribe==${BABELSCRIBE_VERSION}"
+# Installed from this checkout, not from PyPI: the image is then exactly the code it was built from, there is
+# no version pin here to go stale, and a tag can be built before (or without) its PyPI upload.
+COPY pyproject.toml README.md LICENSE /src/
+COPY babelscribe /src/babelscribe
+RUN pip install --no-cache-dir /src && rm -rf /src
 
 # Default CPU: it runs anywhere, and a Vulkan build without a passed-through GPU cannot load libvulkan.so.1.
 # For a GPU host see docker/README.md.
