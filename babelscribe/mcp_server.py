@@ -24,16 +24,20 @@ def _guard_stdout():
     return proto
 
 
-def _no_exit(fn):
-    """Run fn, turning SystemExit into a ToolError. The CLI reports problems (no prebuilt binary for this
-    platform, unknown model, bad format) by raising SystemExit; inside the server that must come back as a tool
-    error the client can read, never as the server process going away. ToolError rather than RuntimeError
-    because the SDK only forwards the text of a ToolError; any other exception becomes "Error executing tool"."""
+def _tool_error(e: SystemExit):
+    """The CLI reports problems (no prebuilt binary for this platform, unknown model, bad format) by raising
+    SystemExit. Inside the server that must come back as a tool error the client can read, never as the server
+    process going away. ToolError because the SDK only forwards the text of a ToolError; any other exception
+    reaches the client as a bare "Error executing tool"."""
     from mcp.server.mcpserver.exceptions import ToolError
+    return ToolError(str(e) or "babelscribe stopped without a message")
+
+
+def _no_exit(fn):
     try:
         return fn()
     except SystemExit as e:
-        raise ToolError(str(e) or "babelscribe stopped without a message") from None
+        raise _tool_error(e) from None
 
 
 def build():
@@ -83,15 +87,23 @@ def build():
                 if ctx and not done.is_set():
                     await ctx.report_progress(time.time() - t0, None, lines[-1] if lines else "starting ...")
 
+        def work():   # runs in a worker thread
+            try:
+                return api.transcribe_file(
+                    src, language, accurate=accurate, formats=fmts, out=out, log=lambda m: (lines.append(m), print(m)),
+                    prompt=vocabulary, translate=translate)
+            except SystemExit as e:   # carried out of the task group by hand: raised inside it, it would arrive
+                return e              # wrapped in an ExceptionGroup and lose its message
+
         result: dict = {}
         async with anyio.create_task_group() as tg:
             tg.start_soon(heartbeat)
             try:
-                result = await anyio.to_thread.run_sync(lambda: _no_exit(lambda: api.transcribe_file(
-                    src, language, accurate=accurate, formats=fmts, out=out, log=lambda m: (lines.append(m), print(m)),
-                    prompt=vocabulary, translate=translate)))
+                result = await anyio.to_thread.run_sync(work)
             finally:
                 done.set()
+        if isinstance(result, SystemExit):
+            raise _tool_error(result)
         text = result.pop("text", "")
         result["text"] = text[:TEXT_LIMIT]
         if len(text) > TEXT_LIMIT:
