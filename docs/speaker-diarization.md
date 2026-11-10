@@ -7,7 +7,7 @@ implemented yet.
 **The question:** is there a light, offline, no-account way to label speakers that works on non-NVIDIA GPUs and keeps
 the install small?
 
-**Short answer:** yes — `sherpa-onnx` (2 wheels, 11.6 MB, no CUDA) with a 45 MB pair of ONNX models. It runs on the CPU,
+**Short answer:** yes — `sherpa-onnx` (2 wheels, 11.6 MB, no CUDA) with a 47 MB pair of ONNX models. It runs on the CPU,
 so it works identically on AMD, Intel, Apple and NVIDIA. Measured at **6.4×–23× realtime**, i.e. a 5-minute interview
 costs 47 s on top of the transcription. Two caveats: it needs a threshold that adapts to the recording, and the numbers
 below come from synthetic voices, so real recordings are still unmeasured.
@@ -56,18 +56,19 @@ inference time.
 
 ### Install cost
 
-| Piece | Size |
-|---|---|
-| `sherpa-onnx` wheel (macOS arm64) | 2.0 MB |
-| `sherpa-onnx-core` wheel | 9.1 MB |
-| Dependencies | **none** (only `sherpa-onnx` and `sherpa-onnx-core`) |
-| Installed site-packages | 37 MB |
-| Segmentation model (`sherpa-onnx-pyannote-segmentation-3-0`) | 7.2 MB |
-| Embedding model (`3dspeaker_eres2net_base`, 16 kHz) | 38 MB |
-| **Total** | **≈ 107 MB** |
+| Piece | Download | On disk |
+|---|---|---|
+| `sherpa-onnx` 2.0.1 wheel (macOS arm64, cp311) | 2.1 MB | 5 MB |
+| `sherpa-onnx-core` 2.0.1 wheel (macOS arm64) | 9.5 MB | 34 MB |
+| Other dependencies | **none** | |
+| Segmentation model (`sherpa-onnx-pyannote-segmentation-3-0`) | 7.0 MB | 7 MB |
+| Embedding model (`3dspeaker_eres2net_base`, 16 kHz) | 39.6 MB | 40 MB |
+| **Total** | **≈ 58 MB** (11.6 MB of wheels + 46.6 MB of models) | **≈ 86 MB** |
 
-For comparison, the Whisper model babelscribe already downloads is 1.6 GB, so this is ~7% on top and is a lazy
-download like the models. No CUDA toolkit, no PyTorch (which would be ~2 GB and would pull a GPU stack that does not
+Sizes are the file sizes PyPI and the sherpa-onnx GitHub release report (checked 2026-11-10); "on disk" for the
+wheels is the sum of the unpacked files. For comparison, the Whisper model babelscribe already downloads is
+1.6 GB, so this is about 4% more to download and about 5% more on disk, and the models are a lazy download like
+the Whisper ones. No CUDA toolkit, no PyTorch (which would be ~2 GB and would pull a GPU stack that does not
 work on AMD without ROCm).
 
 ### Accuracy, measured
@@ -140,7 +141,7 @@ they need renumbering by first appearance before they are shown to a user.
 ## Recommendation
 
 1. **Implement with sherpa-onnx**, as an opt-in flag (`--speakers` / a `diarize: true` MCP argument) rather than a
-   default, because it adds 3–4× the transcription time and a 45 MB model download.
+   default, because it adds 3–4× the transcription time and a 47 MB model download.
 2. **Default `threshold=0.4`**, expose it, and document that two similar voices can merge.
 3. **Plain-language output** — `Speaker 1:` prefixes in `txt`/`srt`, a `speaker` key per segment in `json`. Keep the
    `json` addition optional so the pinned output keys in `API_STABILITY.md` are untouched.
