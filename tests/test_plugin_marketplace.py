@@ -1,8 +1,10 @@
 """The Claude Code plugin and the marketplace it is published through.
 
-`plugin/.claude-plugin/marketplace.json` is what lets someone run
-`/plugin install babelscribe --marketplace phonology024/babelscribe`, so it has to keep listing the plugin
-under the same name as `plugin.json`; a mismatch fails at install time with "Plugin ... not found in marketplace".
+`.claude-plugin/marketplace.json` at the repository root is what lets someone run
+`/plugin marketplace add phonology024/babelscribe` and then `/plugin install babelscribe@babelscribe`.
+It has to be at the root: a GitHub marketplace is read from there, and under plugin/ the add fails with
+"Marketplace file not found". It also has to keep listing the plugin under the same name as `plugin.json`;
+a mismatch fails at install time with "Plugin ... not found in marketplace".
 """
 from __future__ import annotations
 
@@ -15,7 +17,7 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 PLUGIN = ROOT / "plugin"
 MANIFEST = PLUGIN / ".claude-plugin" / "plugin.json"
-MARKETPLACE = PLUGIN / ".claude-plugin" / "marketplace.json"
+MARKETPLACE = ROOT / ".claude-plugin" / "marketplace.json"
 
 
 def test_the_plugin_manifest_is_valid_json():
@@ -33,11 +35,14 @@ def test_the_marketplace_lists_the_plugin_under_the_same_name():
 
 
 def test_the_marketplace_entry_points_at_the_plugin_root():
-    """The plugin lives at the repository's plugin/ root, so its source is './' — not '../' or a subfolder."""
+    """The marketplace is at the repository root and the plugin in plugin/, so the source is './plugin'."""
+    assert not (PLUGIN / ".claude-plugin" / "marketplace.json").exists(), "GitHub installs read the root file only"
     market = json.loads(MARKETPLACE.read_text(encoding="utf-8"))
     entry = next(p for p in market["plugins"] if p["name"] == "babelscribe")
-    assert entry["source"] == "./"
-    assert MARKETPLACE.parent.parent.joinpath(".mcp.json").is_file()
+    assert entry["source"] == "./plugin"
+    source = (ROOT / entry["source"]).resolve()
+    assert source == PLUGIN.resolve()
+    assert (source / ".claude-plugin" / "plugin.json").is_file() and (source / ".mcp.json").is_file()
 
 
 def test_the_marketplace_has_the_fields_claude_code_requires():
@@ -71,6 +76,8 @@ def test_the_icon_is_a_square_png_that_claude_code_accepts():
     assert icon.stat().st_size < 2 * 1024 * 1024
 
 
-def test_the_readme_documents_the_one_line_install():
+def test_the_readme_documents_the_install_commands():
+    market = json.loads(MARKETPLACE.read_text(encoding="utf-8"))
     readme = (PLUGIN / "README.md").read_text(encoding="utf-8")
-    assert "/plugin install babelscribe --marketplace phonology024/babelscribe" in readme
+    assert "/plugin marketplace add phonology024/babelscribe" in readme
+    assert f"/plugin install babelscribe@{market['name']}" in readme

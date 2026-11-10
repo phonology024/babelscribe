@@ -6,11 +6,13 @@ using your own graphics card — AMD Radeon, NVIDIA, Intel Arc or Apple Silicon 
 ## Install
 
 ```
-/plugin install babelscribe --marketplace phonology024/babelscribe
+/plugin marketplace add phonology024/babelscribe
+/plugin install babelscribe@babelscribe
 ```
 
-That adds the marketplace in `plugin/.claude-plugin/marketplace.json` and installs the plugin from it. From a shell,
-`claude plugin install babelscribe --marketplace phonology024/babelscribe` does the same.
+The first line adds this repository as a marketplace (`.claude-plugin/marketplace.json` at its root); the second
+installs the plugin from it. From a shell: `claude plugin marketplace add phonology024/babelscribe`, then
+`claude plugin install babelscribe@babelscribe`.
 
 ## Use it
 Ask Claude, for example: *"Make English subtitles for the newest video in my Downloads"*, *"Transcribe interview.mp3"*, or
