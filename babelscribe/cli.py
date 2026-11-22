@@ -17,6 +17,28 @@ import sys
 from . import __version__, api, backend, doctor, models
 
 
+def progress_bar(stream=None, width: int = 30):
+    """A callback for transcribe_file(progress=...) that draws one self-updating line: [#####-----]  42%.
+
+    It is drawn on stderr, so stdout stays clean for pipes, and wiped when the file reaches 100."""
+    stream = stream or sys.stderr
+    last = [-1]
+
+    def draw(pct: float) -> None:
+        n = int(pct)
+        if n == last[0]:
+            return
+        last[0] = n
+        if n >= 100:
+            stream.write("\r" + " " * (width + 9) + "\r")
+            last[0] = -1          # the next file of a batch starts a fresh bar
+        else:
+            done = width * n // 100
+            stream.write(f"\r  [{'#' * done}{'-' * (width - done)}] {n:3d}%")
+        stream.flush()
+    return draw
+
+
 def main(argv: list[str] | None = None) -> None:
     argv = sys.argv[1:] if argv is None else argv
     if argv[:1] == ["doctor"]:
@@ -54,6 +76,7 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--bin", help="path to a whisper-cli you built yourself")
     ap.add_argument("--flavor", help="prebuilt flavour to download: vulkan | cuda | metal | cpu")
     ap.add_argument("-v", "--verbose", action="store_true")
+    ap.add_argument("--no-progress", action="store_true", help="never draw the progress bar")
     ap.add_argument("--version", action="version", version=__version__)
     a = ap.parse_args(argv)
 
@@ -75,6 +98,8 @@ def main(argv: list[str] | None = None) -> None:
         prompt=a.prompt,
         translate=a.translate,
     )
+    if sys.stderr.isatty() and not a.verbose and not a.no_progress:   # a bar only where a person is watching
+        options["progress"] = progress_bar()
     formats = [f.strip() for f in a.formats.split(",") if f.strip()]
     from pathlib import Path
     try:

@@ -8,10 +8,10 @@ from babelscribe import api, cli
 
 CLI_FLAGS = {"-l", "--lang", "-m", "--model", "--text-model", "--accurate", "--prompt", "-f", "--formats",
              "-o", "--out", "--device", "--bin", "--flavor", "-v", "--verbose", "--version",
-             "-r", "--recursive", "--skip-existing"}
+             "-r", "--recursive", "--skip-existing", "--no-progress"}
 TRANSCRIBE_MANY_ARGS = {"inputs", "recursive", "out_dir", "skip_existing", "formats", "log"}
 TRANSCRIBE_FILE_ARGS = {"src", "lang", "model", "text_model", "accurate", "formats", "out", "device", "bin",
-                        "flavor", "verbose", "log", "prompt"}
+                        "flavor", "verbose", "log", "prompt", "progress"}
 MCP_TRANSCRIBE_ARGS = {"file_path", "language", "accurate", "formats", "output_dir", "vocabulary"}
 MCP_TOOLS = {"transcribe", "find_media", "list_devices", "list_languages_and_models"}
 

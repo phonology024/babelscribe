@@ -5,11 +5,11 @@ accurate text to the timing segments inside that chunk."""
 from __future__ import annotations
 
 import json
-import subprocess
 import tempfile
 from pathlib import Path
+from typing import Callable
 
-from . import align
+from . import align, transcribe
 from .transcribe import prompt_args, to_wav16k
 
 
@@ -25,7 +25,9 @@ def chunks(time_segs: list[dict], max_len: float = 24.0) -> list[tuple[float, fl
 
 
 def run(binary: Path, text_model: Path, media: Path, time_segs: list[dict], lang: str, device: int, beam: int | None,
-        verbose: bool = False, pad: float = .25, prompt: str | None = None) -> list[dict]:
+        verbose: bool = False, pad: float = .25, prompt: str | None = None,
+        progress: Callable[[float], None] | None = None) -> list[dict]:
+    """progress, when given, is called with 0-100: the share of chunks whisper-cli has finished."""
     parts = chunks(time_segs)
     with tempfile.TemporaryDirectory() as d:
         wavs = []
@@ -37,9 +39,11 @@ def run(binary: Path, text_model: Path, media: Path, time_segs: list[dict], lang
             cmd += ["-bs", str(beam)]
         for w in wavs:
             cmd += ["-f", str(w)]
-        p = subprocess.run(cmd, capture_output=not verbose, text=True, errors="replace")
-        if p.returncode:
-            raise RuntimeError(f"whisper-cli failed ({p.returncode}):\n{(p.stderr or '')[-2000:]}")
+        if progress and wavs:   # -np silences whisper-cli here, so count the per-chunk JSON files it has written
+            transcribe.run_cli(cmd, verbose, tick=lambda: progress(
+                100.0 * sum(Path(str(w) + ".json").exists() for w in wavs) / len(wavs)))
+        else:
+            transcribe.run_cli(cmd, verbose)
         texts = []
         for w in wavs:
             j = json.loads(Path(str(w) + ".json").read_text(encoding="utf-8", errors="replace"))
