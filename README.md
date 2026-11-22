@@ -5,6 +5,7 @@
 [![PyPI](https://img.shields.io/pypi/v/babelscribe)](https://pypi.org/project/babelscribe/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![MCP server](https://img.shields.io/badge/MCP-server-blue)](#use-it-from-an-ai-app-mcp--no-terminal-needed)
+**Translations:** [తెలుగు (Telugu)](README.te.md)
 
 **babelscribe turns any audio or video file into subtitles (SRT, VTT) and text, in any of Whisper's 99 languages, on your
 own graphics card — AMD Radeon, NVIDIA, Intel Arc or Apple Silicon — or the CPU. No CUDA needed, no cloud, free (MIT).**
@@ -70,6 +71,9 @@ and double-click it (or *Settings → Extensions → Install extension*).
 ```
 (`timeout` is in milliseconds and only some apps read it.) Already installed with pip? Use `"command": "babelscribe", "args": ["mcp"]`.
 Web-only chat apps (e.g. grok.com, chatgpt.com) can only reach servers on the internet, not your computer, so they can't use your GPU or files.
+
+The MCP tools use the `turbo` model (1.6 GB). On a small machine set `BABELSCRIBE_MODEL` in the server's
+environment to pick another one, e.g. `"env": {"BABELSCRIBE_MODEL": "small"}` in the JSON above.
 
 ## Benchmark: real talks, human captions as the answer key
 Four TED / TEDx talks, scored against the **human-made captions in the spoken language** (`bench/bench.py`, reproducible).
@@ -294,7 +298,13 @@ Add one entry to `FINETUNES` in `babelscribe/models.py` (Hugging Face repo, lang
 
 ## Prebuilt binaries
 `.github/workflows/build-binaries.yml` builds `whisper-cli` + `whisper-quantize` for every row of the table above and attaches
-them to each `v*` release. Point `BABELSCRIBE_RELEASES` at another URL to self-host.
+them to each `v*` release, with a `SHA256SUMS` file.
+
+Each babelscribe version downloads the binaries of one fixed release (`BINARY_TAG` in `babelscribe/backend.py`), not
+"latest", and checks the zip's sha256 before unpacking it. A download that does not match is deleted and nothing is
+run. `babelscribe doctor` shows which release the cached binary came from and whether its files changed since.
+Point `BABELSCRIBE_RELEASES` at another URL to self-host: a mirror of the official zips is checked the same way; a
+mirror with your own builds needs `BABELSCRIBE_SKIP_VERIFY=1`.
 
 ## ภาษาไทย
 ใช้ผ่าน Claude Desktop ได้โดยไม่ต้องพิมพ์คำสั่ง: โหลด `babelscribe.mcpb` จากหน้า Releases แล้วดับเบิลคลิก จากนั้นพิมพ์ในแชทว่า *"ทำซับไทยให้คลิปล่าสุดในโฟลเดอร์ดาวน์โหลด"*
