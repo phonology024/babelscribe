@@ -2,6 +2,7 @@
 Vulkan, NVIDIA via CUDA, Apple via Metal) or the CPU.
 
   babelscribe talk.mp4                         # auto language, turbo model, best GPU -> talk.srt + talk.json
+  babelscribe a.mp4 b.mp3 ./recordings         # several files and folders in one run (-r for sub-folders)
   babelscribe vo.wav -l th --text-model thai-thonburian   # hybrid: Thai fine-tune text + turbo timing
   babelscribe talk.mp4 --accurate              # slower, fewest errors: large-v3 + beam search, or the best fine-tune
   babelscribe talk.mp4 --prompt "Pitakpong, babelscribe"   # bias spelling of names and terms
@@ -30,7 +31,10 @@ def main(argv: list[str] | None = None) -> None:
         [print(f"  {k:16} [{v['lang']}] {v['note']}") for k, v in models.FINETUNES.items()]
         return
     ap = argparse.ArgumentParser(prog="babelscribe", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("input", help="audio or video file, or 'devices'")
+    ap.add_argument("input", nargs="+", help="audio/video files and/or folders, or 'devices'")
+    ap.add_argument("-r", "--recursive", action="store_true", help="also take media from sub-folders of a folder")
+    ap.add_argument("--skip-existing", action="store_true",
+                    help="with several files or a folder: leave files whose outputs already exist")
     ap.add_argument("-l", "--lang", default="auto", help="language code (th, en, ja, ...) or auto")
     ap.add_argument("-m", "--model", default="turbo", help="timing/general model (default turbo = large-v3-turbo)")
     ap.add_argument("--text-model", help="language fine-tune for the text (hybrid mode), e.g. thai-thonburian")
@@ -44,7 +48,8 @@ def main(argv: list[str] | None = None) -> None:
         type=int,
         help="maximum characters per subtitle line (default: 42, smaller for CJK/Thai)",
     )
-    ap.add_argument("-o", "--out", help="output base path (default: next to the input)")
+    ap.add_argument("-o", "--out", help="one file: output base path; several files or a folder: output folder "
+                                        "(default: next to each input)")
     ap.add_argument("--device", default="auto", help="GPU id from `babelscribe devices`, or auto")
     ap.add_argument("--bin", help="path to a whisper-cli you built yourself")
     ap.add_argument("--flavor", help="prebuilt flavour to download: vulkan | cuda | metal | cpu")
@@ -52,30 +57,42 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--version", action="version", version=__version__)
     a = ap.parse_args(argv)
 
-    if a.input == "devices":
+    if a.input == ["devices"]:
         _, _, found = api.setup(a.model, a.bin, a.flavor)
         for d in found:
             print(f"  [{d['id']}] {d['backend']:6} {d['name']}  {d.get('detail', '')}")
         print(f"auto picks device {backend.pick_device(found)}"); return
+    options = dict(
+        lang=a.lang,
+        model=a.model,
+        text_model=a.text_model,
+        accurate=a.accurate,
+        device=a.device,
+        bin=a.bin,
+        flavor=a.flavor,
+        verbose=a.verbose,
+        max_line_chars=a.max_line_chars,
+        prompt=a.prompt,
+        translate=a.translate,
+    )
+    formats = [f.strip() for f in a.formats.split(",") if f.strip()]
+    from pathlib import Path
     try:
-        api.transcribe_file(
-            src=a.input,
-            lang=a.lang,
-            model=a.model,
-            text_model=a.text_model,
-            accurate=a.accurate,
-            formats=[f.strip() for f in a.formats.split(",") if f.strip()],
-            out=a.out,
-            device=a.device,
-            bin=a.bin,
-            flavor=a.flavor,
-            verbose=a.verbose,
-            max_line_chars=a.max_line_chars,
-            prompt=a.prompt,
-            translate=a.translate,
-        )
+        if len(a.input) == 1 and not Path(a.input[0]).expanduser().is_dir():   # one file: -o is the output base path
+            api.transcribe_file(src=a.input[0], formats=formats, out=a.out, **options)
+            return
+        done = api.transcribe_many(a.input, recursive=a.recursive, out_dir=a.out, skip_existing=a.skip_existing,
+                                   formats=formats, **options)
     except FileNotFoundError as e:
         raise SystemExit(str(e))
+    if not done["total"]:
+        raise SystemExit("no audio or video files found" + ("" if a.recursive else " (use -r to look in sub-folders)"))
+    print(f"{done['succeeded']} done, {done['skipped']} skipped, {done['failed']} failed")
+    for r in done["files"]:
+        if not r["ok"]:
+            print(f"  failed: {r['path']}: {r['error']}")
+    if done["failed"]:
+        raise SystemExit(1)
 
 if __name__ == "__main__":
     main()
