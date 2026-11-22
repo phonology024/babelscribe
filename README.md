@@ -5,6 +5,7 @@
 [![PyPI](https://img.shields.io/pypi/v/babelscribe)](https://pypi.org/project/babelscribe/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![MCP server](https://img.shields.io/badge/MCP-server-blue)](#use-it-from-an-ai-app-mcp--no-terminal-needed)
+**Translations:** [తెలుగు (Telugu)](README.te.md)
 
 **babelscribe turns any audio or video file into subtitles (SRT, VTT) and text, in any of Whisper's 99 languages, on your
 own graphics card — AMD Radeon, NVIDIA, Intel Arc or Apple Silicon — or the CPU. No CUDA needed, no cloud, free (MIT).**
