@@ -52,9 +52,26 @@ jobs:
           done
           echo "::error::babelscribe $version is not on PyPI after 10 minutes. Upload it, then re-run this job."
           exit 1
+      - name: Already on the MCP Registry?
+        id: have
+        # the registry refuses a version twice; a re-run after a successful publish must not turn red
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml)
+          name=$(python3 -c "import json; print(json.load(open('server.json'))['name'])")
+          if curl -sf "https://registry.modelcontextprotocol.io/v0/servers?search=${name#*/}" | python3 -c "
+          import json, sys
+          name, version = sys.argv[1:]
+          servers = [s.get('server', s) for s in json.load(sys.stdin).get('servers', [])]
+          sys.exit(0 if any(s.get('name') == name and s.get('version') == version for s in servers) else 1)
+          " "$name" "$version"; then
+            echo "$name $version is already on the MCP Registry"
+            echo "skip=1" >> "$GITHUB_OUTPUT"
+          fi
       - name: Install mcp-publisher
+        if: steps.have.outputs.skip != '1'
         run: curl -sL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" | tar xz mcp-publisher
       - name: Publish
+        if: steps.have.outputs.skip != '1'
         run: |
           ./mcp-publisher login github-oidc
           ./mcp-publisher publish
