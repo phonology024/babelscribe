@@ -5,8 +5,8 @@
 #   linux-x64-cuda      NVIDIA (CUDA) on Linux
 #   macos-arm64-metal   Apple Silicon
 #   *-cpu               any machine without a usable GPU
-#   linux-arm64-cpu     Raspberry Pi 5, ARM servers, Docker on Apple Silicon   } built from the first release after
-#   macos-x64-cpu       Intel Macs                                             } v0.4.0. babelscribe starts using them
+#   linux-arm64-cpu     Raspberry Pi 5, ARM servers, Docker on Apple Silicon   } built by releases made after these
+#   macos-x64-cpu       Intel Macs                                             } rows were added. babelscribe starts using them
 #                       when backend.py lists them (ASSETS, and the pinned digests) for a release that has them.
 name: build-binaries
 on:
