@@ -7,6 +7,9 @@ Vulkan, NVIDIA via CUDA, Apple via Metal) or the CPU.
   babelscribe talk.mp4 --accurate              # slower, fewest errors: large-v3 + beam search, or the best fine-tune
   babelscribe talk.mp4 --prompt "Pitakpong, babelscribe"   # bias spelling of names and terms
   babelscribe mcp                              # MCP server for AI apps (Claude, Codex, Gemini CLI, ...)
+  babelscribe convert talk.json -f srt,ass --max-line-chars 20   # re-wrap / re-export from the JSON, no transcription
+  babelscribe clip.mp4 --burn --style shorts   # also write clip.subbed.mp4: the video with the captions drawn on
+  babelscribe burn clip.mp4 clip.ass           # draw an existing (edited) subtitle file onto the video
   babelscribe devices                          # list GPUs whisper.cpp can use
   babelscribe models                           # list models and fine-tunes"""
 from __future__ import annotations
@@ -39,6 +42,36 @@ def progress_bar(stream=None, width: int = 30):
     return draw
 
 
+def convert_main(argv: list[str]) -> None:
+    """babelscribe convert talk.json -f srt,ass --max-line-chars 20"""
+    from . import convert
+    ap = argparse.ArgumentParser(
+        prog="babelscribe convert",
+        description="Write subtitles again from a saved babelscribe JSON (made with -f json): another format, "
+                    "another line width, or after you corrected the text in the JSON. No model, no GPU; instant.")
+    ap.add_argument("json", nargs="+", help="babelscribe .json file(s)")
+    ap.add_argument("-f", "--formats", default="srt", help="comma list: srt,vtt,txt,json,ass (default: srt)")
+    ap.add_argument("-o", "--out", help="output base path (default: next to the JSON; one input only)")
+    ap.add_argument("--max-line-chars", type=int, help="maximum characters per subtitle line")
+    ap.add_argument("--max-lines", type=int, default=2, help="lines per subtitle (default: 2)")
+    ap.add_argument("--max-cps", type=float, help="reading speed: keep a fast subtitle up longer (e.g. 17)")
+    ap.add_argument("--min-duration", type=float, help="seconds a subtitle stays up at least (e.g. 1.0)")
+    ap.add_argument("--max-duration", type=float, help="seconds a subtitle stays up at most; longer ones are cut (e.g. 7)")
+    a = ap.parse_args(argv)
+    if a.out and len(a.json) > 1:
+        raise SystemExit("-o names one output; convert one JSON at a time with it")
+    for path in a.json:
+        try:
+            r = convert.convert_file(
+                path, [f.strip() for f in a.formats.split(",") if f.strip()], out=a.out,
+                max_line_chars=a.max_line_chars, max_lines=a.max_lines, max_cps=a.max_cps,
+                min_duration=a.min_duration, max_duration=a.max_duration)
+        except (FileNotFoundError, ValueError) as e:
+            raise SystemExit(str(e))
+        edited = f" ({r['retimed']} with edited text)" if r["retimed"] else ""
+        print(f"{r['segments']} segments{edited} -> " + ", ".join(r["files"]))
+
+
 def main(argv: list[str] | None = None) -> None:
     argv = sys.argv[1:] if argv is None else argv
     if argv[:1] == ["doctor"]:
@@ -47,6 +80,11 @@ def main(argv: list[str] | None = None) -> None:
     if argv[:1] == ["mcp"]:                          # MCP server for AI apps (stdio)
         from .mcp_server import main as serve
         return serve()
+    if argv[:1] == ["convert"]:
+        return convert_main(argv[1:])
+    if argv[:1] == ["burn"]:
+        from . import burn
+        return burn.main(argv[1:])
     if argv[:1] == ["models"]:
         print("general (99 languages):"); [print(f"  {k:16} {v}") for k, v in models.GENERAL.items()]
         print("fine-tunes (text quality for one language, use with --text-model):")
@@ -70,6 +108,12 @@ def main(argv: list[str] | None = None) -> None:
         type=int,
         help="maximum characters per subtitle line (default: 42, smaller for CJK/Thai)",
     )
+    ap.add_argument("--burn", action="store_true",
+                    help="also write NAME.subbed.mp4: the video with the subtitles drawn on it (the input is not changed)")
+    ap.add_argument("--style", default="plain", choices=("plain", "karaoke", "shorts"),
+                    help="look of --burn: plain | karaoke (each word lights up) | shorts (big, 2-3 words at a time, "
+                         "for vertical video)")
+    ap.add_argument("--font", help="font family for --burn (default: one that has the letters of the language)")
     ap.add_argument("-o", "--out", help="one file: output base path; several files or a folder: output folder "
                                         "(default: next to each input)")
     ap.add_argument("--device", default="auto", help="GPU id from `babelscribe devices`, or auto")
@@ -102,13 +146,39 @@ def main(argv: list[str] | None = None) -> None:
         options["progress"] = progress_bar()
     formats = [f.strip() for f in a.formats.split(",") if f.strip()]
     from pathlib import Path
+    if a.burn:
+        from . import burn
+        if "json" not in formats:
+            formats.append("json")       # the word timings: what the karaoke and shorts looks are drawn from
+
+    def burn_one(src, files: list[str]) -> dict:
+        saved = next(f for f in files if f.endswith(".json"))
+        return burn.burn_file(src, saved, a.style, saved[:-len(".json")] + ".subbed.mp4", a.font,
+                              progress=options.get("progress"))
+
     try:
         if len(a.input) == 1 and not Path(a.input[0]).expanduser().is_dir():   # one file: -o is the output base path
-            api.transcribe_file(src=a.input[0], formats=formats, out=a.out, **options)
+            src = Path(a.input[0]).expanduser()
+            if a.burn and src.is_file():
+                burn.video_size(src, burn.burn_ffmpeg())   # an audio file has no picture: say so before transcribing it
+            r = api.transcribe_file(src=a.input[0], formats=formats, out=a.out, **options)
+            if a.burn:
+                burn_one(src, r["files"])
             return
+        if a.burn:
+            burn.burn_ffmpeg()
         done = api.transcribe_many(a.input, recursive=a.recursive, out_dir=a.out, skip_existing=a.skip_existing,
                                    formats=formats, **options)
-    except FileNotFoundError as e:
+        if a.burn:                       # videos transcribed in this run; audio files have nothing to draw on
+            for r in done["files"]:
+                if r["ok"] and not r.get("skipped") and Path(r["path"]).suffix.lower() in burn.VIDEO:
+                    try:
+                        burn_one(r["path"], r["files"])
+                    except (Exception, SystemExit) as e:
+                        r.update(ok=False, error=f"subtitles written, but burning them in failed: {e}")
+                        done["succeeded"] -= 1
+                        done["failed"] += 1
+    except (FileNotFoundError, RuntimeError) as e:
         raise SystemExit(str(e))
     if not done["total"]:
         raise SystemExit("no audio or video files found" + ("" if a.recursive else " (use -r to look in sub-folders)"))

@@ -177,7 +177,7 @@ def test_mcp_transcribe_folder_rejects_a_file(tmp_path):
         return await srv.call_tool("transcribe_folder", {"folder": str(target)})
     with pytest.raises(Exception) as exc:
         anyio.run(go)
-    assert "not a folder" in str(exc.value.__cause__)
+    assert "not a folder" in str(exc.value), "the client only gets the text of the error itself"
 
 
 def _argv_of(monkeypatch, tmp_path, runner, *args, **kw):
