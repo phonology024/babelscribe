@@ -1,6 +1,6 @@
 # Maintainer: phonology024 <https://github.com/phonology024/babelscribe/issues>
 pkgname=babelscribe
-pkgver=0.4.0
+pkgver=0.5.0
 pkgrel=1
 pkgdesc="Transcribe audio and video into subtitles on any GPU (Vulkan/CUDA/Metal) or CPU, in 99 languages"
 arch=('any')

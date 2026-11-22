@@ -3,7 +3,7 @@ class Babelscribe < Formula
 
   desc "Transcribe audio and video into subtitles on any GPU or CPU, in 99 languages"
   homepage "https://github.com/phonology024/babelscribe"
-  url "https://files.pythonhosted.org/packages/b6/d2/81bebdb3952a83cf433dc9b11a3208e386ead33feadd70fad75e70faa6a6/babelscribe-0.4.0.tar.gz"
+  url "https://files.pythonhosted.org/packages/b6/d2/81bebdb3952a83cf433dc9b11a3208e386ead33feadd70fad75e70faa6a6/babelscribe-0.5.0.tar.gz"
   sha256 "34aff766e6fa3d6c025afd8fedefdc70aef33f523c7cc5af5053284ffc205a1e"
   license "MIT"
 

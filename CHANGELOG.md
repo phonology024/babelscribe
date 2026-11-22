@@ -7,7 +7,24 @@ section into the release's section.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-22
+
 ### Added
+- Several files or a whole folder in one command: `babelscribe a.mp4 b.mp3 talks/`, with `-r` for sub-folders and
+  `--skip-existing` to resume; `babelscribe.api.transcribe_many` in Python ([#61](https://github.com/phonology024/babelscribe/pull/61)).
+- Real progress: MCP clients get a percentage instead of a spinner, and the CLI shows a progress bar
+  (`--no-progress` to hide it) ([#64](https://github.com/phonology024/babelscribe/pull/64)).
+- `babelscribe convert talk.json -f srt,vtt,ass`: write the subtitles again from the saved JSON, with corrected
+  text, another line width or reading-speed rules (`--max-cps`, `--min-duration`, `--max-duration`), without
+  transcribing again. MCP tool `convert_subtitles` ([#66](https://github.com/phonology024/babelscribe/pull/66)).
+- `--burn` and `babelscribe burn`: the video with the subtitles drawn on it, in a `plain`, `karaoke` or `shorts`
+  look, with a font that has the letters of the language and GPU encoding where available. MCP tool
+  `burn_subtitles` ([#67](https://github.com/phonology024/babelscribe/pull/67)).
+- `--translate-to LANG` and `babelscribe translate`: subtitles in any language through an LLM running on your own
+  computer (llama-server, Ollama, LM Studio), timing kept. MCP tool `translate_subtitles` ([#70](https://github.com/phonology024/babelscribe/pull/70)).
+- Standalone Windows build: `babelscribe.exe`, no Python needed, attached to the GitHub release ([#69](https://github.com/phonology024/babelscribe/pull/69)).
+- Homebrew formula in `HomebrewFormula` ([#42](https://github.com/phonology024/babelscribe/pull/42)).
+- README in Telugu ([#71](https://github.com/phonology024/babelscribe/pull/71)).
 - MCP tool `transcribe_folder`: every audio/video file in a folder in one request, one summary back; a file that
   fails does not stop the rest ([#36](https://github.com/phonology024/babelscribe/pull/36)).
 - Docker image (CPU by default, Vulkan as a build argument), built and tested in CI and pushed to GHCR on a version
@@ -18,6 +35,14 @@ section into the release's section.
   ([#41](https://github.com/phonology024/babelscribe/pull/41)).
 - `CHANGELOG.md`, `RELEASING.md`, `tools/release.py` (one-command version bump and packaging hashes), and PyPI
   trusted publishing from the version tag ([#54](https://github.com/phonology024/babelscribe/issues/54)).
+- CI: one real transcription per OS, and before a built binary is released ([#63](https://github.com/phonology024/babelscribe/pull/63)); `whisper-cli` builds for
+  linux-arm64 and Intel macOS (the package starts using them in a later release) ([#68](https://github.com/phonology024/babelscribe/pull/68)); Python 3.9 tested on
+  ubuntu-24.04 ([#72](https://github.com/phonology024/babelscribe/pull/72)).
+
+### Changed
+- The MCP tools write a `.json` next to the subtitles by default, so `convert`, `burn` and `translate` can use it
+  later ([#66](https://github.com/phonology024/babelscribe/pull/66)).
+- The downloaded `whisper-cli` is checked against a pinned SHA-256 and comes from a pinned release ([#62](https://github.com/phonology024/babelscribe/pull/62)).
 
 ### Fixed
 - Linux arm64 and Intel macOS asked for a prebuilt `whisper-cli` that was never built and got a bare "HTTP Error 404".
