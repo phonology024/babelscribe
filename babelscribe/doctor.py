@@ -84,6 +84,7 @@ def collect_report() -> tuple[list[tuple[str, str]], str]:
         )
         if result.returncode == 0 or result.stdout or result.stderr:
             checks.append(("whisper-cli", f"Found and launched: {binary}"))
+            checks.append(("whisper-cli build", backend.binary_origin(binary)))
             try:
                 devices = backend.devices(binary)
                 if devices:

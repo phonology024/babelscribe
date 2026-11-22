@@ -5,6 +5,7 @@
 [![PyPI](https://img.shields.io/pypi/v/babelscribe)](https://pypi.org/project/babelscribe/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![MCP server](https://img.shields.io/badge/MCP-server-blue)](#use-it-from-an-ai-app-mcp--no-terminal-needed)
+**Translations:** [తెలుగు (Telugu)](README.te.md)
 
 **babelscribe turns any audio or video file into subtitles (SRT, VTT) and text, in any of Whisper's 99 languages, on your
 own graphics card — AMD Radeon, NVIDIA, Intel Arc or Apple Silicon — or the CPU. No CUDA needed, no cloud, free (MIT).**
@@ -189,6 +190,9 @@ languages are the most valuable contribution.
 ## Usage
 ```bash
 babelscribe talk.mp4 -f srt,vtt,txt,json          # all formats
+babelscribe a.mp4 b.mp3 c.wav                      # several files in one run
+babelscribe ./recordings                           # every audio/video file in a folder (-r: sub-folders too)
+babelscribe ./recordings -o ./subs --skip-existing # write into a folder; leave files that are already done
 babelscribe reel.mp4 -f ass                        # karaoke subtitles, one highlight per word
 babelscribe podcast.mp3 -l en -m large-v3          # pick language and model
 babelscribe talk.mp4 -l hi --accurate              # slower, fewest errors (best model per language)
@@ -199,11 +203,19 @@ babelscribe devices                                # GPUs whisper.cpp can see
 babelscribe models                                 # models and fine-tunes
 babelscribe talk.mp4 --bin /path/to/whisper-cli    # use your own whisper.cpp build
 ```
+With several files or a folder, a file that fails does not stop the rest: the run ends with a summary line
+(`12 done, 0 skipped, 1 failed`) and a non-zero exit code if anything failed. `-o` is then an output folder, and
+two files that would share a subtitle name (`talk.mp4` and `talk.mp3`) keep their full name.
+
 From Python:
 ```python
 from babelscribe.api import transcribe_file
 r = transcribe_file("talk.mp4", lang="auto", formats=["srt", "txt"])   # or accurate=True, prompt="names, terms"
 print(r["lang"], r["device"], r["files"]); print(r["text"][:200])
+
+from babelscribe.api import transcribe_many
+done = transcribe_many(["a.mp4", "./recordings"], recursive=True, formats=["srt"])   # other options as above
+print(done["succeeded"], done["failed"])
 ```
 Models download on first use to `~/.babelscribe/models` (`BABELSCRIBE_MODELS` to change). Hybrid fine-tunes are converted on your
 machine from their original Hugging Face repo — install `pip install "babelscribe[finetune]"` once; converted weights are never
@@ -226,7 +238,13 @@ Add one entry to `FINETUNES` in `babelscribe/models.py` (Hugging Face repo, lang
 
 ## Prebuilt binaries
 `.github/workflows/build-binaries.yml` builds `whisper-cli` + `whisper-quantize` for every row of the table above and attaches
-them to each `v*` release. Point `BABELSCRIBE_RELEASES` at another URL to self-host.
+them to each `v*` release, with a `SHA256SUMS` file.
+
+Each babelscribe version downloads the binaries of one fixed release (`BINARY_TAG` in `babelscribe/backend.py`), not
+"latest", and checks the zip's sha256 before unpacking it. A download that does not match is deleted and nothing is
+run. `babelscribe doctor` shows which release the cached binary came from and whether its files changed since.
+Point `BABELSCRIBE_RELEASES` at another URL to self-host: a mirror of the official zips is checked the same way; a
+mirror with your own builds needs `BABELSCRIBE_SKIP_VERIFY=1`.
 
 ## ภาษาไทย
 ใช้ผ่าน Claude Desktop ได้โดยไม่ต้องพิมพ์คำสั่ง: โหลด `babelscribe.mcpb` จากหน้า Releases แล้วดับเบิลคลิก จากนั้นพิมพ์ในแชทว่า *"ทำซับไทยให้คลิปล่าสุดในโฟลเดอร์ดาวน์โหลด"*
