@@ -1,0 +1,25 @@
+babelscribe standalone build: what is inside this folder
+=========================================================
+
+babelscribe itself is MIT licensed (see LICENSE). To run without Python being installed, this folder also
+contains the following software, each under its own licence:
+
+  Python runtime and standard library      PSF License            https://www.python.org
+  FFmpeg (_internal/imageio_ffmpeg)        GPL v3 or later        https://ffmpeg.org
+      The ffmpeg executable is the unmodified "essentials" build by gyan.dev (https://www.gyan.dev/ffmpeg/builds/)
+      as distributed with the imageio-ffmpeg package (https://github.com/imageio/imageio-ffmpeg).
+      Its source code is available from https://ffmpeg.org/download.html and from the gyan.dev page above.
+  imageio-ffmpeg                           BSD 2-Clause           https://github.com/imageio/imageio-ffmpeg
+  MCP Python SDK (mcp)                     MIT                    https://github.com/modelcontextprotocol/python-sdk
+  pydantic, pydantic-core                  MIT                    https://github.com/pydantic/pydantic
+  anyio                                    MIT                    https://github.com/agronholm/anyio
+  cryptography                             Apache 2.0 / BSD       https://github.com/pyca/cryptography
+  OpenSSL (libssl, libcrypto)              Apache 2.0             https://www.openssl.org
+  starlette, uvicorn (BSD 3-Clause), httpx, and the other Python packages in _internal: see each package's *.dist-info folder.
+
+Downloaded on first use, not included here:
+  whisper.cpp (whisper-cli)                MIT                    https://github.com/ggml-org/whisper.cpp
+  Whisper speech models                    MIT (OpenAI)           https://github.com/openai/whisper
+
+The executables were packaged with PyInstaller (https://pyinstaller.org), whose bootloader licence allows this.
+They are not code-signed, so Windows may show an "unknown publisher" notice the first time.

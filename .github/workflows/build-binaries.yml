@@ -5,6 +5,9 @@
 #   linux-x64-cuda      NVIDIA (CUDA) on Linux
 #   macos-arm64-metal   Apple Silicon
 #   *-cpu               any machine without a usable GPU
+#   linux-arm64-cpu     Raspberry Pi 5, ARM servers, Docker on Apple Silicon   } built by releases made after these
+#   macos-x64-cpu       Intel Macs                                             } rows were added. babelscribe starts using them
+#                       when backend.py lists them (ASSETS, and the pinned digests) for a release that has them.
 name: build-binaries
 on:
   push:
@@ -27,7 +30,14 @@ jobs:
           - { os: ubuntu-22.04,   name: linux-x64-vulkan,   cmake: "-DGGML_VULKAN=ON" }
           - { os: ubuntu-22.04,   name: linux-x64-cuda,     cmake: "-DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES='61;70;75;80;86;89;90'", container: "nvidia/cuda:12.6.3-devel-ubuntu22.04" }
           - { os: ubuntu-22.04,   name: linux-x64-cpu,      cmake: "" }
-          - { os: macos-14,       name: macos-arm64-metal,  cmake: "-DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON" }
+          # arm64 Linux: Raspberry Pi 5, ARM servers, Docker on Apple Silicon. GGML_NATIVE=OFF for the same reason
+          # as on x64: a native build targets the CI machine's CPU (Neoverse) and can crash on a Cortex-A76.
+          - { os: ubuntu-22.04-arm, name: linux-arm64-cpu,  cmake: "-DGGML_NATIVE=OFF" }
+          # Intel Macs. CPU only (Accelerate); the x64 portable flags below apply to it as well.
+          - { os: macos-15-intel, name: macos-x64-cpu,      cmake: "-DGGML_METAL=OFF -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0" }
+          # macos-14 runners are retired ("configuration is not supported"); the deployment target keeps the
+          # binary usable on macOS 14, which is what the macos-14 build required.
+          - { os: macos-15,       name: macos-arm64-metal,  cmake: "-DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0" }
     runs-on: ${{ matrix.os }}
     container: ${{ matrix.container }}
     steps:
@@ -62,6 +72,26 @@ jobs:
           cp whisper.cpp/LICENSE pkg/LICENSE-whisper.cpp
           cd pkg && 7z a ../whisper-cli-${{ matrix.name }}.zip . >/dev/null 2>&1 || zip -r ../whisper-cli-${{ matrix.name }}.zip .
 
+      # A binary that cannot transcribe must not reach a release: run the freshly built whisper-cli on a real
+      # file before it is uploaded. Not the CUDA build: it cannot start without an NVIDIA driver, and the
+      # runners have none.
+      - uses: actions/checkout@v4
+        if: ${{ !contains(matrix.name, 'cuda') }}
+        with: { path: babelscribe-src }
+      - uses: actions/setup-python@v5
+        if: ${{ !contains(matrix.name, 'cuda') }}
+        with: { python-version: "3.12" }
+      - name: Transcribe a real file with this build
+        if: ${{ !contains(matrix.name, 'cuda') }}
+        shell: bash
+        env:
+          BABELSCRIBE_HOME: ${{ runner.temp }}/babelscribe-home
+          PYTHONUTF8: "1"
+        run: |
+          pip install -q ./babelscribe-src
+          exe=pkg/whisper-cli; [ -f pkg/whisper-cli.exe ] && exe=pkg/whisper-cli.exe
+          python babelscribe-src/tests/smoke/real_transcription.py whisper.cpp/samples/jfk.wav --bin "$exe" --no-mcp
+
       - uses: actions/upload-artifact@v4
         with: { name: "whisper-cli-${{ matrix.name }}", path: "whisper-cli-${{ matrix.name }}.zip" }
 
@@ -77,5 +107,8 @@ jobs:
         with: { path: dist, merge-multiple: true }
       - name: Claude Desktop extension (.mcpb)
         run: npx -y @anthropic-ai/mcpb pack mcpb dist/babelscribe.mcpb
+      # The digests babelscribe/backend.py pins (SHA256) are copied from this file when BINARY_TAG moves here.
+      - name: SHA256SUMS
+        run: cd dist && sha256sum *.zip > SHA256SUMS && cat SHA256SUMS
       - uses: softprops/action-gh-release@v2
-        with: { files: "dist/*.zip\ndist/babelscribe.mcpb" }
+        with: { files: "dist/*.zip\ndist/babelscribe.mcpb\ndist/SHA256SUMS" }
