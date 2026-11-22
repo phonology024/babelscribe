@@ -25,3 +25,6 @@ Run `babelscribe devices` and transcribe one file, then open an issue with your 
 
 ## 3. Code
 `pip install -e .` then `python -m pytest`. Keep changes small, match the surrounding style, and say in the PR how you tested.
+
+If your change is something a user would notice, add one line under **Unreleased** in [CHANGELOG.md](CHANGELOG.md).
+Releases are the maintainer's job; the steps are in [RELEASING.md](RELEASING.md).

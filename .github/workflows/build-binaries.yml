@@ -77,5 +77,8 @@ jobs:
         with: { path: dist, merge-multiple: true }
       - name: Claude Desktop extension (.mcpb)
         run: npx -y @anthropic-ai/mcpb pack mcpb dist/babelscribe.mcpb
+      # The digests babelscribe/backend.py pins (SHA256) are copied from this file when BINARY_TAG moves here.
+      - name: SHA256SUMS
+        run: cd dist && sha256sum *.zip > SHA256SUMS && cat SHA256SUMS
       - uses: softprops/action-gh-release@v2
-        with: { files: "dist/*.zip\ndist/babelscribe.mcpb" }
+        with: { files: "dist/*.zip\ndist/babelscribe.mcpb\ndist/SHA256SUMS" }
