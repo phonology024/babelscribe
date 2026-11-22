@@ -3,9 +3,16 @@ on: [push, pull_request]
 jobs:
   test:
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         python: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        # ubuntu-latest is 26.04 now and setup-python has no 3.9 build for it;
+        # keep testing 3.9 (requires-python >=3.9) on 24.04.
+        exclude:
+          - { os: ubuntu-latest, python: "3.9" }
+        include:
+          - { os: ubuntu-24.04, python: "3.9" }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
