@@ -14,7 +14,7 @@ optdepends=(
   'python-pythainlp: Thai word boundaries in hybrid mode'
 )
 source=("$pkgname-$pkgver.tar.gz::https://files.pythonhosted.org/packages/source/b/$pkgname/$pkgname-$pkgver.tar.gz")
-sha256sums=('34aff766e6fa3d6c025afd8fedefdc70aef33f523c7cc5af5053284ffc205a1e')
+sha256sums=('9e204629f3a447302fab7b4fcfbeb888bf0afc10d2cf203237e7fc3ac44454d7')
 
 build() {
   cd "$srcdir/$pkgname-$pkgver"

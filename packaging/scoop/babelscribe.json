@@ -9,8 +9,8 @@
         "babelscribe --help    for languages, formats and accurate mode."
     ],
     "depends": "python",
-    "url": "https://files.pythonhosted.org/packages/4f/c9/9320d50c6bc123baf0b96bd76749050598e32c13018eb2267fec5077a3e6/babelscribe-0.5.0-py3-none-any.whl",
-    "hash": "01fcdd2a1d6303153117f82ed2ae32097d34619549d0a568cc81c15bb4c7aaff",
+    "url": "https://files.pythonhosted.org/packages/8c/c9/e5ec82c2464f0941d3afa1ecc2f980e5075392f1c96321a2f742c0b00e36/babelscribe-0.5.0-py3-none-any.whl",
+    "hash": "c005e9b47f8abc1f912728a67531909319279d4a2e779dc9b23c89da53f6e48a",
     "installer": {
         "script": [
             "Push-Location \"$dir\"",
