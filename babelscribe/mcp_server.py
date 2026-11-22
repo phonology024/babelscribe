@@ -72,7 +72,8 @@ def build():
         "this computer: if the user only names or describes a file, call find_media first. Subtitles (.srt) and text "
         "(.txt) are written next to the media file unless output_dir is given, plus a .json with the word timings: "
         "to fix names or change the line width afterwards, edit the text in that .json and call convert_subtitles "
-        "instead of transcribing again. Use accurate=true when the user wants "
+        "instead of transcribing again. burn_subtitles draws the subtitles onto a copy of a video (for TikTok, Reels, "
+        "Shorts). Use accurate=true when the user wants "
         "the fewest mistakes (slower); it is much better for Thai and Hindi. The first run downloads the model "
         "(~1.6 GB), so it can take a few minutes. After transcribing you can proofread names, translate, or "
         "summarise from the returned text."))
@@ -213,6 +214,30 @@ def build():
         out = Path(output_dir).expanduser() / src.with_suffix("").name if output_dir else None
         return _no_exit(lambda: convert.convert_file(
             src, [f.strip() for f in formats.split(",") if f.strip()], out=out, max_line_chars=max_line_chars or None))
+
+    # burn_subtitles writes one new video file next to the input (or at output_path); the input is only read
+    @srv.tool(title="Burn subtitles into a video", annotations=ToolAnnotations(
+        read_only_hint=False, destructive_hint=False, idempotent_hint=True, open_world_hint=False))
+    async def burn_subtitles(video_path: str, subtitle_path: str = "", style: str = "plain", output_path: str = "",
+                             ctx: Context | None = None) -> dict:
+        """Draw subtitles onto a copy of a video (NAME.subbed.mp4), for posting where a separate subtitle file
+        is not possible (TikTok, Reels, Shorts). The input video is never changed; audio is copied.
+
+        video_path: absolute path to the video.
+        subtitle_path: the .json written by transcribe (best: any style works, and text edited in it is used),
+            or an .ass (drawn exactly as written), or an .srt / .vtt (plain only). Empty = the subtitle file
+            next to the video; transcribe the video first if there is none.
+        style: plain (white text at the bottom) | karaoke (each word lights up as it is spoken) | shorts (big,
+            two or three words at a time, placed for vertical video).
+        output_path: the video to write; empty = NAME.subbed.mp4 next to the input.
+        Returns the file written, the style, the subtitle file used, the encoder and the picture size."""
+        from . import burn
+        result = await _run(ctx, lambda log, pct: burn.burn_file(
+            video_path, subtitle_path or None, style, output_path or None, log=log, progress=pct))
+        if isinstance(result, BaseException):
+            raise _tool_error(result) from None
+        await _report_progress(ctx, 100, 100, "done")
+        return result
 
     @srv.tool(title="Find audio/video files", annotations=ToolAnnotations(read_only_hint=True, open_world_hint=False))
     def find_media(name_contains: str = "", folder: str = "", limit: int = 15) -> list[dict]:

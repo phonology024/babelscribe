@@ -38,7 +38,8 @@ my Downloads"* — and the app finds the file, transcribes it, writes `.srt` / `
 translate or summarise the text for you.
 
 Tools: `transcribe` (file → subtitles + text), `transcribe_folder` (every audio/video in a folder, one summary
-back), `convert_subtitles` (re-wrap or re-export from the saved JSON, no transcription), `find_media` (newest audio/video in Downloads, Videos, Desktop, …), `list_devices`,
+back), `convert_subtitles` (re-wrap or re-export from the saved JSON, no transcription), `burn_subtitles` (the video with
+the subtitles drawn on it), `find_media` (newest audio/video in Downloads, Videos, Desktop, …), `list_devices`,
 `list_languages_and_models`.
 
 `transcribe_folder` goes on after a file fails and lists the failure in the summary. Subtitles land next to each
@@ -197,6 +198,7 @@ babelscribe vo.wav -l th --text-model thai-thonburian   # hybrid: pick a Thai fi
 babelscribe talk.mp4 --prompt "Pitakpong, babelscribe"   # bias the spelling of names and terms
 babelscribe talk.mp4 --translate                   # subtitles translated to English
 babelscribe convert talk.json -f srt,ass --max-line-chars 20   # re-wrap / re-export, no transcription
+babelscribe clip.mp4 --burn --style shorts         # also clip.subbed.mp4: the video with the captions drawn on
 babelscribe devices                                # GPUs whisper.cpp can see
 babelscribe models                                 # models and fine-tunes
 babelscribe talk.mp4 --bin /path/to/whisper-cli    # use your own whisper.cpp build
@@ -216,6 +218,29 @@ babelscribe convert talk.json -f srt,vtt,ass     # every format gets the correct
 for: `--max-duration 7` (cut subtitles that stay up longer), `--min-duration 1` and `--max-cps 17` (keep short or
 fast subtitles up longer, never into the next one). In MCP it is the `convert_subtitles` tool, which is why the
 MCP tools now write a `.json` by default.
+
+**Burn the subtitles into the video.** For TikTok, Reels and Shorts the result you post is the video with the
+captions on it, not an `.srt`:
+```bash
+babelscribe clip.mp4 --burn                   # clip.subbed.mp4, white subtitles at the bottom
+babelscribe clip.mp4 --burn --style karaoke   # each word lights up as it is spoken
+babelscribe clip.mp4 --burn --style shorts    # big, two or three words at a time, placed for vertical video
+babelscribe burn clip.mp4                     # again from the saved clip.json (after fixing words, or another style)
+babelscribe burn clip.mp4 clip.ass            # an .ass you styled yourself is drawn exactly as it is
+```
+| `babelscribe jfk.mp4 --burn --style karaoke` | `babelscribe clip.mp4 -l th --burn --style shorts` |
+|---|---|
+| ![English clip with karaoke subtitles](https://raw.githubusercontent.com/phonology024/babelscribe/main/docs/img/burn-karaoke-en.jpg) | ![Vertical Thai clip with shorts captions](https://raw.githubusercontent.com/phonology024/babelscribe/main/docs/img/burn-shorts-th.jpg) |
+
+Frames from real runs (speech: JFK's 1961 inaugural address, public domain; a Thai sentence from Google FLEURS, CC BY 4.0).
+
+The input video is never changed and its audio is copied as it is. Text size and position follow the picture
+(a phone video counts as vertical), and the font is one that has the letters of the language: Thai, Japanese,
+Chinese, Korean, Arabic and Devanagari are looked up among the fonts on your computer, and if none has them
+babelscribe says which to install instead of drawing empty boxes (`--font "Name"` to choose yourself). The video is
+encoded on the GPU when it can be (NVIDIA, AMD, Intel, Apple), otherwise with x264. An `.srt` or `.vtt` can be
+burned too, plain only, since it has no word timings. For Thai in the shorts look, `pip install "babelscribe[thai]"`
+keeps words whole. In MCP it is the `burn_subtitles` tool.
 
 From Python:
 ```python

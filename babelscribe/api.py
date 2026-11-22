@@ -24,7 +24,9 @@ def collect_media(inputs: list[str | Path], recursive: bool = False) -> list[tup
         p = Path(item).expanduser()
         if p.is_dir():
             found = p.rglob("*") if recursive else p.glob("*")
-            for f in sorted(f for f in found if f.is_file() and f.suffix.lower() in MEDIA):
+            # NAME.subbed.mp4 is what --burn writes: a second run on the folder must not subtitle it again
+            for f in sorted(f for f in found if f.is_file() and f.suffix.lower() in MEDIA
+                            and not f.stem.lower().endswith(".subbed")):
                 seen.setdefault(f, p)
         elif p.is_file():
             seen.setdefault(p, p.parent)
