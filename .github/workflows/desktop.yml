@@ -52,7 +52,9 @@ jobs:
 
       - name: Build the engine (the standalone babelscribe.exe, as in build-standalone.yml)
         run: |
-          pip install . pyinstaller==6.22.3
+          # cryptography (needed by the mcp SDK) only from a prebuilt wheel: built from source on an Intel Mac it links the
+          # Homebrew OpenSSL dynamically and breaks against the older libssl that Python brings (babelscribe-mcp failed to start)
+          pip install --only-binary=cryptography . pyinstaller==6.22.3
           pyinstaller --noconfirm --distpath dist --workpath build packaging/standalone/babelscribe.spec
           mkdir -p desktop/src-tauri/binaries desktop/src-tauri/engine
           cp dist/babelscribe/babelscribe.exe desktop/src-tauri/binaries/babelscribe-engine-x86_64-pc-windows-msvc.exe
@@ -165,7 +167,9 @@ jobs:
 
       - name: Build the engine (PyInstaller, the same recipe as Windows)
         run: |
-          pip install . pyinstaller==6.22.3
+          # cryptography (needed by the mcp SDK) only from a prebuilt wheel: built from source on an Intel Mac it links the
+          # Homebrew OpenSSL dynamically and breaks against the older libssl that Python brings (babelscribe-mcp failed to start)
+          pip install --only-binary=cryptography . pyinstaller==6.22.3
           pyinstaller --noconfirm --distpath dist --workpath build packaging/standalone/babelscribe.spec
           mkdir -p desktop/src-tauri/engine
           cp dist/babelscribe/babelscribe desktop/src-tauri/engine/babelscribe-engine
@@ -269,7 +273,9 @@ jobs:
 
       - name: Build the engine (PyInstaller, the same recipe as Windows)
         run: |
-          pip install . pyinstaller==6.22.3
+          # cryptography (needed by the mcp SDK) only from a prebuilt wheel: built from source on an Intel Mac it links the
+          # Homebrew OpenSSL dynamically and breaks against the older libssl that Python brings (babelscribe-mcp failed to start)
+          pip install --only-binary=cryptography . pyinstaller==6.22.3
           pyinstaller --noconfirm --distpath dist --workpath build packaging/standalone/babelscribe.spec
           mkdir -p desktop/src-tauri/engine
           cp dist/babelscribe/babelscribe desktop/src-tauri/engine/babelscribe-engine
