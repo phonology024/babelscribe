@@ -11,6 +11,7 @@ import platform
 import re
 import shutil
 import subprocess
+import sys
 import urllib.error
 import urllib.request
 import zipfile
@@ -60,10 +61,32 @@ ASSETS = {
 }
 
 
+def vulkan_loader_missing() -> bool:
+    """Linux: is the Vulkan loader (libvulkan.so.1, package libvulkan1) not installed? The Vulkan build of whisper-cli
+    cannot even start without it, GPU or no GPU. Windows ships the loader with every graphics driver, macOS uses Metal."""
+    if platform.system() != "Linux":
+        return False
+    import ctypes
+    try:
+        ctypes.CDLL("libvulkan.so.1")
+    except OSError:
+        return True
+    return False
+
+
+NO_VULKAN = ("babelscribe: this computer has no Vulkan library (libvulkan1), which the GPU build of whisper-cli needs, "
+             "so the CPU build is used (slower). For the GPU: install libvulkan1 (sudo apt install libvulkan1) and "
+             "run babelscribe again.")
+
+
 def asset_name(flavor: str | None = None) -> str:
     system = {"Windows": "windows", "Linux": "linux", "Darwin": "macos"}[platform.system()]
     arch = "arm64" if platform.machine().lower() in ("arm64", "aarch64") else "x64"
-    # Apple Silicon: Metal. Intel Macs: CPU only (Accelerate), the only build for them. Windows and Linux: Vulkan.
+    # Apple Silicon: Metal. Intel Macs: CPU only (Accelerate), the only build for them. Windows and Linux: Vulkan,
+    # except on a Linux without the Vulkan library, where only the CPU build can run. A flavour asked for is kept.
+    if flavor is None and system == "linux" and vulkan_loader_missing():
+        flavor = "cpu"
+        print(NO_VULKAN, file=sys.stderr)
     flavor = flavor or (("metal" if arch == "arm64" else "cpu") if system == "macos" else "vulkan")
     # A self-hosted mirror (BABELSCRIBE_RELEASES) may carry builds this project does not publish, so only the
     # default URL is checked against the table; a mirror is asked for the composed name as before.
@@ -78,11 +101,24 @@ def asset_name(flavor: str | None = None) -> str:
     return f"whisper-cli-{system}-{arch}-{flavor}.zip"
 
 
+def _cached_order(flavor: str | None) -> list[Path]:
+    """The whisper-cli builds in the cache, best first: the flavour asked for; else, on a Linux that can run Vulkan, the
+    Vulkan build (a CPU build kept from a time it could not must not stay the choice for good); else by name."""
+    found = sorted((CACHE / "bin").rglob(EXE)) if (CACHE / "bin").exists() else []
+    if flavor:
+        want = flavor
+    elif platform.system() == "Linux" and not vulkan_loader_missing():
+        want = "vulkan"
+    else:
+        return found
+    return sorted(found, key=lambda path: not path.parent.name.endswith("-" + want))   # stable: ties keep name order
+
+
 def find_binary(explicit: str | None = None, flavor: str | None = None, download: bool = True) -> Path:
     for cand in (explicit, os.environ.get("BABELSCRIBE_WHISPER_BIN")):
         if cand and Path(cand).is_file():
             return Path(cand)
-    cached = next(iter(sorted((CACHE / "bin").rglob(EXE))), None) if (CACHE / "bin").exists() else None
+    cached = next(iter(_cached_order(flavor)), None)
     if cached:
         return cached
     on_path = shutil.which("whisper-cli")
@@ -187,6 +223,16 @@ def probe_or_refetch(binary: Path, model: Path, flavor: str | None = None) -> tu
     """Probe devices; a cached binary that crashes with 'illegal instruction' is deleted and downloaded again once."""
     try:
         return binary, probe_devices(binary, model)
+    except MissingLibrary as e:
+        in_cache = (CACHE / "bin").resolve() in binary.resolve().parents
+        vulkan = str(e).startswith("libvulkan")
+        if not (vulkan and in_cache and flavor is None):          # your own build, or a flavour you asked for
+            raise SystemExit(f"{binary} cannot start: {e} is not installed on this computer"
+                             + (" (Linux: sudo apt install libvulkan1, or use --flavor cpu)." if vulkan else "."))
+        shutil.rmtree(binary.parent)                              # the Vulkan build we cannot run
+        print(NO_VULKAN, file=sys.stderr)
+        binary = fetch_binary("cpu")
+        return binary, probe_devices(binary, model)
     except IllegalInstruction:
         cache = (CACHE / "bin").resolve()
         if cache not in binary.resolve().parents:
@@ -210,6 +256,10 @@ def devices(binary: Path) -> list[dict]:
     return found
 
 
+class MissingLibrary(RuntimeError):
+    """whisper-cli could not start because a shared library is not installed (the message names it)."""
+
+
 class IllegalInstruction(RuntimeError):
     """The binary was compiled for CPU features this machine lacks (e.g. an old AVX-512 build)."""
 
@@ -226,6 +276,9 @@ def probe_devices(binary: Path, model: Path) -> list[dict]:
     if out.returncode in (0xC000001D, -4, 132):   # Windows STATUS_ILLEGAL_INSTRUCTION / SIGILL
         raise IllegalInstruction(str(binary))
     text = out.stdout + out.stderr
+    gone = re.search(r"error while loading shared libraries: (\S+): cannot open shared object file", text)
+    if gone:
+        raise MissingLibrary(gone.group(1))
     found = [{"backend": m.group(1), "id": int(m.group(2)), "name": m.group(3).strip(), "detail": m.group(4).strip()}
              for m in re.finditer(r"ggml_(vulkan|cuda|metal): *(\d+) = ([^|\n]+)\|?([^\n]*)", text)]
     if not found and "Metal" in text:

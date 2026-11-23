@@ -4,7 +4,8 @@
 #   macos    a .dmg for Apple Silicon (Metal) and one for Intel (CPU); ad-hoc signed, no Apple Developer account
 #   linux    an .AppImage and a .deb (x64)
 # Every job does the same: build the engine, build the app, install it, run one real transcription through the
-# INSTALLED engine, start the app and check it stays up, and check that closing it leaves nothing running.
+# INSTALLED engine, start the app and check it stays up, check that closing it leaves nothing running, and that
+# killing it outright does not either (the engine ends itself and whisper-cli when the app is gone).
 name: desktop
 on:
   push:
@@ -81,6 +82,14 @@ jobs:
         run: |
           curl -sSfL -o jfk.wav https://github.com/ggml-org/whisper.cpp/raw/v1.9.4/samples/jfk.wav
           python desktop/scripts/check_engine.py "$LOCALAPPDATA/babelscribe/babelscribe-engine.exe" jfk.wav
+
+      - name: Killing the app leaves nothing running (the engine ends itself, and whisper-cli with it)
+        env:
+          BABELSCRIBE_HOME: ${{ runner.temp }}/babelscribe-home
+        run: |
+          pip install psutil
+          python desktop/scripts/long_wav.py jfk.wav long.wav 60
+          python desktop/scripts/check_orphans.py "$LOCALAPPDATA/babelscribe/babelscribe-engine.exe" long.wav cpu
 
       - name: The installed app starts and keeps running
         shell: pwsh
@@ -191,6 +200,13 @@ jobs:
           cargo test --release --manifest-path desktop/src-tauri/Cargo.toml -- --nocapture --test-threads=1 2>&1 | tee cargo-test.log
           grep -q "real-engine test: ran, nothing left" cargo-test.log
 
+      - name: Killing the app leaves nothing running (the engine ends itself, and whisper-cli with it)
+        env:
+          BABELSCRIBE_HOME: ${{ runner.temp }}/babelscribe-home
+        run: |
+          pip install psutil
+          python desktop/scripts/check_orphans.py "${{ steps.install.outputs.engine }}" long.wav ${{ matrix.flavor }}
+
       - name: The installed app starts and keeps running; Quit ends it and leaves nothing behind
         env:
           SHOT: out/launch-macos.png
@@ -287,10 +303,17 @@ jobs:
           cargo test --release --manifest-path desktop/src-tauri/Cargo.toml -- --nocapture --test-threads=1 2>&1 | tee cargo-test.log
           grep -q "real-engine test: ran, nothing left" cargo-test.log
 
+      - name: Killing the app leaves nothing running (the engine ends itself, and whisper-cli with it)
+        env:
+          BABELSCRIBE_HOME: ${{ runner.temp }}/babelscribe-home
+        run: |
+          pip install psutil
+          python desktop/scripts/check_orphans.py "${{ steps.install.outputs.engine }}" long.wav cpu
+
       - name: The installed app (.deb) starts under Xvfb and keeps running; closing its window ends it
         env:
           SHOT: out/launch-deb.png
-        run: desktop/scripts/check_install.sh launch-linux babelscribe
+        run: desktop/scripts/check_install.sh launch-linux babelscribe-desktop
 
       - name: The AppImage starts and keeps running; closing its window ends it
         env:

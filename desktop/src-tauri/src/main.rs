@@ -30,6 +30,11 @@ use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 #[cfg(windows)]
 use tauri_plugin_shell::ShellExt;
 
+/// Added to every run: the engine watches its standard input, which the app holds open and never writes to, and
+/// ends itself, whisper-cli and ffmpeg when it is closed. That happens when the app ends in any way, also when it is
+/// killed or crashes and gets no chance to clean up (Windows, macOS and Linux alike).
+const EXIT_WITH_APP: &str = "--exit-when-stdin-closes";
+
 /// What stops a running engine: its sidecar handle on Windows, its process group on macOS and Linux.
 #[cfg(windows)]
 type Running = CommandChild;
@@ -67,6 +72,8 @@ fn run_engine(app: AppHandle, engine: State<'_, Engine>, args: Vec<String>, on_e
     }
     // The slot stays locked until the run is in it: an engine that ends at once must find its own entry to clear.
     let run = engine.runs.fetch_add(1, Ordering::SeqCst) + 1;
+    let mut args = args;
+    args.push(EXIT_WITH_APP.to_string());
     let running = start_engine(&app, args, on_event, run)?;
     *slot = Some((run, running));
     Ok(())
@@ -153,7 +160,8 @@ fn forward<R: std::io::Read + Send + 'static>(
 }
 
 /// Starts the engine with its output piped, as the leader of a new process group: signalling the group reaches
-/// whisper-cli and ffmpeg too. The group's id is the child's pid.
+/// whisper-cli and ffmpeg too. The group's id is the child's pid. Its standard input is a pipe: whoever holds the
+/// write end (`Child::stdin`) keeps the engine alive, and when that is gone the engine ends (EXIT_WITH_APP).
 #[cfg(unix)]
 fn spawn_in_own_group(exe: &Path, args: &[String]) -> std::io::Result<std::process::Child> {
     use std::os::unix::process::CommandExt;
@@ -162,7 +170,7 @@ fn spawn_in_own_group(exe: &Path, args: &[String]) -> std::io::Result<std::proce
     let mut command = Command::new(exe);
     command
         .args(args)
-        .stdin(Stdio::null())
+        .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .process_group(0);
@@ -179,11 +187,13 @@ fn start_engine(app: &AppHandle, args: Vec<String>, on_event: Channel<EngineMess
     let exe = engine_path(app)?;
     let mut child = spawn_in_own_group(&exe, &args).map_err(|e| format!("could not start {}: {e}", exe.display()))?;
     let pgid = child.id() as i32;
+    let stdin = child.stdin.take(); // kept open, never written to, until the engine has ended
     let out = forward(child.stdout.take(), on_event.clone(), |line| EngineMessage::Stdout { line });
     let err = forward(child.stderr.take(), on_event.clone(), |line| EngineMessage::Stderr { line });
 
     let app = app.clone();
     std::thread::spawn(move || {
+        let _held_open = stdin;
         let status = child.wait();
         // The engine is gone; anything of its group still running (a whisper-cli it did not wait for) goes with it.
         signal_group(pgid, libc::SIGKILL);
@@ -333,7 +343,19 @@ fn set_theme(window: WebviewWindow, theme: Option<String>) -> Result<(), String>
     window.set_theme(theme).map_err(|e| e.to_string())
 }
 
+/// Sets `key` to `value` unless the user has set it: what they chose wins.
+#[cfg(any(target_os = "linux", test))]
+fn set_default_env(key: &str, value: &str) {
+    if std::env::var_os(key).is_none() {
+        std::env::set_var(key, value);
+    }
+}
+
 fn main() {
+    // WebKitGTK's DMA-BUF renderer leaves the window blank on some systems (NVIDIA drivers among them). Turning it
+    // off costs nothing visible here, and it has to be set before the web view starts.
+    #[cfg(target_os = "linux")]
+    set_default_env("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
@@ -452,7 +474,7 @@ mod tests {
         // BABELSCRIBE_TEST_FLAVOR: the whisper-cli flavour (default cpu; "default" leaves it to the engine, as on
         // Apple Silicon, which has only a Metal build).
         let flavor = std::env::var("BABELSCRIBE_TEST_FLAVOR").unwrap_or_else(|_| "cpu".to_string());
-        let mut args: Vec<String> = [wav.as_str(), "-m", "tiny", "-l", "en", "-f", "txt", "--progress-json"]
+        let mut args: Vec<String> = [wav.as_str(), "-m", "tiny", "-l", "en", "-f", "txt", "--progress-json", EXIT_WITH_APP]
             .iter()
             .map(|a| a.to_string())
             .collect();
@@ -481,6 +503,18 @@ mod tests {
         let left = group_members(pgid);
         assert!(left.is_empty(), "left running after stopping: {left:?}");
         println!("real-engine test: ran, nothing left");
+    }
+
+    #[test]
+    fn a_setting_the_user_made_is_not_overwritten() {
+        // single-threaded in CI (--test-threads=1): nothing else reads the environment while it changes
+        std::env::remove_var("BABELSCRIBE_TEST_DEFAULT_ENV");
+        set_default_env("BABELSCRIBE_TEST_DEFAULT_ENV", "1");
+        assert_eq!(std::env::var("BABELSCRIBE_TEST_DEFAULT_ENV").as_deref(), Ok("1"));
+        std::env::set_var("BABELSCRIBE_TEST_DEFAULT_ENV", "0");
+        set_default_env("BABELSCRIBE_TEST_DEFAULT_ENV", "1");
+        assert_eq!(std::env::var("BABELSCRIBE_TEST_DEFAULT_ENV").as_deref(), Ok("0"));
+        std::env::remove_var("BABELSCRIBE_TEST_DEFAULT_ENV");
     }
 
     #[test]

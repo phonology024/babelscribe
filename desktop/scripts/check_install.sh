@@ -70,10 +70,12 @@ case "$step" in
     dpkg -L babelscribe | head -40
     engine="$(dpkg -L babelscribe | grep '/engine/babelscribe-engine$')"
     [[ -n "$engine" ]] || fail "the package has no engine"
-    need /usr/bin/babelscribe
-    need /usr/share/applications/babelscribe.desktop
+    # not /usr/bin/babelscribe: that name is the command line (pip), which an app must not shadow on the PATH
+    need /usr/bin/babelscribe-desktop
+    [[ -n "$(dpkg -L babelscribe | grep '^/usr/share/applications/.*[.]desktop$')" ]] || fail "no .desktop file"
+    ok "an application menu entry"
     installed_engine_checks "$engine" "$(dirname "$(dirname "$engine")")"
-    missing="$(ldd /usr/bin/babelscribe | grep 'not found' || true)"
+    missing="$(ldd /usr/bin/babelscribe-desktop | grep 'not found' || true)"
     [[ -z "$missing" ]] || fail "the app needs libraries that are not installed: $missing"
     ok "every library the app needs is installed"
     ;;

@@ -12,6 +12,13 @@ section into the release's section.
   that drive the command line, such as the desktop app (`desktop/`, Windows, first version; see `docs/desktop-app.md`).
 - The desktop app (`desktop/`) also builds for macOS (a `.dmg` for Apple Silicon and one for Intel, ad-hoc signed) and
   Linux (an `.AppImage` and a `.deb`), and stopping it ends whisper-cli and ffmpeg there too (`docs/desktop-app.md`).
+- `--exit-when-stdin-closes`: for a program that keeps babelscribe's standard input open; when that program ends in any
+  way, babelscribe stops whisper-cli and ffmpeg and exits. The desktop app uses it, so killing the app (or a crash) leaves
+  nothing running on the GPU.
+- Linux without the Vulkan library (`libvulkan1`, e.g. an AppImage on a minimal install): babelscribe says so once and
+  downloads the CPU build of whisper-cli instead of failing with "error while loading shared libraries". A cached CPU
+  build no longer outranks the Vulkan build once the library is installed, and a cached build of the flavour named with
+  `--flavor` is preferred.
 - Intel Macs: `babelscribe` downloads the CPU build of whisper-cli (`whisper-cli-macos-x64-cpu`, from release v0.5.0, with
   a pinned checksum) instead of failing with "no prebuilt whisper-cli". Every other platform keeps the v0.4.0 builds.
 

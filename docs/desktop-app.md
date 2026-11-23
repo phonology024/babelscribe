@@ -45,12 +45,16 @@ and open it again: `xattr -dr com.apple.quarantine /Applications/babelscribe.app
 `babelscribe-linux-x64.AppImage` runs on Ubuntu 22.04 or newer (and most distributions of the same age or newer): make
 it executable (`chmod +x`) and run it. It needs FUSE 2 (`sudo apt install libfuse2` on Ubuntu 22.04 and 24.04); without
 it, `APPIMAGE_EXTRACT_AND_RUN=1 ./babelscribe-linux-x64.AppImage` works. `babelscribe-linux-x64.deb` installs with
-`sudo apt install ./babelscribe-linux-x64.deb` and puts babelscribe in the application menu.
+`sudo apt install ./babelscribe-linux-x64.deb` and puts babelscribe in the application menu. The program is called
+`babelscribe-desktop`, so it does not take the place of the `babelscribe` command line if you installed that with pip.
 
-The first run downloads the Vulkan build of whisper-cli (AMD, NVIDIA and Intel GPUs through the Vulkan driver, which
-Ubuntu installs with its graphics drivers: `libvulkan1`; the `.deb` depends on it). With no GPU driver it still runs on
-the CPU. The window uses WebKitGTK; if its window stays blank on an NVIDIA system, start the app with
-`WEBKIT_DISABLE_DMABUF_RENDERER=1`.
+The first run downloads the Vulkan build of whisper-cli (AMD, NVIDIA and Intel GPUs through the Vulkan driver). It
+needs the Vulkan library, `libvulkan1`, which Ubuntu installs with its graphics drivers and the `.deb` depends on. On a
+system without it (an AppImage on a minimal install) babelscribe says so once and uses the CPU build instead; install
+`libvulkan1` and run it again to get the GPU. With no GPU driver the Vulkan build runs on the CPU.
+
+The window uses WebKitGTK, whose DMA-BUF renderer leaves the window blank on some systems (NVIDIA drivers among them).
+The app turns that renderer off itself (`WEBKIT_DISABLE_DMABUF_RENDERER=1`, unless you have set the variable).
 
 ### Which whisper-cli is downloaded on first use
 
@@ -74,6 +78,10 @@ Silicon the Metal build, Intel Macs the CPU build. Each download is checked agai
   - Stopping it: *Cancel*, closing the window, Quit from the menu or the Dock, all end the engine **and what it
     started** (whisper-cli, ffmpeg). Windows: `taskkill /T`. macOS and Linux: the engine is started as the leader of
     its own process group and the group gets SIGTERM, then SIGKILL after two seconds.
+  - If the app itself is killed or crashes it cannot clean up, so the engine does it: the app starts it with
+    `--exit-when-stdin-closes` and a pipe on its standard input that it holds open and never writes to. When the app
+    ends, however it ends, the system closes the pipe, and the engine stops whisper-cli and ffmpeg and exits (the
+    same on all three systems; see `babelscribe/lifecycle.py`).
   - On Linux the engine starts whisper-cli and ffmpeg with the library path the app was started with, not the
     PyInstaller folder's (`packaging/standalone/frozen_env.py`): the GPU driver whisper-cli loads must not run against
     the libraries the engine was built with.
@@ -96,7 +104,9 @@ Silicon the Metal build, Intel Macs the CPU build. Each download is checked agai
   - `ubuntu-22.04`: `apt install` of the `.deb` and its dependencies, the AppImage (unpacked, and started), the app
     under Xvfb with a window manager, closed the way a window is closed.
   - On macOS and Linux a Rust test also starts the *installed* engine on an 11-minute recording, stops it as the app
-    does while whisper-cli is working, and checks that no process of its group is left. What CI cannot do is click in
+    does while whisper-cli is working, and checks that no process of its group is left. On all three systems a script
+    plays the app (a pipe on the engine's standard input, a long recording), kills it outright once whisper-cli is
+    running, and checks that the engine and whisper-cli are gone within 20 seconds. What CI cannot do is click in
     the window: the start of a transcription from the window, Cmd+Q during one, and what macOS shows on the first start
     of an app downloaded from the internet are not tested.
 
