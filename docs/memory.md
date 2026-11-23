@@ -57,11 +57,14 @@ A model fits when its **CPU-build peak + 512 MB (+ 11 MB for each minute beyond 
 available physical memory; Linux: `MemAvailable`, or the room left under a container's memory limit when there is one;
 macOS: free + inactive + speculative pages). The 512 MB margin is for the operating system, ffmpeg and the program itself.
 
-The rule uses the CPU number even when you have a graphics card, because the program does not know which device will run
-the model until the model is loaded, and the CPU is the build it falls back to. So on a computer with little RAM and a
-good card, a big model may be reported as "will not fit" although it would run; the warning then says what it would need
-with a graphics card, and nothing stops you: a model you chose is never changed. Choosing the default model for you only
-happens when `turbo` does not fit, which is below about 2.4 GB of free memory.
+The CPU column is the rule's default. **When a discrete graphics card will hold the weights, the Vulkan column is used
+instead** (about 0.7 to 0.9 GB of RAM for every model), so a computer with a good card and little free RAM keeps `turbo`.
+The card is looked for only when the CPU column says no, and it counts only when it is certain: the `whisper-cli` that
+will run is a CUDA build, or a Vulkan build whose device says `uma: 0` (its own memory). An integrated GPU (`uma: 1`)
+shares the computer's RAM, and Apple's Metal uses the same unified memory, so both use the CPU column; so does anything
+that cannot be found out. The card's own memory is not checked (its size is not read), only that it exists.
+Choosing the default model for you only happens when `turbo` does not fit by that rule, which, without a card, is below
+about 2.4 GB of free memory.
 
 ## Not measured
 
