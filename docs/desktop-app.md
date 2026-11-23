@@ -50,8 +50,12 @@ terminal: `babelscribe connect status | show APP | add APP | remove APP` (`--jso
   babelscribe -- PROGRAM` (and `claude mcp remove`), run by the full path of the `claude` that was found (a `claude.cmd`
   from npm cannot be started by its bare name on Windows), so its own settings file is never edited by babelscribe.
   Claude Desktop and Cursor get only `command` and `args`.
-- The command written into a config is the full path of `babelscribe-mcp` in the installed app. If you move or
-  uninstall the app, connect again (or *Remove*).
+- The command written into a config is the full path of `babelscribe-mcp` in the installed app. **Uninstalling on
+  Windows takes babelscribe out of the apps it was connected to** (the uninstaller runs `babelscribe connect remove --all`
+  first: only entries that point at this installation go, each changed file is kept as `.bak`, a failure never stops the
+  uninstall; an update or a reinstall keeps the connections). **On macOS and Linux there is no such hook** (the app is
+  dragged to the Trash; a `.deb` is removed by root, with no user folder), so press *Remove* in the window before deleting
+  the app. If you move the app, connect again.
 - Apps are found by their program or their settings folder. Connect also works for an app that is not found (the file is
   created); Claude Code needs its `claude` command, and Codex's file needs the engine's Python 3.11+ (the app has it).
 

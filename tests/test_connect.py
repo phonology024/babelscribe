@@ -595,3 +595,86 @@ def test_replacing_an_older_claude_code_entry_also_uses_the_full_path(tmp_path):
 def test_the_command_shown_to_copy_says_claude_plainly(tmp_path):
     env = make_env(tmp_path, found=("claude",))
     assert connect.plan("claude-code", env)["text"].startswith("claude mcp add --scope user babelscribe")
+
+
+# ------------------------------------------------------------------------------------------------- remove --all (the uninstaller)
+
+def test_remove_all_takes_babelscribe_out_of_every_app_that_points_at_this_program(tmp_path):
+    env = make_env(tmp_path, found=("claude",))
+    others = {"mcpServers": {"keep": {"command": "k"}}}
+    for app in ("claude-desktop", "cursor", "gemini"):
+        put(connect.config_path(app, env), json.dumps(others))
+        connect.add(app, env)
+    if connect.tomllib:
+        put(connect.config_path("codex", env), '[mcp_servers.keep]\ncommand = "k"\n')
+        connect.add("codex", env)
+    put(env.home / ".claude.json", json.dumps({"mcpServers": {"babelscribe": OURS}}))
+    r = connect.remove_all(env)
+    assert r["ok"] and set(r["removed"]) == {"claude-desktop", "cursor", "gemini", "claude-code"} | ({"codex"} if connect.tomllib else set())
+    for app in ("claude-desktop", "cursor", "gemini"):
+        assert json.loads(connect.config_path(app, env).read_text(encoding="utf-8")) == others, app
+        cfg = connect.config_path(app, env)
+        assert cfg.with_name(cfg.name + ".bak").exists() and cfg.with_name(cfg.name + ".bak2").exists()   # one from add, one from remove
+    assert env.ran[-1] == ["/bin/claude", "mcp", "remove", "--scope", "user", "babelscribe"]
+    assert all(s["state"] == "not-connected" for s in connect.status(env) if s["app"] != "claude-code")
+
+
+def test_remove_all_leaves_an_entry_that_points_somewhere_else_alone(tmp_path):
+    env = make_env(tmp_path)
+    mine = {"mcpServers": {"babelscribe": {"command": "uvx", "args": ["babelscribe", "mcp"]}}}
+    path = put(connect.config_path("cursor", env), json.dumps(mine))
+    r = connect.remove_all(env)
+    assert r["removed"] == [] and r["results"] == [] and json.loads(path.read_text(encoding="utf-8")) == mine
+    assert only_files(path.parent) == ["mcp.json"]
+
+
+def test_remove_all_goes_on_when_one_app_cannot_be_changed(tmp_path, monkeypatch):
+    env = make_env(tmp_path)
+    for app in ("cursor", "gemini"):
+        connect.add(app, env)
+    real = connect.os.replace
+    cursor_file = connect.config_path("cursor", env)
+
+    def refuse_cursor(src, dst):
+        if Path(dst) == cursor_file:
+            raise PermissionError(13, "Permission denied")
+        return real(src, dst)
+    monkeypatch.setattr(connect.os, "replace", refuse_cursor)
+    r = connect.remove_all(env)
+    assert r["ok"] and r["removed"] == ["gemini"]
+    failed = next(x for x in r["results"] if x["app"] == "cursor")
+    assert "close it and try again" in failed["error"]
+    assert "babelscribe" in json.loads(cursor_file.read_text(encoding="utf-8"))["mcpServers"]       # untouched, still there
+
+
+def test_remove_all_never_raises_even_when_something_unexpected_happens(tmp_path, monkeypatch):
+    env = make_env(tmp_path)
+    connect.add("cursor", env)
+    monkeypatch.setattr(connect, "remove", lambda *a, **k: (_ for _ in ()).throw(ValueError("odd")))
+    r = connect.remove_all(env)
+    assert r["ok"] and r["removed"] == [] and "ValueError: odd" in r["results"][0]["error"]
+
+
+def test_remove_all_with_nothing_connected_is_an_empty_success(tmp_path):
+    assert connect.remove_all(make_env(tmp_path)) == {"ok": True, "removed": [], "results": []}
+
+
+def test_remove_all_gives_an_apps_own_command_less_time_and_puts_the_time_back(tmp_path):
+    seen = []
+    env = make_env(tmp_path, found=("claude",))
+    put(env.home / ".claude.json", json.dumps({"mcpServers": {"babelscribe": OURS}}))
+    env.run = lambda cmd: seen.append(connect.RUN_TIMEOUT) or (0, "")
+    before = connect.RUN_TIMEOUT
+    connect.remove_all(env)
+    assert seen == [20] and connect.RUN_TIMEOUT == before
+
+
+def test_command_line_remove_all(tmp_path, monkeypatch, capsys):
+    env = make_env(tmp_path)
+    monkeypatch.setattr(connect, "Env", lambda: env)
+    connect.add("cursor", env)
+    cli.main(["connect", "remove", "--all", "--json", "--exit-when-stdin-closes"])
+    out = json.loads(capsys.readouterr().out)
+    assert out["removed"] == ["cursor"]
+    cli.main(["connect", "remove", "--all"])
+    assert "not connected to any app" in capsys.readouterr().out

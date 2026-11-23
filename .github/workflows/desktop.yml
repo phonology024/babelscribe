@@ -99,9 +99,15 @@ jobs:
         shell: pwsh
         run: desktop/scripts/check_install.ps1 -Step launch
 
+      - name: Connect AI apps (this throw-away runner's own settings), so that uninstalling has something to take out
+        run: python desktop/scripts/check_connect_uninstall.py prepare "$LOCALAPPDATA/babelscribe/babelscribe-engine.exe"
+
       - name: Silent uninstall removes it all
         shell: pwsh
         run: desktop/scripts/check_install.ps1 -Step uninstall
+
+      - name: Uninstalling took babelscribe out of the AI apps it was connected to, and nothing else
+        run: python desktop/scripts/check_connect_uninstall.py verify
 
       - name: One click - a plain run installs without questions and starts the app (with screenshots)
         shell: pwsh

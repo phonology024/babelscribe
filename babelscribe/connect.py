@@ -54,9 +54,12 @@ def server_command() -> tuple[str, list[str]]:
     return sys.executable, ["-m", "babelscribe", "mcp"]
 
 
+RUN_TIMEOUT = 90       # seconds for an app's own command (remove --all uses less: an uninstall must not hang)
+
+
 def _run(cmd: list[str]) -> tuple[int, str]:
     try:
-        p = subprocess.run(cmd, capture_output=True, text=True, errors="replace", timeout=90, check=False)
+        p = subprocess.run(cmd, capture_output=True, text=True, errors="replace", timeout=RUN_TIMEOUT, check=False)
     except (OSError, subprocess.SubprocessError) as e:
         return 1, str(e)
     return p.returncode, ((p.stdout or "") + (p.stderr or "")).strip()
@@ -580,18 +583,46 @@ def _code_remove(env: Env) -> dict:
     return {"ok": True, "changed": True, "path": None, "backup": None, "message": "babelscribe was taken out of Claude Code's settings."}
 
 
+def remove_all(env: Env | None = None, make_backup: bool = True) -> dict:
+    """Take babelscribe out of every app that has it set up with THIS program (state "connected"), for the uninstaller: the
+    settings must not keep pointing at a program that is about to be deleted. An entry that points somewhere else (the person's
+    own `uvx` one) is left alone. A failure for one app (a file with a syntax error, an app that is open) is reported for it and
+    never stops the others; nothing here raises."""
+    global RUN_TIMEOUT
+    env = env or Env()
+    results = []
+    saved, RUN_TIMEOUT = RUN_TIMEOUT, min(RUN_TIMEOUT, 20)
+    try:
+        for key, a in APPS.items():
+            try:
+                if state(key, env)[0] != "connected":
+                    continue
+                r = remove(key, env, make_backup)
+                results.append({"app": key, "name": a.name, "changed": r["changed"], "message": r["message"]})
+            except ConnectError as e:
+                results.append({"app": key, "name": a.name, "changed": False, "error": str(e)})
+            except Exception as e:                                       # nothing may stop an uninstall
+                results.append({"app": key, "name": a.name, "changed": False, "error": f"{type(e).__name__}: {e}"})
+    finally:
+        RUN_TIMEOUT = saved
+    return {"ok": True, "removed": [r["app"] for r in results if r.get("changed")], "results": results}
+
+
 # ---------------------------------------------------------------------------------------------------- command line
 
 def main(argv: list[str]) -> None:
-    """babelscribe connect [status | show APP | add APP | remove APP] [--json] [--no-backup]"""
+    """babelscribe connect [status | show APP | add APP | remove APP | remove --all] [--json] [--no-backup]"""
     argv = [x for x in argv if x != "--exit-when-stdin-closes"]       # added by the desktop app to everything it runs
     as_json = "--json" in argv
     backup_on = "--no-backup" not in argv
+    everything = "--all" in argv
     words = [x for x in argv if not x.startswith("--")]
     action = words[0] if words else "status"
     app = words[1] if len(words) > 1 else ""
     try:
-        if action == "status":
+        if action == "remove" and everything:
+            result = remove_all(make_backup=backup_on)
+        elif action == "status":
             result: object = status()
         elif action in ("show", "add", "remove") and app:
             result = {"show": lambda: plan(app), "add": lambda: add(app, make_backup=backup_on),
@@ -607,7 +638,12 @@ def main(argv: list[str]) -> None:
     if as_json:
         print(json.dumps(result, ensure_ascii=True))
         return
-    if action == "status":
+    if action == "remove" and everything:
+        for r in result["results"]:                               # type: ignore[index]
+            print(f"  {r['name']}: " + (r.get("error") or r["message"]))
+        if not result["results"]:                                 # type: ignore[index]
+            print("babelscribe was not connected to any app.")
+    elif action == "status":
         for r in result:                                          # type: ignore[union-attr]
             print(f"  {r['name']:16} {'found' if r['installed'] else 'not found':10} {r['state']}")
     elif action == "show":

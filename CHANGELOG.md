@@ -25,6 +25,8 @@ section into the release's section.
   Cursor or Gemini CLI as an MCP server, or take it out again. A settings file is merged, never replaced; the old file is
   kept as `NAME.bak`; a file with a syntax error is refused and left as it is. The desktop app uses it
   (`docs/desktop-app.md`), and now ships `babelscribe-mcp` for it.
+- `babelscribe connect remove --all`: takes babelscribe out of every app that has it set up with this program (the Windows
+  uninstaller runs it, so no AI app keeps pointing at a program that is gone).
 - `babelscribe llms [--json]`: which local models answer on the usual ports (for the desktop app's list of translators).
 - `--burn-translated` (with `--burn` and `--translate-to`): draw the translated subtitles, into `NAME.LANG.subbed.mp4`.
 - `--progress-json` also reports the progress of the translation (`"stage": "translate"`).
