@@ -106,21 +106,33 @@ case "$step" in
 
   launch-linux)
     export DISPLAY=:99
-    Xvfb :99 -screen 0 1280x800x24 > /dev/null 2>&1 &
+    Xvfb :99 -screen 0 1280x800x24 > xvfb.log 2>&1 &
     xvfb=$!
     trap 'kill $xvfb 2>/dev/null || true' EXIT
     sleep 2
-    openbox > /dev/null 2>&1 &              # a window manager: closing a window needs one to ask the app politely
+    eval "$(dbus-launch --sh-syntax)"       # a session bus, as on a desktop
+    openbox > openbox.log 2>&1 &            # a window manager: closing a window needs one to ask the app politely
     sleep 2
-    export LIBGL_ALWAYS_SOFTWARE=1 WEBKIT_DISABLE_COMPOSITING_MODE=1
-    "$@" &
+    export LIBGL_ALWAYS_SOFTWARE=1
+    "$@" > app.log 2>&1 &
     app=$!
+    diagnose() {
+      echo "--- windows (wmctrl -l):"; wmctrl -l || true
+      echo "--- X tree:"; xwininfo -root -tree | head -40 || true
+      echo "--- processes:"; ps -eo pid,ppid,stat,args | grep -E "babelscribe|WebKit|openbox|Xvfb" | grep -v grep || true
+      echo "--- app.log:"; tail -50 app.log || true
+      echo "--- openbox.log:"; tail -20 openbox.log || true
+    }
     sleep 15
-    kill -0 "$app" 2> /dev/null || fail "the app is not running 15 s after it was started"
+    kill -0 "$app" 2> /dev/null || { diagnose; fail "the app is not running 15 s after it was started"; }
     ok "the app is still running after 15 s"
-    wmctrl -l || true
     import -window root "${SHOT:-launch-linux.png}" 2> /dev/null || true
-    wmctrl -c babelscribe || fail "no window called babelscribe"
+    # the window: wait for it, it may take the web view a few seconds more
+    for _ in $(seq 1 30); do wmctrl -l | grep -q . && break; sleep 1; done
+    wmctrl -l | grep -q . || { diagnose; fail "the app is running but has no window"; }
+    ok "the app has a window: $(wmctrl -l | head -1)"
+    import -window root "${SHOT:-launch-linux.png}" 2> /dev/null || true
+    wmctrl -c babelscribe || { diagnose; fail "no window called babelscribe"; }
     for _ in $(seq 1 30); do kill -0 "$app" 2> /dev/null || break; sleep 0.5; done
     kill -0 "$app" 2> /dev/null && fail "the app did not quit when its window was closed"
     ok "the app quit when its window was closed"

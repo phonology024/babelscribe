@@ -251,7 +251,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev \
-            libayatana-appindicator3-dev librsvg2-dev patchelf libfuse2 xvfb openbox wmctrl imagemagick
+            libayatana-appindicator3-dev librsvg2-dev patchelf libfuse2 xvfb openbox wmctrl imagemagick x11-utils dbus-x11
 
       - name: Build the engine (PyInstaller, the same recipe as Windows)
         run: |
