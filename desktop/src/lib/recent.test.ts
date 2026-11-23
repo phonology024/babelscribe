@@ -9,6 +9,12 @@ describe("recent files", () => {
     l = addRecent(l, { path: "c:\\A.MP4", when: 3 });
     expect(l.map((r) => [r.path, r.lang])).toEqual([["c:\\A.MP4", "th"], ["C:\\b.mp4", undefined]]);
   });
+  it("compares macOS and Linux paths with case: A.mp4 and a.mp4 can be two files", () => {
+    let l = addRecent([], { path: "/home/you/A.mp4", when: 1 });
+    l = addRecent(l, { path: "/home/you/a.mp4", when: 2 });
+    l = addRecent(l, { path: "/home/you/A.mp4", when: 3 });
+    expect(l.map((r) => r.path)).toEqual(["/home/you/A.mp4", "/home/you/a.mp4"]);
+  });
   it("keeps at most 8", () => {
     let l: ReturnType<typeof loadRecent> = [];
     for (let i = 0; i < 12; i++) l = addRecent(l, { path: `C:\\${i}.mp4`, when: i });
@@ -37,6 +43,9 @@ describe("paths and sizes", () => {
   it("splits Windows and POSIX paths", () => {
     expect(splitPath("C:\\Users\\you\\Videos\\jfk.mp4")).toEqual({ name: "jfk.mp4", folder: "C:\\Users\\you\\Videos" });
     expect(splitPath("/home/you/jfk.mp4")).toEqual({ name: "jfk.mp4", folder: "/home/you" });
+    expect(splitPath("\\\\server\\share\\jfk.mp4")).toEqual({ name: "jfk.mp4", folder: "\\\\server\\share" });
+    // a backslash is an ordinary character in a macOS or Linux file name
+    expect(splitPath("/home/you/a\\b.mp4")).toEqual({ name: "a\\b.mp4", folder: "/home/you" });
     expect(splitPath("jfk.mp4")).toEqual({ name: "jfk.mp4", folder: "" });
   });
   it("formats file sizes", () => {

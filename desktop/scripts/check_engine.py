@@ -1,8 +1,9 @@
 """CI check of the engine as the installed app runs it: babelscribe-engine.exe with --progress-json.
 
-    python desktop/scripts/check_engine.py "<install folder>/babelscribe-engine.exe" jfk.wav
+    python desktop/scripts/check_engine.py "<install folder>/babelscribe-engine.exe" jfk.wav [FLAVOR]
 
-Runs one real transcription (tiny model, CPU build of whisper-cli: CI machines have no GPU) the way the window does,
+Runs one real transcription (tiny model; FLAVOR of whisper-cli, default "cpu": CI machines have no GPU; "default" leaves
+the choice to the engine, as on Apple Silicon, which has only a Metal build) the way the window does,
 and checks what the window relies on: every stdout line is one JSON event, progress never goes back and reaches
 100, the last event is "done" with files that exist. Standard library only.
 """
@@ -19,14 +20,18 @@ from pathlib import Path
 
 def main() -> None:
     engine, sample = Path(sys.argv[1]).resolve(), Path(sys.argv[2]).resolve()
+    flavor = sys.argv[3] if len(sys.argv) > 3 else "cpu"
     with tempfile.TemporaryDirectory() as tmp:
         work = Path(tmp) / "my files"                          # a space in the path, as on a real desktop
         work.mkdir()
         audio = work / sample.name
         shutil.copyfile(sample, audio)
-        env = {**os.environ, "BABELSCRIBE_HOME": str(Path(tmp) / "home")}
-        p = subprocess.run([str(engine), str(audio), "-m", "tiny", "--flavor", "cpu", "-l", "en", "-f", "srt,txt",
-                            "--progress-json"], env=env, capture_output=True, timeout=1200)
+        # BABELSCRIBE_HOME from the caller keeps the downloaded whisper-cli and model for a later step
+        env = {**os.environ, "BABELSCRIBE_HOME": os.environ.get("BABELSCRIBE_HOME") or str(Path(tmp) / "home")}
+        cmd = [str(engine), str(audio), "-m", "tiny", "-l", "en", "-f", "srt,txt", "--progress-json"]
+        if flavor != "default":
+            cmd += ["--flavor", flavor]
+        p = subprocess.run(cmd, env=env, capture_output=True, timeout=1200)
         out = p.stdout.decode("ascii")                         # the events are ASCII-only JSON
         print(out[-1500:])
         print(p.stderr.decode("utf-8", "replace")[-1500:])

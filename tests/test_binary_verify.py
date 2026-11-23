@@ -72,7 +72,27 @@ def test_binary_origin_for_own_builds_and_old_caches(monkeypatch, tmp_path):
 
 def test_downloads_are_pinned_to_a_release_tag_not_latest():
     assert "/latest/" not in backend.DEFAULT_RELEASES and backend.DEFAULT_RELEASES.endswith(backend.BINARY_TAG)
-    assert set(backend.SHA256) == {f"whisper-cli-{s}-{a}-{f}.zip" for s, a, f in backend.ASSETS}
+    assert set(backend.SHA256) | set(backend.LATER) == {f"whisper-cli-{s}-{a}-{f}.zip" for s, a, f in backend.ASSETS}
+    assert not set(backend.SHA256) & set(backend.LATER), "one pin per build"
+    for name, (tag, digest) in backend.LATER.items():
+        assert tag.startswith("v") and tag != "latest" and len(digest) == 64, name
+
+
+def test_a_later_build_is_fetched_from_its_own_release_and_checked_against_its_own_digest(monkeypatch, tmp_path):
+    name = "whisper-cli-macos-x64-cpu.zip"
+    digest = _fake_release(monkeypatch, tmp_path, name=name)
+    asked = []
+    real = backend.urllib.request.urlopen
+    monkeypatch.setattr(backend.urllib.request, "urlopen", lambda url: (asked.append(url), real(url))[1])
+    monkeypatch.setitem(backend.LATER, name, ("v9.9.9", digest))
+    exe = backend.fetch_binary("cpu")
+    assert asked == [f"{backend.release_url('v9.9.9')}/{name}"]
+    assert exe.read_bytes() == b"binary" and "v9.9.9" in backend.binary_origin(exe)
+    monkeypatch.setitem(backend.LATER, name, ("v9.9.9", "0" * 64))
+    import pytest
+    with pytest.raises(SystemExit) as e:
+        backend.fetch_binary("cpu")
+    assert "checksum mismatch" in str(e.value) and "v9.9.9" in str(e.value)
 
 
 def test_digest_table_matches_the_pinned_release():
@@ -89,6 +109,23 @@ def test_digest_table_matches_the_pinned_release():
         pytest.skip(f"cannot reach the GitHub API: {e}")
     published = {a["name"]: (a.get("digest") or "").removeprefix("sha256:") for a in assets}
     for name, digest in backend.SHA256.items():
+        assert published.get(name) == digest, name
+
+
+def test_later_builds_match_the_release_they_are_pinned_to():
+    """Network test, as above, for the builds pinned to a newer release than BINARY_TAG."""
+    import json
+    import urllib.request
+    import pytest
+    for name, (tag, digest) in backend.LATER.items():
+        url = f"https://api.github.com/repos/phonology024/babelscribe/releases/tags/{tag}"
+        try:
+            with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "babelscribe-tests"}),
+                                        timeout=10) as r:
+                assets = json.load(r)["assets"]
+        except OSError as e:
+            pytest.skip(f"cannot reach the GitHub API: {e}")
+        published = {a["name"]: (a.get("digest") or "").removeprefix("sha256:") for a in assets}
         assert published.get(name) == digest, name
 
 

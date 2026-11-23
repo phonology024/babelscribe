@@ -17,6 +17,11 @@ describe("engineArgs", () => {
     expect(commandLine(path, { ...DEFAULT_OPTIONS, prompt: 'say "hi"' })).toBe(
       'babelscribe "C:\\Users\\you\\My Videos\\talk.mp4" -f srt,txt --prompt "say \\"hi\\""');
   });
+  it("quotes a macOS or Linux path for a POSIX shell: $, backticks and quotes stay literal", () => {
+    expect(commandLine("/home/you/talk.mp4", DEFAULT_OPTIONS)).toBe("babelscribe /home/you/talk.mp4 -f srt,txt");
+    expect(commandLine("/home/you/My Videos/$HOME `x`.mp4", { ...DEFAULT_OPTIONS, prompt: "it's" })).toBe(
+      "babelscribe '/home/you/My Videos/$HOME `x`.mp4' -f srt,txt --prompt 'it'\\''s'");
+  });
 });
 
 describe("parseEvent", () => {

@@ -17,6 +17,9 @@ tauri-plugin-dialog = "~2.8.4"
 tauri-plugin-opener = "~2.7.3"
 serde = { version = "1", features = ["derive"] }
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"      # signalling the engine's process group
+
 [profile.release]
 codegen-units = 1
 lto = true

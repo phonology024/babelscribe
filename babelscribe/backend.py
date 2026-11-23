@@ -11,6 +11,7 @@ import platform
 import re
 import shutil
 import subprocess
+import sys
 import urllib.error
 import urllib.request
 import zipfile
@@ -33,7 +34,18 @@ SHA256 = {
     "whisper-cli-windows-x64-cpu.zip": "34743845679c1bc0cd30b87efcc95b3393fdd936a2252e0bfd466e7e02438121",
     "whisper-cli-windows-x64-vulkan.zip": "dba378fc25326203b57b41476ecc81c2ab5881bcd46b4b1b2a2e4a184eeeea25",
 }
-DEFAULT_RELEASES = f"https://github.com/phonology024/babelscribe/releases/download/{BINARY_TAG}"
+# A build published after BINARY_TAG was pinned stays on the release that first carried it: moving BINARY_TAG
+# would change the whisper-cli every other platform runs. name -> (release tag, sha256 from that release's SHA256SUMS)
+LATER = {
+    "whisper-cli-macos-x64-cpu.zip": ("v0.5.0", "ee42b85c95f8fa31899f0b3db1c87eb313e03765d05bd452ad781d845f4a9da1"),
+}
+
+
+def release_url(tag: str) -> str:
+    return f"https://github.com/phonology024/babelscribe/releases/download/{tag}"
+
+
+DEFAULT_RELEASES = release_url(BINARY_TAG)
 RELEASES = os.environ.get("BABELSCRIBE_RELEASES", DEFAULT_RELEASES)
 EXE = "whisper-cli.exe" if os.name == "nt" else "whisper-cli"
 RECEIPT = "babelscribe-download.json"   # written next to a downloaded binary: where it came from, what it hashed to
@@ -45,14 +57,37 @@ RECEIPT = "babelscribe-download.json"   # written next to a downloaded binary: w
 ASSETS = {
     ("windows", "x64", "vulkan"), ("windows", "x64", "cpu"),
     ("linux", "x64", "vulkan"), ("linux", "x64", "cuda"), ("linux", "x64", "cpu"),
-    ("macos", "arm64", "metal"),
+    ("macos", "arm64", "metal"), ("macos", "x64", "cpu"),
 }
+
+
+def vulkan_loader_missing() -> bool:
+    """Linux: is the Vulkan loader (libvulkan.so.1, package libvulkan1) not installed? The Vulkan build of whisper-cli
+    cannot even start without it, GPU or no GPU. Windows ships the loader with every graphics driver, macOS uses Metal."""
+    if platform.system() != "Linux":
+        return False
+    import ctypes
+    try:
+        ctypes.CDLL("libvulkan.so.1")
+    except OSError:
+        return True
+    return False
+
+
+NO_VULKAN = ("babelscribe: this computer has no Vulkan library (libvulkan1), which the GPU build of whisper-cli needs, "
+             "so the CPU build is used (slower). For the GPU: install libvulkan1 (sudo apt install libvulkan1) and "
+             "run babelscribe again.")
 
 
 def asset_name(flavor: str | None = None) -> str:
     system = {"Windows": "windows", "Linux": "linux", "Darwin": "macos"}[platform.system()]
     arch = "arm64" if platform.machine().lower() in ("arm64", "aarch64") else "x64"
-    flavor = flavor or ("metal" if system == "macos" else "vulkan")
+    # Apple Silicon: Metal. Intel Macs: CPU only (Accelerate), the only build for them. Windows and Linux: Vulkan,
+    # except on a Linux without the Vulkan library, where only the CPU build can run. A flavour asked for is kept.
+    if flavor is None and system == "linux" and vulkan_loader_missing():
+        flavor = "cpu"
+        print(NO_VULKAN, file=sys.stderr)
+    flavor = flavor or (("metal" if arch == "arm64" else "cpu") if system == "macos" else "vulkan")
     # A self-hosted mirror (BABELSCRIBE_RELEASES) may carry builds this project does not publish, so only the
     # default URL is checked against the table; a mirror is asked for the composed name as before.
     if RELEASES == DEFAULT_RELEASES and (system, arch, flavor) not in ASSETS:
@@ -66,11 +101,24 @@ def asset_name(flavor: str | None = None) -> str:
     return f"whisper-cli-{system}-{arch}-{flavor}.zip"
 
 
+def _cached_order(flavor: str | None) -> list[Path]:
+    """The whisper-cli builds in the cache, best first: the flavour asked for; else, on a Linux that can run Vulkan, the
+    Vulkan build (a CPU build kept from a time it could not must not stay the choice for good); else by name."""
+    found = sorted((CACHE / "bin").rglob(EXE)) if (CACHE / "bin").exists() else []
+    if flavor:
+        want = flavor
+    elif platform.system() == "Linux" and not vulkan_loader_missing():
+        want = "vulkan"
+    else:
+        return found
+    return sorted(found, key=lambda path: not path.parent.name.endswith("-" + want))   # stable: ties keep name order
+
+
 def find_binary(explicit: str | None = None, flavor: str | None = None, download: bool = True) -> Path:
     for cand in (explicit, os.environ.get("BABELSCRIBE_WHISPER_BIN")):
         if cand and Path(cand).is_file():
             return Path(cand)
-    cached = next(iter(sorted((CACHE / "bin").rglob(EXE))), None) if (CACHE / "bin").exists() else None
+    cached = next(iter(_cached_order(flavor)), None)
     if cached:
         return cached
     on_path = shutil.which("whisper-cli")
@@ -101,18 +149,20 @@ def fetch_binary(flavor: str | None = None) -> Path:
     for a mirror that carries its own builds."""
     name = asset_name(flavor)
     dest = CACHE / "bin" / name[:-4]
-    want = None if _skip_verify() else SHA256.get(name)
+    tag, later = (LATER[name][0], LATER[name][1]) if name in LATER else (BINARY_TAG, None)
+    base = release_url(tag) if RELEASES == DEFAULT_RELEASES else RELEASES
+    want = None if _skip_verify() else (later or SHA256.get(name))
     if want is None and not _skip_verify():
         raise SystemExit(
             f"{name} is not one of the builds babelscribe publishes, so there is no checksum to verify it against.\n"
             f"If {RELEASES} is your own mirror with your own builds, set BABELSCRIBE_SKIP_VERIFY=1.")
     print(f"downloading {name} ...")
     try:
-        resp = urllib.request.urlopen(f"{RELEASES}/{name}")
+        resp = urllib.request.urlopen(f"{base}/{name}")
     except urllib.error.HTTPError as e:
         if e.code != 404:
             raise
-        raise SystemExit(f"{RELEASES}/{name} was not found (HTTP 404). Publish that file on the mirror, or build "
+        raise SystemExit(f"{base}/{name} was not found (HTTP 404). Publish that file on the mirror, or build "
                          f"whisper.cpp for this machine and pass --bin PATH/whisper-cli.")
     (CACHE / "bin").mkdir(parents=True, exist_ok=True)
     part = CACHE / "bin" / (name + ".part")
@@ -127,7 +177,7 @@ def fetch_binary(flavor: str | None = None) -> Path:
             raise SystemExit(
                 f"{name}: checksum mismatch, nothing was installed.\n"
                 f"  expected sha256 {want}\n  downloaded      {got}\n"
-                f"The download from {RELEASES} was cut short or is not the {BINARY_TAG} build. Try again; "
+                f"The download from {base} was cut short or is not the {tag} build. Try again; "
                 f"if it keeps happening, build whisper.cpp yourself and pass --bin PATH/whisper-cli."
                 + ("" if RELEASES == DEFAULT_RELEASES else
                    "\nA mirror with its own builds needs BABELSCRIBE_SKIP_VERIFY=1."))
@@ -142,7 +192,7 @@ def fetch_binary(flavor: str | None = None) -> Path:
         exe.chmod(0o755)
     files = {f.relative_to(dest).as_posix(): _sha256(f) for f in sorted(dest.rglob("*")) if f.is_file()}
     (dest / RECEIPT).write_text(json.dumps({
-        "asset": name, "source": RELEASES, "tag": BINARY_TAG if RELEASES == DEFAULT_RELEASES else None,
+        "asset": name, "source": base, "tag": tag if RELEASES == DEFAULT_RELEASES else None,
         "sha256": got, "verified": bool(want), "files": files}, indent=1), encoding="utf-8")
     return exe
 
@@ -173,6 +223,16 @@ def probe_or_refetch(binary: Path, model: Path, flavor: str | None = None) -> tu
     """Probe devices; a cached binary that crashes with 'illegal instruction' is deleted and downloaded again once."""
     try:
         return binary, probe_devices(binary, model)
+    except MissingLibrary as e:
+        in_cache = (CACHE / "bin").resolve() in binary.resolve().parents
+        vulkan = str(e).startswith("libvulkan")
+        if not (vulkan and in_cache and flavor is None):          # your own build, or a flavour you asked for
+            raise SystemExit(f"{binary} cannot start: {e} is not installed on this computer"
+                             + (" (Linux: sudo apt install libvulkan1, or use --flavor cpu)." if vulkan else "."))
+        shutil.rmtree(binary.parent)                              # the Vulkan build we cannot run
+        print(NO_VULKAN, file=sys.stderr)
+        binary = fetch_binary("cpu")
+        return binary, probe_devices(binary, model)
     except IllegalInstruction:
         cache = (CACHE / "bin").resolve()
         if cache not in binary.resolve().parents:
@@ -196,6 +256,10 @@ def devices(binary: Path) -> list[dict]:
     return found
 
 
+class MissingLibrary(RuntimeError):
+    """whisper-cli could not start because a shared library is not installed (the message names it)."""
+
+
 class IllegalInstruction(RuntimeError):
     """The binary was compiled for CPU features this machine lacks (e.g. an old AVX-512 build)."""
 
@@ -212,6 +276,9 @@ def probe_devices(binary: Path, model: Path) -> list[dict]:
     if out.returncode in (0xC000001D, -4, 132):   # Windows STATUS_ILLEGAL_INSTRUCTION / SIGILL
         raise IllegalInstruction(str(binary))
     text = out.stdout + out.stderr
+    gone = re.search(r"error while loading shared libraries: (\S+): cannot open shared object file", text)
+    if gone:
+        raise MissingLibrary(gone.group(1))
     found = [{"backend": m.group(1), "id": int(m.group(2)), "name": m.group(3).strip(), "detail": m.group(4).strip()}
              for m in re.finditer(r"ggml_(vulkan|cuda|metal): *(\d+) = ([^|\n]+)\|?([^\n]*)", text)]
     if not found and "Metal" in text:

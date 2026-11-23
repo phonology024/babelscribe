@@ -1,5 +1,6 @@
-# PyInstaller spec for the standalone Windows build (#59): one folder holding babelscribe.exe and
-# babelscribe-mcp.exe, with Python and every library inside it. Nothing to install, no admin rights.
+# PyInstaller spec for the standalone build (#59): one folder holding babelscribe and babelscribe-mcp (.exe on
+# Windows), with Python and every library inside it. Nothing to install, no admin rights. The same recipe builds for
+# the system it runs on; the desktop app (desktop/, #18) builds it on Windows, macOS (Apple Silicon and Intel) and Linux.
 #
 #   pip install . pyinstaller
 #   pyinstaller --noconfirm --distpath dist --workpath build packaging/standalone/babelscribe.spec
@@ -8,7 +9,7 @@
 from PyInstaller.utils.hooks import collect_all, collect_submodules, copy_metadata
 
 datas, binaries, hidden = [], [], collect_submodules("babelscribe")
-d, b, h = collect_all("imageio_ffmpeg")            # carries ffmpeg.exe as package data
+d, b, h = collect_all("imageio_ffmpeg")            # carries ffmpeg as package data (the one for this system)
 datas += d; binaries += b; hidden += h
 # the server imports parts of the mcp SDK by name at run time; mcp.cli is the SDK's own command line (needs typer)
 hidden += collect_submodules("mcp", filter=lambda name: not name.startswith("mcp.cli"))

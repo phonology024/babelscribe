@@ -10,7 +10,7 @@ the icon is shown. Small sizes (16-32 px) are drawn on the pixel grid with a sli
 a scaled-down outline turns grey and blurry there.
 
 Then run `npx @tauri-apps/cli@2.12.6 icon desktop/src-tauri/icons/icon-source.png -o <tmp>` for the Square*Logo
-files (see docs/desktop-app.md); this script already writes icon.ico and the PNGs Windows uses.
+files (see docs/desktop-app.md); this script already writes icon.ico, icon.icns (macOS) and the PNGs.
 """
 from __future__ import annotations
 
@@ -175,7 +175,9 @@ def main() -> None:
     ICONS.mkdir(parents=True, exist_ok=True)
     INSTALLER.mkdir(parents=True, exist_ok=True)
     (ICONS / "logo.svg").write_text(svg(), encoding="utf-8")
-    render(1024).save(ICONS / "icon-source.png")
+    source = render(1024)
+    source.save(ICONS / "icon-source.png")
+    source.save(ICONS / "icon.icns", format="ICNS", sizes=[(n, n) for n in (16, 32, 64, 128, 256, 512, 1024)])   # macOS
     sizes = [16, 20, 24, 32, 40, 48, 64, 128, 256]
     ico = {n: icon(n) for n in sizes}
     ico[256].save(ICONS / "icon.ico", format="ICO", sizes=[(n, n) for n in sizes],

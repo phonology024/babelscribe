@@ -50,7 +50,8 @@ HISTORY: dict[str, list[str]] = {
     "docker/README.md": ["for {v} or earlier", "after {v},"],
     "packaging/aur/README.md": ["babelscribe-{v}-1-any.pkg.tar.zst"],
     "packaging/homebrew/README.md": ["babelscribe/{v}:", "for {v} ", "`{v}`"],
-    "babelscribe/backend.py": ['BINARY_TAG = "v{v}"'],
+    # BINARY_TAG, and the one build pinned to the release that first carried it (backend.LATER)
+    "babelscribe/backend.py": ['BINARY_TAG = "v{v}"', '"whisper-cli-macos-x64-cpu.zip": ("v{v}"'],
     "README.md": ["| **{v}** |", "({v}+)"],
 }
 

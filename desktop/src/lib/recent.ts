@@ -1,4 +1,5 @@
 // The recent files on screen 1. Kept in this computer's WebView storage only; losing it loses nothing else.
+import { isWindowsPath } from "./utils";
 
 export interface Recent {
   path: string;
@@ -26,9 +27,13 @@ export function saveRecent(list: Recent[], store: Pick<Storage, "setItem"> | nul
   }
 }
 
-/** The list with this file on top (once; paths compare without case, as on Windows). */
+/** The list with this file on top (once). Windows paths compare without case, as Windows does; on macOS and Linux
+ * "A.mp4" and "a.mp4" can be two files. */
 export function addRecent(list: Recent[], item: Recent): Recent[] {
-  const same = (r: Recent) => r.path.toLowerCase() === item.path.toLowerCase();
+  const same = (r: Recent) =>
+    isWindowsPath(item.path) || isWindowsPath(r.path)
+      ? r.path.toLowerCase() === item.path.toLowerCase()
+      : r.path === item.path;
   const old = list.find(same);
   return [{ ...old, ...item, lang: item.lang ?? old?.lang }, ...list.filter((r) => !same(r))].slice(0, MAX);
 }

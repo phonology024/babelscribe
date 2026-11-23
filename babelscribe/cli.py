@@ -136,8 +136,14 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--progress-json", action="store_true",
                     help="for programs that run babelscribe (such as the desktop app): print one JSON object per "
                          "line on stdout (progress, log, done, error) and everything else on stderr")
+    ap.add_argument("--exit-when-stdin-closes", action="store_true",
+                    help="for a program that runs babelscribe and keeps its standard input open: when that program "
+                         "ends, however it ends, stop whisper-cli and ffmpeg and exit instead of finishing the file")
     ap.add_argument("--version", action="version", version=__version__)
     a = ap.parse_args(argv)
+    if a.exit_when_stdin_closes:
+        from . import lifecycle
+        lifecycle.start()
     if a.progress_json:
         return run_with_events(a)
     return _run(a)
