@@ -55,6 +55,7 @@ jobs:
           # cryptography (needed by the mcp SDK) only from a prebuilt wheel: built from source on an Intel Mac it links the
           # Homebrew OpenSSL dynamically and breaks against the older libssl that Python brings (babelscribe-mcp failed to start)
           pip install --only-binary=cryptography . pyinstaller==6.22.3
+          pip show cryptography mcp | grep -E "^(Name|Version):"        # which versions this engine got
           pyinstaller --noconfirm --distpath dist --workpath build packaging/standalone/babelscribe.spec
           mkdir -p desktop/src-tauri/binaries desktop/src-tauri/engine
           cp dist/babelscribe/babelscribe.exe desktop/src-tauri/binaries/babelscribe-engine-x86_64-pc-windows-msvc.exe
@@ -170,6 +171,7 @@ jobs:
           # cryptography (needed by the mcp SDK) only from a prebuilt wheel: built from source on an Intel Mac it links the
           # Homebrew OpenSSL dynamically and breaks against the older libssl that Python brings (babelscribe-mcp failed to start)
           pip install --only-binary=cryptography . pyinstaller==6.22.3
+          pip show cryptography mcp | grep -E "^(Name|Version):"        # which versions this engine got
           pyinstaller --noconfirm --distpath dist --workpath build packaging/standalone/babelscribe.spec
           mkdir -p desktop/src-tauri/engine
           cp dist/babelscribe/babelscribe desktop/src-tauri/engine/babelscribe-engine
@@ -276,6 +278,7 @@ jobs:
           # cryptography (needed by the mcp SDK) only from a prebuilt wheel: built from source on an Intel Mac it links the
           # Homebrew OpenSSL dynamically and breaks against the older libssl that Python brings (babelscribe-mcp failed to start)
           pip install --only-binary=cryptography . pyinstaller==6.22.3
+          pip show cryptography mcp | grep -E "^(Name|Version):"        # which versions this engine got
           pyinstaller --noconfirm --distpath dist --workpath build packaging/standalone/babelscribe.spec
           mkdir -p desktop/src-tauri/engine
           cp dist/babelscribe/babelscribe desktop/src-tauri/engine/babelscribe-engine
