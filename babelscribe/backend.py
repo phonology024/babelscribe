@@ -251,8 +251,9 @@ def devices(binary: Path) -> list[dict]:
     out = subprocess.run([str(binary), "--help"], capture_output=True, text=True, errors="replace")
     text = out.stdout + out.stderr
     found = []
-    for m in re.finditer(r"ggml_(vulkan|cuda|metal): *(\d+) = ([^|\n]+)", text):
-        found.append({"backend": m.group(1), "id": int(m.group(2)), "name": m.group(3).strip()})
+    for m in re.finditer(r"ggml_(vulkan|cuda|metal): *(\d+) = ([^|\n]+)\|?([^\n]*)", text):
+        found.append({"backend": m.group(1), "id": int(m.group(2)), "name": m.group(3).strip(),
+                      "detail": (m.group(4) or "").strip()})
     return found
 
 

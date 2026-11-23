@@ -133,18 +133,40 @@ def extra_mb(minutes: float | None) -> int:
     return int(max(0.0, (minutes or 0.0) - MEASURED_MINUTES) * LENGTH_MB_PER_MIN + 0.999)
 
 
-def need_mb(*names: str, minutes: float | None = None) -> int:
-    """Peak RAM (CPU build) for a run that uses these models one after the other, a recording of this many minutes
-    (None: not known, taken as short), plus the margin."""
-    return max(models.RAM_MB[models.resolve(n)[0]]["cpu"] for n in names) + MARGIN_MB + extra_mb(minutes)
+def need_mb(*names: str, minutes: float | None = None, gpu: bool = False) -> int:
+    """Peak RAM for a run that uses these models one after the other, a recording of this many minutes (None: not known,
+    taken as short), plus the margin. gpu: the weights live in a graphics card's own memory (RAM_MB "gpu" column), else the
+    whole model is in RAM ("cpu" column)."""
+    col = "gpu" if gpu else "cpu"
+    return max(models.RAM_MB[models.resolve(n)[0]][col] for n in names) + MARGIN_MB + extra_mb(minutes)
 
 
-def fits(name: str, ram: dict, minutes: float | None = None) -> bool:
-    return need_mb(name, minutes=minutes) <= ram["available_mb"]
+def fits(name: str, ram: dict, minutes: float | None = None, gpu: bool = False) -> bool:
+    return need_mb(name, minutes=minutes, gpu=gpu) <= ram["available_mb"]
 
 
-def best_fit(ram: dict, candidates=SMALLER, minutes: float | None = None) -> str | None:
-    return next((n for n in candidates if fits(n, ram, minutes)), None)
+def best_fit(ram: dict, candidates=SMALLER, minutes: float | None = None, gpu: bool = False) -> str | None:
+    return next((n for n in candidates if fits(n, ram, minutes, gpu)), None)
+
+
+def gpu_runs(bin: str | None = None, flavor: str | None = None) -> bool:
+    """Will the weights live in a graphics card's own memory? True only when it is certain: the whisper-cli that will run is a
+    Vulkan or CUDA build and it sees a discrete GPU (CUDA, or Vulkan with `uma: 0`). An integrated GPU shares the computer's
+    RAM, Apple's Metal uses the same (unified) memory, and anything that cannot be found out counts as no: the CPU numbers."""
+    try:
+        from . import backend
+        found = backend.devices(backend.find_binary(bin, flavor))
+    except (Exception, SystemExit):
+        return False
+    return any(d["backend"] == "cuda" or (d["backend"] == "vulkan" and "uma: 0" in d.get("detail", "")) for d in found)
+
+
+def settle(names: list[str], ram: dict, minutes: float | None, probe: Callable[[], bool] | None) -> bool:
+    """Which column to judge by: the CPU one, unless it says no and a discrete GPU will run the model (asked only then, so a
+    computer with plenty of memory never looks for a GPU here)."""
+    if probe is None or all(fits(n, ram, minutes) for n in names):
+        return False
+    return bool(probe())
 
 
 def media_minutes(path) -> float | None:
@@ -163,47 +185,53 @@ def _for(minutes: float | None) -> str:
     return f" for a {minutes:.0f} minute recording" if minutes and minutes > 30 else ""
 
 
-def warning(name: str, ram: dict | None, minutes: float | None = None) -> str | None:
+def warning(name: str, ram: dict | None, minutes: float | None = None,
+            probe: Callable[[], bool] | None = None) -> str | None:
     """One plain line when `name` is too big for the free memory, else None. Never changes anything."""
     if not ram:
         return None
     name = models.resolve(name)[0]
-    if fits(name, ram, minutes):
+    gpu = settle([name], ram, minutes, probe)
+    if fits(name, ram, minutes, gpu):
         return None
-    alt = best_fit(ram, [n for n in SMALLER if models.RAM_MB[n]["cpu"] < models.RAM_MB[name]["cpu"]], minutes)
-    gpu = models.RAM_MB[name]["gpu"] + MARGIN_MB + extra_mb(minutes)
-    return (f"{name} needs about {gb(need_mb(name, minutes=minutes))} of free memory{_for(minutes)} and this computer has "
-            f"{gb(ram['available_mb'])} free "
-            f"({gb(ram['total_mb'])} in all): it may run very slowly or stop"
-            + (f" (on a graphics card with its own memory, about {gb(gpu)})" if gpu <= ram["available_mb"] else "")
+    col = "gpu" if gpu else "cpu"
+    alt = best_fit(ram, [n for n in SMALLER if models.RAM_MB[n][col] < models.RAM_MB[name][col]], minutes, gpu)
+    return (f"{name} needs about {gb(need_mb(name, minutes=minutes, gpu=gpu))} of free memory{_for(minutes)} and this computer "
+            f"has {gb(ram['available_mb'])} free ({gb(ram['total_mb'])} in all): it may run very slowly or stop"
             + (f". A smaller model that fits: -m {alt}." if alt else ". Close other programs and try again."))
 
 
-def choose_default(default: str, ram: dict | None, minutes: float | None = None) -> tuple[str, str | None]:
+def choose_default(default: str, ram: dict | None, minutes: float | None = None,
+                   probe: Callable[[], bool] | None = None) -> tuple[str, str | None]:
     """The model to use when nobody named one, and the one line to say when it is not the default."""
-    if not ram or fits(default, ram, minutes):
+    if not ram:
         return default, None
-    pick = best_fit(ram, [n for n in SMALLER if models.RAM_MB[n]["cpu"] < models.RAM_MB[models.resolve(default)[0]]["cpu"]],
-                    minutes)
+    gpu = settle([default], ram, minutes, probe)
+    if fits(default, ram, minutes, gpu):
+        return default, None
+    col = "gpu" if gpu else "cpu"
+    pick = best_fit(ram, [n for n in SMALLER if models.RAM_MB[n][col] < models.RAM_MB[models.resolve(default)[0]][col]],
+                    minutes, gpu)
     if pick is None:
         pick = "tiny"
-        tail = f"even tiny needs about {gb(need_mb('tiny', minutes=minutes))}; close other programs"
+        tail = f"even tiny needs about {gb(need_mb('tiny', minutes=minutes, gpu=gpu))}; close other programs"
     else:
         tail = "it is less accurate, most of all for Thai and other languages than English"
-    return pick, (f"low memory: {gb(ram['available_mb'])} free, {default} needs about {gb(need_mb(default, minutes=minutes))}"
-                  f"{_for(minutes)}; using {pick} "
+    return pick, (f"low memory: {gb(ram['available_mb'])} free, {default} needs about "
+                  f"{gb(need_mb(default, minutes=minutes, gpu=gpu))}{_for(minutes)}; using {pick} "
                   f"instead ({tail}). -m {default} keeps it.")
 
 
-def report(ram: dict | None) -> dict:
+def report(ram: dict | None, probe: Callable[[], bool] | None = None) -> dict:
     """What `babelscribe models --json` prints for the desktop app: every model, whether it fits, and the warning."""
     default = "turbo"
-    pick, say = choose_default(default, ram)
+    pick, say = choose_default(default, ram, None, probe)
+    names = list(models.GENERAL) + list(models.FINETUNES)
+    gpu = bool(ram) and settle(names, ram, None, probe)       # asked once, and only when some model does not fit the CPU way
     rows = []
-    for name in list(models.GENERAL) + list(models.FINETUNES):
-        r = models.RAM_MB[name]
+    for name in names:
         rows.append({"name": name, "kind": "general" if name in models.GENERAL else "finetune",
-                     "ram_mb": need_mb(name), "gpu_ram_mb": r["gpu"] + MARGIN_MB,
-                     "fits": None if not ram else fits(name, ram), "warning": warning(name, ram)})
-    return {"ram": ram, "margin_mb": MARGIN_MB, "default": default, "default_used": pick, "default_note": say,
+                     "ram_mb": need_mb(name, gpu=gpu), "gpu_ram_mb": models.RAM_MB[name]["gpu"] + MARGIN_MB,
+                     "fits": None if not ram else fits(name, ram, None, gpu), "warning": warning(name, ram, None, probe)})
+    return {"ram": ram, "gpu": gpu, "margin_mb": MARGIN_MB, "default": default, "default_used": pick, "default_note": say,
             "accurate": {**models.ACCURATE, "*": "large-v3"}, "models": rows}

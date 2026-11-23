@@ -162,8 +162,18 @@ def _tell(log: Callable[[str], None], line: str | None) -> None:
         log(line)
 
 
+def _once(fn: Callable[[], bool]) -> Callable[[], bool]:
+    box: list[bool] = []
+
+    def get() -> bool:
+        if not box:
+            box.append(bool(fn()))
+        return box[0]
+    return get
+
+
 def _memory(model: str, text_model: str | None, accurate: bool, translate: bool, log: Callable[[str], None],
-            src: str | Path | None = None):
+            src: str | Path | None = None, bin: str | None = None, flavor: str | None = None):
     """Look at the free memory before anything is downloaded. Returns (model to use, memory info or None).
 
     No model named, nothing else that needs one: a model that does not fit is replaced by the largest that does, with
@@ -173,14 +183,16 @@ def _memory(model: str, text_model: str | None, accurate: bool, translate: bool,
     if info is None:
         return str(model), None
     minutes = ram.media_minutes(src) if src else None
+    # Asked only when the CPU numbers say no: does a discrete graphics card hold the weights (then RAM is what the "gpu" column says)?
+    probe = _once(lambda: ram.gpu_runs(bin, flavor))
     if isinstance(model, _Unchosen) and not (text_model or accurate or translate):
-        pick, say = ram.choose_default(str(model), info, minutes)
+        pick, say = ram.choose_default(str(model), info, minutes, probe)
         _tell(log, say)
-        return pick, info
+        return pick, (info, probe)
     for name in (model, text_model):
         if name:
-            _tell(log, ram.warning(name, info, minutes))
-    return str(model), info
+            _tell(log, ram.warning(name, info, minutes, probe))
+    return str(model), (info, probe)
 
 
 def transcribe_file(
@@ -218,7 +230,7 @@ def transcribe_file(
         if models.ALIASES.get(model, model) == "large-v3-turbo":   # turbo was not trained for translation
             model = "large-v3"
             log("translate: using large-v3 (turbo does not translate)")
-    model, mem = _memory(model, text_model, accurate, translate, log, src)
+    model, mem = _memory(model, text_model, accurate, translate, log, src, bin, flavor)
     binary, timing, found = setup(model, bin, flavor)
     dev = backend.pick_device(found) if device in ("auto", None) else _device_id(device, found)
     gpu = next((d for d in found if d["id"] == dev), found[0])
@@ -229,10 +241,10 @@ def transcribe_file(
     if accurate and not text_model and not translate:
         if lang in models.ACCURATE:
             text_model = models.ACCURATE[lang]          # fine-tune text + turbo timing
-            _tell(log, mem and ram.warning(text_model, mem, ram.media_minutes(src)))
+            _tell(log, mem and ram.warning(text_model, mem[0], ram.media_minutes(src), mem[1]))
         elif model == "turbo":
             model, beam = "large-v3", 5
-            _tell(log, mem and ram.warning(model, mem, ram.media_minutes(src)))
+            _tell(log, mem and ram.warning(model, mem[0], ram.media_minutes(src), mem[1]))
             timing = models.ensure(model, _quantizer(binary))
     t0 = time.time()
     log(f"transcribing with {model} on {gpu['backend']} {gpu['name']} ...")
