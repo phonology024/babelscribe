@@ -33,7 +33,18 @@ SHA256 = {
     "whisper-cli-windows-x64-cpu.zip": "34743845679c1bc0cd30b87efcc95b3393fdd936a2252e0bfd466e7e02438121",
     "whisper-cli-windows-x64-vulkan.zip": "dba378fc25326203b57b41476ecc81c2ab5881bcd46b4b1b2a2e4a184eeeea25",
 }
-DEFAULT_RELEASES = f"https://github.com/phonology024/babelscribe/releases/download/{BINARY_TAG}"
+# A build published after BINARY_TAG was pinned stays on the release that first carried it: moving BINARY_TAG
+# would change the whisper-cli every other platform runs. name -> (release tag, sha256 from that release's SHA256SUMS)
+LATER = {
+    "whisper-cli-macos-x64-cpu.zip": ("v0.5.0", "ee42b85c95f8fa31899f0b3db1c87eb313e03765d05bd452ad781d845f4a9da1"),
+}
+
+
+def release_url(tag: str) -> str:
+    return f"https://github.com/phonology024/babelscribe/releases/download/{tag}"
+
+
+DEFAULT_RELEASES = release_url(BINARY_TAG)
 RELEASES = os.environ.get("BABELSCRIBE_RELEASES", DEFAULT_RELEASES)
 EXE = "whisper-cli.exe" if os.name == "nt" else "whisper-cli"
 RECEIPT = "babelscribe-download.json"   # written next to a downloaded binary: where it came from, what it hashed to
@@ -45,14 +56,15 @@ RECEIPT = "babelscribe-download.json"   # written next to a downloaded binary: w
 ASSETS = {
     ("windows", "x64", "vulkan"), ("windows", "x64", "cpu"),
     ("linux", "x64", "vulkan"), ("linux", "x64", "cuda"), ("linux", "x64", "cpu"),
-    ("macos", "arm64", "metal"),
+    ("macos", "arm64", "metal"), ("macos", "x64", "cpu"),
 }
 
 
 def asset_name(flavor: str | None = None) -> str:
     system = {"Windows": "windows", "Linux": "linux", "Darwin": "macos"}[platform.system()]
     arch = "arm64" if platform.machine().lower() in ("arm64", "aarch64") else "x64"
-    flavor = flavor or ("metal" if system == "macos" else "vulkan")
+    # Apple Silicon: Metal. Intel Macs: CPU only (Accelerate), the only build for them. Windows and Linux: Vulkan.
+    flavor = flavor or (("metal" if arch == "arm64" else "cpu") if system == "macos" else "vulkan")
     # A self-hosted mirror (BABELSCRIBE_RELEASES) may carry builds this project does not publish, so only the
     # default URL is checked against the table; a mirror is asked for the composed name as before.
     if RELEASES == DEFAULT_RELEASES and (system, arch, flavor) not in ASSETS:
@@ -101,18 +113,20 @@ def fetch_binary(flavor: str | None = None) -> Path:
     for a mirror that carries its own builds."""
     name = asset_name(flavor)
     dest = CACHE / "bin" / name[:-4]
-    want = None if _skip_verify() else SHA256.get(name)
+    tag, later = (LATER[name][0], LATER[name][1]) if name in LATER else (BINARY_TAG, None)
+    base = release_url(tag) if RELEASES == DEFAULT_RELEASES else RELEASES
+    want = None if _skip_verify() else (later or SHA256.get(name))
     if want is None and not _skip_verify():
         raise SystemExit(
             f"{name} is not one of the builds babelscribe publishes, so there is no checksum to verify it against.\n"
             f"If {RELEASES} is your own mirror with your own builds, set BABELSCRIBE_SKIP_VERIFY=1.")
     print(f"downloading {name} ...")
     try:
-        resp = urllib.request.urlopen(f"{RELEASES}/{name}")
+        resp = urllib.request.urlopen(f"{base}/{name}")
     except urllib.error.HTTPError as e:
         if e.code != 404:
             raise
-        raise SystemExit(f"{RELEASES}/{name} was not found (HTTP 404). Publish that file on the mirror, or build "
+        raise SystemExit(f"{base}/{name} was not found (HTTP 404). Publish that file on the mirror, or build "
                          f"whisper.cpp for this machine and pass --bin PATH/whisper-cli.")
     (CACHE / "bin").mkdir(parents=True, exist_ok=True)
     part = CACHE / "bin" / (name + ".part")
@@ -127,7 +141,7 @@ def fetch_binary(flavor: str | None = None) -> Path:
             raise SystemExit(
                 f"{name}: checksum mismatch, nothing was installed.\n"
                 f"  expected sha256 {want}\n  downloaded      {got}\n"
-                f"The download from {RELEASES} was cut short or is not the {BINARY_TAG} build. Try again; "
+                f"The download from {base} was cut short or is not the {tag} build. Try again; "
                 f"if it keeps happening, build whisper.cpp yourself and pass --bin PATH/whisper-cli."
                 + ("" if RELEASES == DEFAULT_RELEASES else
                    "\nA mirror with its own builds needs BABELSCRIBE_SKIP_VERIFY=1."))
@@ -142,7 +156,7 @@ def fetch_binary(flavor: str | None = None) -> Path:
         exe.chmod(0o755)
     files = {f.relative_to(dest).as_posix(): _sha256(f) for f in sorted(dest.rglob("*")) if f.is_file()}
     (dest / RECEIPT).write_text(json.dumps({
-        "asset": name, "source": RELEASES, "tag": BINARY_TAG if RELEASES == DEFAULT_RELEASES else None,
+        "asset": name, "source": base, "tag": tag if RELEASES == DEFAULT_RELEASES else None,
         "sha256": got, "verified": bool(want), "files": files}, indent=1), encoding="utf-8")
     return exe
 

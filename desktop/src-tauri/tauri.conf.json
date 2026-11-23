@@ -28,9 +28,6 @@
   },
   "bundle": {
     "active": true,
-    "targets": [
-      "nsis"
-    ],
     "publisher": "babelscribe",
     "copyright": "MIT licence",
     "license": "MIT",
@@ -41,26 +38,14 @@
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.png",
-      "icons/icon.ico"
-    ],
-    "externalBin": [
-      "binaries/babelscribe-engine"
+      "icons/icon.ico",
+      "icons/icon.icns"
     ],
     "resources": {
-      "engine/_internal/": "_internal/",
       "../../LICENSE": "licenses/LICENSE.txt",
       "../../packaging/standalone/THIRD-PARTY.txt": "licenses/THIRD-PARTY-engine.txt",
       "../THIRD-PARTY-NOTICES.md": "licenses/THIRD-PARTY-app.md",
       "../src/assets/fonts/OFL.txt": "licenses/Poppins-OFL.txt"
-    },
-    "windows": {
-      "nsis": {
-        "installMode": "currentUser",
-        "template": "installer/installer.nsi",
-        "installerIcon": "icons/icon.ico",
-        "headerImage": "installer/header.bmp",
-        "sidebarImage": "installer/sidebar.bmp"
-      }
     }
   }
 }

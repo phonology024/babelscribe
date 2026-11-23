@@ -12,6 +12,14 @@ def test_asset_name_is_known_flavour(monkeypatch):
         assert name.startswith("whisper-cli-") and name.endswith(".zip")
 
 
+def test_each_mac_gets_the_build_made_for_it_by_default(monkeypatch):
+    """Apple Silicon: Metal. Intel: CPU, because there is no Metal build for it (a Vulkan name would be a 404)."""
+    monkeypatch.setattr(backend.platform, "system", lambda: "Darwin")
+    for machine, want in (("arm64", "whisper-cli-macos-arm64-metal.zip"), ("x86_64", "whisper-cli-macos-x64-cpu.zip")):
+        monkeypatch.setattr(backend.platform, "machine", lambda m=machine: m)
+        assert backend.asset_name() == want
+
+
 def test_asset_name_refuses_a_platform_that_was_never_built(monkeypatch):
     """Linux arm64 and Intel macOS got a bare HTTP 404 from a name nothing was published under."""
     import pytest
@@ -28,9 +36,10 @@ def test_asset_name_matches_the_assets_the_release_actually_publishes(monkeypatc
     """The names must stay in step with .github/workflows/build-binaries.yml."""
     published = {"whisper-cli-linux-x64-cpu.zip", "whisper-cli-linux-x64-cuda.zip",
                  "whisper-cli-linux-x64-vulkan.zip", "whisper-cli-macos-arm64-metal.zip",
-                 "whisper-cli-windows-x64-cpu.zip", "whisper-cli-windows-x64-vulkan.zip"}
+                 "whisper-cli-windows-x64-cpu.zip", "whisper-cli-windows-x64-vulkan.zip",
+                 "whisper-cli-macos-x64-cpu.zip"}
     made = set()
-    for system, machines in (("Windows", ["AMD64"]), ("Linux", ["x86_64"]), ("Darwin", ["arm64"])):
+    for system, machines in (("Windows", ["AMD64"]), ("Linux", ["x86_64"]), ("Darwin", ["arm64", "x86_64"])):
         for machine in machines:
             monkeypatch.setattr(backend.platform, "system", lambda s=system: s)
             monkeypatch.setattr(backend.platform, "machine", lambda m=machine: m)

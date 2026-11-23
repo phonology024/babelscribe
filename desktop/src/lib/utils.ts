@@ -5,9 +5,15 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-/** "C:\Videos\talk.mp4" -> { name: "talk.mp4", folder: "C:\Videos" }. Both separators, as Windows accepts both. */
+/** A Windows path ("C:\Users\you\a.mp4", "\\server\share\a.mp4"): drive letter or UNC, and no case in file names. */
+export function isWindowsPath(path: string): boolean {
+  return /^[A-Za-z]:[\\/]/.test(path) || path.startsWith("\\\\");
+}
+
+/** "C:\Videos\talk.mp4" -> { name: "talk.mp4", folder: "C:\Videos" }. Windows accepts both separators; on macOS and
+ * Linux a backslash is an ordinary character in a file name. */
 export function splitPath(path: string): { name: string; folder: string } {
-  const i = Math.max(path.lastIndexOf("\\"), path.lastIndexOf("/"));
+  const i = isWindowsPath(path) ? Math.max(path.lastIndexOf("\\"), path.lastIndexOf("/")) : path.lastIndexOf("/");
   return i < 0 ? { name: path, folder: "" } : { name: path.slice(i + 1), folder: path.slice(0, i) || path.slice(0, 1) };
 }
 

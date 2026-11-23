@@ -1,7 +1,8 @@
-# Desktop app (Windows)
+# Desktop app (Windows, macOS, Linux)
 
 A small window for making subtitles without a terminal ([#18](https://github.com/phonology024/babelscribe/issues/18)).
-The code is in [`desktop/`](../desktop). It is unsigned, so Windows shows "unknown publisher" the first time.
+The code is in [`desktop/`](../desktop). It is not code-signed: Windows shows "unknown publisher" the first time, and
+macOS asks you to confirm the first start (see below).
 
 ## What it does
 
@@ -12,7 +13,7 @@ The code is in [`desktop/`](../desktop). It is unsigned, so Windows shows "unkno
    every process it started (whisper-cli, ffmpeg).
 4. **Result**: the subtitle lines, the files written next to the input, *Open* and *Show in folder*.
 
-Light and dark follow Windows; the button at the top right switches. Everything runs on the computer; the network is
+Light and dark follow the system; the button at the top right switches. Everything runs on the computer; the network is
 only used, as with the command line, to download whisper-cli and the model on first use.
 
 ## Installing
@@ -23,26 +24,81 @@ into `%LOCALAPPDATA%\babelscribe`, with a Start menu shortcut and a desktop shor
 folder. *Settings > Apps* lists it as "babelscribe" and uninstalls it completely. For scripts: `/S` installs silently
 (add `/R` to start the app afterwards).
 
+### macOS
+
+`babelscribe-macos-arm64.dmg` is for Apple Silicon (macOS 14 or newer; the GPU is used through Metal),
+`babelscribe-macos-x64.dmg` for Intel Macs (macOS 13 or newer; the CPU only, so it is slower). Open the `.dmg` and drag
+babelscribe to Applications.
+
+The app has no Apple Developer signature (that costs money per year), only the free ad-hoc one that Apple Silicon
+needs to run it at all. The first time, macOS says it cannot check the app for malware. Open it anyway:
+
+1. Try to open babelscribe once (double-click it in Applications). macOS refuses and offers *Done*.
+2. Open *System Settings > Privacy & Security*, scroll down to the message about babelscribe and click *Open Anyway*,
+   then confirm. (On macOS 14 and older you can instead right-click the app and choose *Open*.)
+
+After that it opens like any other app. If macOS says the app is "damaged" after a download, remove the download mark
+and open it again: `xattr -dr com.apple.quarantine /Applications/babelscribe.app`.
+
+### Linux
+
+`babelscribe-linux-x64.AppImage` runs on Ubuntu 22.04 or newer (and most distributions of the same age or newer): make
+it executable (`chmod +x`) and run it. It needs FUSE 2 (`sudo apt install libfuse2` on Ubuntu 22.04 and 24.04); without
+it, `APPIMAGE_EXTRACT_AND_RUN=1 ./babelscribe-linux-x64.AppImage` works. `babelscribe-linux-x64.deb` installs with
+`sudo apt install ./babelscribe-linux-x64.deb` and puts babelscribe in the application menu.
+
+The first run downloads the Vulkan build of whisper-cli (AMD, NVIDIA and Intel GPUs through the Vulkan driver, which
+Ubuntu installs with its graphics drivers: `libvulkan1`; the `.deb` depends on it). With no GPU driver it still runs on
+the CPU. The window uses WebKitGTK; if its window stays blank on an NVIDIA system, start the app with
+`WEBKIT_DISABLE_DMABUF_RENDERER=1`.
+
+### Which whisper-cli is downloaded on first use
+
+The same choice the command line makes (`babelscribe/backend.py`): Windows and Linux x64 get the Vulkan build, Apple
+Silicon the Metal build, Intel Macs the CPU build. Each download is checked against a pinned SHA-256 before it is run.
+
 ## How it is built
 
 - **Window**: [Tauri 2](https://tauri.app) with React, TypeScript, Vite, Tailwind CSS and components adapted from
   shadcn/ui. The Poppins font is bundled, so nothing is fetched at run time. Licences: `desktop/THIRD-PARTY-NOTICES.md`.
-- **Engine**: the standalone `babelscribe.exe` from `packaging/standalone` (PyInstaller), shipped inside the app as a
-  Tauri sidecar named `babelscribe-engine.exe`. The window runs it as `babelscribe FILE ... --progress-json` and reads
-  one JSON event per line from it (`log`, `progress`, `done`, `error`; see [usage.md](usage.md)). All transcription
-  logic stays in the Python package; the Rust side (`desktop/src-tauri/src/main.rs`) only starts and stops the engine,
-  opens the file picker, reads the written subtitles back and opens files and folders.
+- **Engine**: the standalone `babelscribe` from `packaging/standalone` (PyInstaller, built on each system it is
+  for), named `babelscribe-engine` inside the app. The window runs it as `babelscribe FILE ... --progress-json` and
+  reads one JSON event per line from it (`log`, `progress`, `done`, `error`; see [usage.md](usage.md)). All
+  transcription logic stays in the Python package; the Rust side (`desktop/src-tauri/src/main.rs`) only starts and
+  stops the engine, opens the file picker, reads the written subtitles back and opens files and folders.
+  - Where it is: on Windows a Tauri sidecar next to the app with its `_internal` folder beside it (as before); on
+    macOS and Linux the whole engine folder is a resource, `engine/babelscribe-engine` with `engine/_internal`
+    (`Contents/Resources` in the `.app`, `usr/lib/babelscribe` in the AppImage and the `.deb`), because a sidecar and
+    the resources end up in different folders there. The per-system settings are in
+    `desktop/src-tauri/tauri.{windows,macos,linux}.conf.json`.
+  - Stopping it: *Cancel*, closing the window, Quit from the menu or the Dock, all end the engine **and what it
+    started** (whisper-cli, ffmpeg). Windows: `taskkill /T`. macOS and Linux: the engine is started as the leader of
+    its own process group and the group gets SIGTERM, then SIGKILL after two seconds.
+  - On Linux the engine starts whisper-cli and ffmpeg with the library path the app was started with, not the
+    PyInstaller folder's (`packaging/standalone/frozen_env.py`): the GPU driver whisper-cli loads must not run against
+    the libraries the engine was built with.
 - **Logo and icons**: a rounded square with a lowercase "b" in Poppins SemiBold, as outlines (`desktop/src-tauri/icons/logo.svg`).
   `desktop/scripts/make_icons.py` draws every icon size from it (the small ones on the pixel grid, with a heavier "b")
   and the installer pictures, and the same mark for the website, the `.mcpb` bundle and the Claude plugin; the Square*Logo files come from `npx @tauri-apps/cli@2.12.6 icon icons/icon-source.png`.
-- **Installer**: Tauri's NSIS installer with its own template, `desktop/src-tauri/installer/installer.nsi`: Tauri's
+- **Installers**: macOS `.dmg` (ad-hoc signed, `signingIdentity "-"`), Linux `.AppImage` and `.deb`, both built on
+  Ubuntu 22.04 so they run on it and on newer systems. Windows: Tauri's NSIS installer with its own template, `desktop/src-tauri/installer/installer.nsi`: Tauri's
   template with the changes listed at its top (one click; a single dark progress window with the logo, a slim
   gold bar and no buttons; start the app afterwards; remove every folder on uninstall).
 - **CI**: [`.github/workflows/desktop.yml`](../.github/workflows/desktop.yml) builds the engine the same way as the
-  standalone build, builds the app and its NSIS installer on `windows-latest`, then installs it silently and checks the files,
-  the Start menu shortcut and the *Apps* entry, runs one real transcription through the installed engine, starts the
-  app, uninstalls it silently and checks that nothing is left, installs it once more the way a double-click does
-  (with screenshots), and keeps `babelscribe-setup.exe` as a workflow artifact. It runs when `desktop/`, the Python package or the standalone recipe change.
+  standalone build, builds the app and its installer, installs it, runs one real transcription through the installed
+  engine, starts the app and checks it stays up, and keeps the installers as workflow artifacts. It runs when
+  `desktop/`, the Python package or the standalone recipe change.
+  - `windows-latest`: installs the NSIS installer silently and checks the files, the Start menu shortcut and the *Apps*
+    entry, uninstalls it silently and checks that nothing is left, installs it once more the way a double-click does
+    (with screenshots).
+  - `macos-15` (Apple Silicon) and `macos-15-intel`: mounts the `.dmg`, copies the app to `/Applications`, verifies
+    the ad-hoc signature, starts the app and quits it the way Cmd+Q does.
+  - `ubuntu-22.04`: `apt install` of the `.deb` and its dependencies, the AppImage (unpacked, and started), the app
+    under Xvfb with a window manager, closed the way a window is closed.
+  - On macOS and Linux a Rust test also starts the *installed* engine on an 11-minute recording, stops it as the app
+    does while whisper-cli is working, and checks that no process of its group is left. What CI cannot do is click in
+    the window: the start of a transcription from the window, Cmd+Q during one, and what macOS shows on the first start
+    of an app downloaded from the internet are not tested.
 
 ## Working on it
 
@@ -56,7 +112,7 @@ npm test           # unit tests: arguments, progress events, subtitle parsing, r
 npm run build      # type check + production build of the window
 ```
 
-Building the app itself needs Rust and the engine in place:
+Building the app itself needs Rust and the engine in place. Windows:
 
 ```bash
 pip install . pyinstaller
@@ -65,4 +121,16 @@ mkdir -p desktop/src-tauri/binaries desktop/src-tauri/engine
 cp dist/babelscribe/babelscribe.exe desktop/src-tauri/binaries/babelscribe-engine-x86_64-pc-windows-msvc.exe
 cp -r dist/babelscribe/_internal desktop/src-tauri/engine/_internal
 cd desktop && npx tauri dev       # or: npx tauri build  -> src-tauri/target/release/bundle/nsis/*-setup.exe
+```
+
+macOS and Linux (on Linux first install WebKitGTK and the other libraries of the
+[Tauri prerequisites](https://v2.tauri.app/start/prerequisites/#linux)):
+
+```bash
+pip install . pyinstaller
+pyinstaller --noconfirm --distpath dist --workpath build packaging/standalone/babelscribe.spec
+mkdir -p desktop/src-tauri/engine
+cp dist/babelscribe/babelscribe desktop/src-tauri/engine/babelscribe-engine
+cp -R dist/babelscribe/_internal desktop/src-tauri/engine/_internal
+cd desktop && npx tauri dev       # or: npx tauri build  -> .dmg, or .AppImage and .deb, under src-tauri/target/release/bundle/
 ```

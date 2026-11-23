@@ -10,6 +10,10 @@ section into the release's section.
 ### Added
 - `--progress-json`: progress, log lines and the result as one JSON object per line on stdout, for programs
   that drive the command line, such as the desktop app (`desktop/`, Windows, first version; see `docs/desktop-app.md`).
+- The desktop app (`desktop/`) also builds for macOS (a `.dmg` for Apple Silicon and one for Intel, ad-hoc signed) and
+  Linux (an `.AppImage` and a `.deb`), and stopping it ends whisper-cli and ffmpeg there too (`docs/desktop-app.md`).
+- Intel Macs: `babelscribe` downloads the CPU build of whisper-cli (`whisper-cli-macos-x64-cpu`, from release v0.5.0, with
+  a pinned checksum) instead of failing with "no prebuilt whisper-cli". Every other platform keeps the v0.4.0 builds.
 
 ### Documentation
 - Shorter README. Full usage, benchmarks, FAQ, languages and the privacy policy moved to `docs/usage.md`,

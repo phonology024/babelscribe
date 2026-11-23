@@ -1,6 +1,10 @@
-# Desktop app (desktop/, #18): Tauri window + the standalone babelscribe.exe as its engine (sidecar).
-# Builds an unsigned Windows installer and keeps it as a workflow artifact (not a release). Windows shows
-# "unknown publisher" the first time it runs.
+# Desktop app (desktop/, #18): Tauri window + the standalone babelscribe build as its engine.
+# Builds an unsigned installer per system and keeps it as a workflow artifact (not a release):
+#   windows  babelscribe-setup.exe            (Windows shows "unknown publisher" the first time)
+#   macos    a .dmg for Apple Silicon (Metal) and one for Intel (CPU); ad-hoc signed, no Apple Developer account
+#   linux    an .AppImage and a .deb (x64)
+# Every job does the same: build the engine, build the app, install it, run one real transcription through the
+# INSTALLED engine, start the app and check it stays up, and check that closing it leaves nothing running.
 name: desktop
 on:
   push:
@@ -108,5 +112,209 @@ jobs:
         with:
           name: installer-screenshots
           path: out/shots
+          retention-days: 30
+          if-no-files-found: ignore
+
+  macos:
+    name: macos (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Apple Silicon: the only whisper-cli build is Metal ("default" leaves the flavour to the engine)
+          - { name: arm64, os: macos-15, minimum: "14.0", flavor: default }
+          # Intel: CPU only (Accelerate)
+          - { name: x64, os: macos-15-intel, minimum: "13.0", flavor: cpu }
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with: { python-version: "3.12" }
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22.23.4"
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master, 2026-11-15
+        with: { toolchain: "1.99.1" }
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with: { workspaces: "desktop/src-tauri -> target" }
+
+      - name: Build the engine (PyInstaller, the same recipe as Windows)
+        run: |
+          pip install . pyinstaller==6.22.3
+          pyinstaller --noconfirm --distpath dist --workpath build packaging/standalone/babelscribe.spec
+          mkdir -p desktop/src-tauri/engine
+          cp dist/babelscribe/babelscribe desktop/src-tauri/engine/babelscribe-engine
+          cp -R dist/babelscribe/_internal desktop/src-tauri/engine/_internal
+          desktop/src-tauri/engine/babelscribe-engine --version
+
+      - name: Frontend tests
+        working-directory: desktop
+        run: |
+          npm ci
+          npm test
+
+      - name: Build the app (Tauri, .dmg, ad-hoc signed)
+        working-directory: desktop
+        run: npx tauri build --ci --config '{"bundle":{"macOS":{"minimumSystemVersion":"${{ matrix.minimum }}"}}}'
+
+      - name: Name the installer
+        run: |
+          mkdir -p out
+          cp desktop/src-tauri/target/release/bundle/dmg/*.dmg out/babelscribe-macos-${{ matrix.name }}.dmg
+          ls -l out
+
+      - name: Install it (mount the .dmg, copy the app to /Applications) and check what is inside
+        id: install
+        run: desktop/scripts/check_install.sh install-macos out/babelscribe-macos-${{ matrix.name }}.dmg
+
+      - name: The installed engine transcribes with --progress-json (real download, tiny model)
+        env:
+          BABELSCRIBE_HOME: ${{ runner.temp }}/babelscribe-home
+        run: |
+          curl -sSfL -o jfk.wav https://github.com/ggml-org/whisper.cpp/raw/v1.9.4/samples/jfk.wav
+          python desktop/scripts/check_engine.py "${{ steps.install.outputs.engine }}" jfk.wav ${{ matrix.flavor }}
+
+      - name: Stopping the engine as the app does ends whisper-cli and ffmpeg with it (unit tests + the real engine)
+        env:
+          BABELSCRIBE_HOME: ${{ runner.temp }}/babelscribe-home
+          BABELSCRIBE_TEST_ENGINE: ${{ steps.install.outputs.engine }}
+          BABELSCRIBE_TEST_FLAVOR: ${{ matrix.flavor }}
+        run: |
+          python desktop/scripts/long_wav.py jfk.wav long.wav 60
+          export BABELSCRIBE_TEST_WAV="$PWD/long.wav"
+          cargo test --release --manifest-path desktop/src-tauri/Cargo.toml -- --nocapture --test-threads=1 2>&1 | tee cargo-test.log
+          grep -q "real-engine test: ran, nothing left" cargo-test.log
+
+      - name: The installed app starts and keeps running; Quit ends it and leaves nothing behind
+        env:
+          SHOT: out/launch-macos.png
+        run: desktop/scripts/check_install.sh launch-macos
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: babelscribe-macos-${{ matrix.name }}
+          path: out/babelscribe-macos-${{ matrix.name }}.dmg
+          retention-days: 30
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: screenshots-macos-${{ matrix.name }}
+          path: out/*.png
+          retention-days: 30
+          if-no-files-found: ignore
+
+  linux:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with: { python-version: "3.12" }
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22.23.4"
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master, 2026-11-15
+        with: { toolchain: "1.99.1" }
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with: { workspaces: "desktop/src-tauri -> target" }
+
+      - name: System libraries (WebKitGTK to build the window; Xvfb, a window manager and tools to test it)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev \
+            libayatana-appindicator3-dev librsvg2-dev patchelf libfuse2 xvfb openbox wmctrl imagemagick
+
+      - name: Build the engine (PyInstaller, the same recipe as Windows)
+        run: |
+          pip install . pyinstaller==6.22.3
+          pyinstaller --noconfirm --distpath dist --workpath build packaging/standalone/babelscribe.spec
+          mkdir -p desktop/src-tauri/engine
+          cp dist/babelscribe/babelscribe desktop/src-tauri/engine/babelscribe-engine
+          cp -R dist/babelscribe/_internal desktop/src-tauri/engine/_internal
+          desktop/src-tauri/engine/babelscribe-engine --version
+
+      - name: Frontend tests
+        working-directory: desktop
+        run: |
+          npm ci
+          npm test
+
+      - name: Build the app (Tauri, .AppImage and .deb)
+        working-directory: desktop
+        run: npx tauri build --ci
+
+      - name: Name the installers
+        run: |
+          mkdir -p out
+          cp desktop/src-tauri/target/release/bundle/appimage/*.AppImage out/babelscribe-linux-x64.AppImage
+          cp desktop/src-tauri/target/release/bundle/deb/*.deb out/babelscribe-linux-x64.deb
+          ls -l out
+
+      - name: The AppImage holds the engine and its licences
+        run: desktop/scripts/check_install.sh extract-appimage out/babelscribe-linux-x64.AppImage
+
+      - name: Install the .deb (apt, with its dependencies) and check what is inside
+        id: install
+        run: desktop/scripts/check_install.sh install-deb out/babelscribe-linux-x64.deb
+
+      - name: The installed engine transcribes with --progress-json (real download, tiny model, CPU)
+        env:
+          BABELSCRIBE_HOME: ${{ runner.temp }}/babelscribe-home
+        run: |
+          curl -sSfL -o jfk.wav https://github.com/ggml-org/whisper.cpp/raw/v1.9.4/samples/jfk.wav
+          python desktop/scripts/check_engine.py "${{ steps.install.outputs.engine }}" jfk.wav cpu
+
+      - name: Stopping the engine as the app does ends whisper-cli and ffmpeg with it (unit tests + the real engine)
+        env:
+          BABELSCRIBE_HOME: ${{ runner.temp }}/babelscribe-home
+          BABELSCRIBE_TEST_ENGINE: ${{ steps.install.outputs.engine }}
+        run: |
+          python desktop/scripts/long_wav.py jfk.wav long.wav 60
+          export BABELSCRIBE_TEST_WAV="$PWD/long.wav"
+          cargo test --release --manifest-path desktop/src-tauri/Cargo.toml -- --nocapture --test-threads=1 2>&1 | tee cargo-test.log
+          grep -q "real-engine test: ran, nothing left" cargo-test.log
+
+      - name: The installed app (.deb) starts under Xvfb and keeps running; closing its window ends it
+        env:
+          SHOT: out/launch-deb.png
+        run: desktop/scripts/check_install.sh launch-linux babelscribe
+
+      - name: The AppImage starts and keeps running; closing its window ends it
+        env:
+          SHOT: out/launch-appimage.png
+        run: |
+          if [ -e /dev/fuse ]; then
+            desktop/scripts/check_install.sh launch-linux "$PWD/out/babelscribe-linux-x64.AppImage"
+          else
+            APPIMAGE_EXTRACT_AND_RUN=1 desktop/scripts/check_install.sh launch-linux "$PWD/out/babelscribe-linux-x64.AppImage"
+          fi
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: babelscribe-linux-x64
+          path: |
+            out/babelscribe-linux-x64.AppImage
+            out/babelscribe-linux-x64.deb
+          retention-days: 30
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: screenshots-linux
+          path: out/*.png
           retention-days: 30
           if-no-files-found: ignore

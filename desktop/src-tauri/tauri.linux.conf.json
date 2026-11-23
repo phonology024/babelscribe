@@ -1,0 +1,21 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "targets": [
+      "appimage",
+      "deb"
+    ],
+    "category": "Utility",
+    "longDescription": "Make subtitles (.srt, .vtt) and text from a video or audio file, on this computer. Nothing is uploaded; the speech model runs locally.",
+    "resources": {
+      "engine/": "engine/"
+    },
+    "linux": {
+      "deb": {
+        "depends": [
+          "libvulkan1"
+        ]
+      }
+    }
+  }
+}

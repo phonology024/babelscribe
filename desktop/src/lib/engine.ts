@@ -1,5 +1,6 @@
-// Talking to the engine: babelscribe.exe (the Python CLI, bundled as a sidecar) run with --progress-json.
+// Talking to the engine: babelscribe-engine (the Python CLI, bundled with the app) run with --progress-json.
 // The command line is the single source of truth; this file only builds its arguments and reads its events.
+import { isWindowsPath } from "./utils";
 
 export type Format = "srt" | "vtt" | "txt";
 export const FORMATS: Format[] = ["srt", "vtt", "txt"];
@@ -33,13 +34,21 @@ export function engineArgs(path: string, o: Options): string[] {
   return args;
 }
 
+/** Quoted for cmd.exe / PowerShell (Windows paths) ... */
 function quote(arg: string): string {
   return /^[\w.,:\\/=-]+$/.test(arg) ? arg : `"${arg.replace(/"/g, '\\"')}"`;
 }
 
+/** ... or for a POSIX shell: single quotes keep $, backticks and backslashes as they are. */
+function quotePosix(arg: string): string {
+  return /^[\w.,:/=@%+-]+$/.test(arg) ? arg : `'${arg.replace(/'/g, "'\\''")}'`;
+}
+
 /** The same run typed into a terminal, shown under Advanced. */
 export function commandLine(path: string, o: Options): string {
-  return ["babelscribe", ...engineArgs(path, o).filter((a) => a !== "--progress-json")].map(quote).join(" ");
+  return ["babelscribe", ...engineArgs(path, o).filter((a) => a !== "--progress-json")]
+    .map(isWindowsPath(path) ? quote : quotePosix)
+    .join(" ");
 }
 
 export type EngineEvent =

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "targets": [
+      "nsis"
+    ],
+    "externalBin": [
+      "binaries/babelscribe-engine"
+    ],
+    "resources": {
+      "engine/_internal/": "_internal/"
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "template": "installer/installer.nsi",
+        "installerIcon": "icons/icon.ico",
+        "headerImage": "installer/header.bmp",
+        "sidebarImage": "installer/sidebar.bmp"
+      }
+    }
+  }
+}
