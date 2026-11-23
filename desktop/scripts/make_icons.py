@@ -1,7 +1,8 @@
 """Draw the babelscribe "b" mark and every icon and installer picture made from it.
 
     pip install fontTools brotli Pillow
-    python desktop/scripts/make_icons.py              # writes desktop/src-tauri/icons/* and desktop/src-tauri/installer/*
+    python desktop/scripts/make_icons.py   # desktop/src-tauri/icons/*, desktop/src-tauri/installer/*.bmp,
+                                           # docs/icon.png, mcpb/icon.png, plugin/.claude-plugin/icon.png
 
 The mark is a rounded square with a lowercase "b" in Poppins SemiBold (600), the same as the window's logo. The "b"
 is taken as outlines from the Poppins file the app already bundles (SIL Open Font License), so no font is needed when
@@ -25,6 +26,9 @@ DESKTOP = Path(__file__).resolve().parents[1]
 FONT = DESKTOP / "src/assets/fonts/poppins-latin-600-normal.woff2"
 ICONS = DESKTOP / "src-tauri/icons"
 INSTALLER = DESKTOP / "src-tauri/installer"
+REPO = DESKTOP.parent
+# The same mark outside the app: the website (favicon, og:image, page header), the .mcpb bundle, the Claude plugin.
+ELSEWHERE = [REPO / "docs/icon.png", REPO / "mcpb/icon.png", REPO / "plugin/.claude-plugin/icon.png"]
 
 TILE = (0x0B, 0x0B, 0x0C)        # near-black
 INK = (0xEC, 0xE8, 0xE0)         # off-white "b"
@@ -151,11 +155,10 @@ def bmp(img: Image.Image, path: Path) -> None:
 
 
 def header(w: int = 150, h: int = 57) -> Image.Image:
-    """NSIS header picture: black with the mark and a thin gold rule."""
+    """NSIS header picture: the mark on the same near-black as the installer window around it."""
     img = Image.new("RGB", (w, h), TILE)
     mark = icon(32)
-    img.paste(mark, (w - 32 - 12, (h - 32) // 2), mark)
-    ImageDraw.Draw(img).rectangle([0, h - 2, w, h], fill=GOLD)
+    img.paste(mark, (w - 32 - 16, (h - 32) // 2), mark)
     return img
 
 
@@ -180,6 +183,8 @@ def main() -> None:
     for n, name in [(32, "32x32.png"), (64, "64x64.png"), (128, "128x128.png"), (256, "128x128@2x.png"),
                     (512, "icon.png")]:
         icon(n).save(ICONS / name)
+    for path in ELSEWHERE:
+        icon(512).save(path)
     bmp(header(), INSTALLER / "header.bmp")
     bmp(sidebar(), INSTALLER / "sidebar.bmp")
     print("wrote", ICONS, INSTALLER)

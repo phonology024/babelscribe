@@ -4,6 +4,9 @@
 ;     logo, then starts the app. No welcome, licence, folder or finish page; the licences are in the install folder.
 ;   - the header picture sits on the right; no "Show details" button.
 ;   - the uninstaller also removes the folders it created (_internal, licenses).
+;   - the progress page is one quiet near-black card: dark title bar, no buttons, no status line, no branding line,
+;     a slim gold progress bar, and a shorter window (InstFilesShow below; only built-in NSIS commands and the
+;     System plugin that ships with NSIS).
 ; Silent installs (/S) behave as before: nothing is started unless /R is given.
 Unicode true
 ManifestDPIAware true
@@ -87,8 +90,13 @@ Var OldMainBinaryName
 Name "${PRODUCTNAME}"
 ; babelscribe: a clean progress page
 ShowInstDetails nevershow
+; babelscribe: header in the colours of the app icon
+!define MUI_BGCOLOR "0B0B0C"
+!define MUI_TEXTCOLOR "ECE8E0"
 ShowUninstDetails nevershow
-BrandingText "${COPYRIGHT}"
+; babelscribe: no branding line at the bottom (the copyright stays in the file properties)
+BrandingText " "
+Caption "${PRODUCTNAME}"
 OutFile "${OUTFILE}"
 
 ; We don't actually use this value as default install path,
@@ -441,7 +449,83 @@ Var AppStartMenuFolder
 !define MUI_PAGE_HEADER_SUBTEXT "It opens by itself when it is ready."
 !define MUI_INSTFILESPAGE_FINISHHEADER_TEXT "babelscribe is installed"
 !define MUI_INSTFILESPAGE_FINISHHEADER_SUBTEXT "Starting it now."
+!define MUI_PAGE_CUSTOMFUNCTION_SHOW InstFilesShow
 !insertmacro MUI_PAGE_INSTFILES
+
+; babelscribe: restyle the progress page. Control ids are those of NSIS's Modern UI dialogs (Contrib/UIs/modern*.rc):
+; 1/2/3 Next/Cancel/Back (Cancel is disabled by NSIS while files are copied, so it is hidden too), 1028/1256 branding
+; text, 1035/1036 separator lines, 1004 progress bar, 1006 status line, 1027 "Show details".
+Function InstFilesShow
+  System::Call 'dwmapi::DwmSetWindowAttribute(p $HWNDPARENT, i 20, *i 1, i 4)' ; dark title bar (Windows 10 20H1+)
+  SetCtlColors $HWNDPARENT "ECE8E0" "0B0B0C"
+  FindWindow $0 "#32770" "" $HWNDPARENT
+  SetCtlColors $0 "ECE8E0" "0B0B0C"
+  GetDlgItem $2 $HWNDPARENT 1
+  ShowWindow $2 0
+  GetDlgItem $2 $HWNDPARENT 2
+  ShowWindow $2 0
+  GetDlgItem $2 $HWNDPARENT 3
+  ShowWindow $2 0
+  GetDlgItem $2 $HWNDPARENT 1028
+  ShowWindow $2 0
+  GetDlgItem $2 $HWNDPARENT 1256
+  ShowWindow $2 0
+  GetDlgItem $2 $HWNDPARENT 1035
+  ShowWindow $2 0
+  GetDlgItem $2 $HWNDPARENT 1036
+  ShowWindow $2 0
+  GetDlgItem $2 $0 1006
+  ShowWindow $2 0
+  GetDlgItem $2 $0 1027
+  ShowWindow $2 0
+
+  ; the progress bar: unthemed, smooth, borderless, 4 px high, gold on a dark track
+  System::Call 'user32::GetDpiForWindow(p $HWNDPARENT) i .r9'
+  ${If} $9 = 0
+    StrCpy $9 96
+  ${EndIf}
+  GetDlgItem $1 $0 1004
+  System::Call 'uxtheme::SetWindowTheme(p r1, w " ", w " ")'
+  System::Call 'user32::GetWindowLongW(p r1, i -16) i .r2'
+  IntOp $2 $2 & 0xFF7FFFFF ; no WS_BORDER
+  IntOp $2 $2 | 0x1        ; PBS_SMOOTH
+  System::Call 'user32::SetWindowLongW(p r1, i -16, i r2)'
+  System::Call '*(i 0, i 0, i 0, i 0) p .r3'
+  System::Call 'user32::GetWindowRect(p r1, p r3)'
+  System::Call 'user32::MapWindowPoints(p 0, p r0, p r3, i 2)'
+  System::Call '*$3(i .r4, i .r5, i .r6, i .r7)'
+  IntOp $6 $6 - $4         ; width
+  IntOp $8 4 * $9
+  IntOp $8 $8 / 96         ; 4 px at this DPI
+  IntOp $7 24 * $9
+  IntOp $7 $7 / 96
+  IntOp $5 $5 + $7         ; a little below the header
+  System::Call 'user32::SetWindowPos(p r1, p 0, i r4, i r5, i r6, i r8, i 0x34)' ; NOZORDER|NOACTIVATE|FRAMECHANGED
+  SendMessage $1 0x0409 0 0x005DA7C9 ; PBM_SETBARCOLOR #C9A75D
+  SendMessage $1 0x2001 0 0x00201E1E ; PBM_SETBKCOLOR #1E1E20
+
+  ; a shorter window: cut the empty space under the bar (where the buttons were), keep it centred
+  System::Call 'user32::GetWindowRect(p r1, p r3)'
+  System::Call 'user32::MapWindowPoints(p 0, p $HWNDPARENT, p r3, i 2)'
+  System::Call '*$3(i .R0, i .R0, i .R0, i .r7)' ; bottom of the bar in the window's client area
+  System::Call 'user32::GetClientRect(p $HWNDPARENT, p r3)'
+  System::Call '*$3(i .R0, i .R0, i .R0, i .r6)' ; client height
+  IntOp $8 40 * $9
+  IntOp $8 $8 / 96
+  IntOp $7 $7 + $8         ; keep 40 px under the bar
+  IntOp $6 $6 - $7         ; how much to cut
+  ${If} $6 > 0
+    System::Call 'user32::GetWindowRect(p $HWNDPARENT, p r3)'
+    System::Call '*$3(i .r4, i .r5, i .r7, i .r8)'
+    IntOp $7 $7 - $4         ; width
+    IntOp $8 $8 - $5
+    IntOp $8 $8 - $6         ; new height
+    IntOp $2 $6 / 2
+    IntOp $5 $5 + $2         ; stay centred
+    System::Call 'user32::SetWindowPos(p $HWNDPARENT, p 0, i r4, i r5, i r7, i r8, i 0x14)' ; NOZORDER|NOACTIVATE
+  ${EndIf}
+  System::Free $3
+FunctionEnd
 
 ; 8. Finish page
 ;
@@ -699,6 +783,7 @@ Section WebView2
 SectionEnd
 
 Section Install
+  SetDetailsPrint none ; babelscribe: no "Extract: _internal\..." lines
   SetOutPath $INSTDIR
 
   !ifmacrodef NSIS_HOOK_PREINSTALL

@@ -34,9 +34,10 @@ folder. *Settings > Apps* lists it as "babelscribe" and uninstalls it completely
   opens the file picker, reads the written subtitles back and opens files and folders.
 - **Logo and icons**: a rounded square with a lowercase "b" in Poppins SemiBold, as outlines (`desktop/src-tauri/icons/logo.svg`).
   `desktop/scripts/make_icons.py` draws every icon size from it (the small ones on the pixel grid, with a heavier "b")
-  and the installer pictures; the Square*Logo files come from `npx @tauri-apps/cli@2.12.6 icon icons/icon-source.png`.
+  and the installer pictures, and the same mark for the website, the `.mcpb` bundle and the Claude plugin; the Square*Logo files come from `npx @tauri-apps/cli@2.12.6 icon icons/icon-source.png`.
 - **Installer**: Tauri's NSIS installer with its own template, `desktop/src-tauri/installer/installer.nsi`: Tauri's
-  template with the changes listed at its top (one click, start the app afterwards, remove every folder on uninstall).
+  template with the changes listed at its top (one click; a single dark progress window with the logo, a slim
+  gold bar and no buttons; start the app afterwards; remove every folder on uninstall).
 - **CI**: [`.github/workflows/desktop.yml`](../.github/workflows/desktop.yml) builds the engine the same way as the
   standalone build, builds the app and its NSIS installer on `windows-latest`, then installs it silently and checks the files,
   the Start menu shortcut and the *Apps* entry, runs one real transcription through the installed engine, starts the
