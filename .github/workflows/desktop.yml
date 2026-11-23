@@ -63,39 +63,50 @@ jobs:
         working-directory: desktop
         run: npx tauri build --ci
 
-      - name: Install it silently and check what was installed
-        id: setup
+      - name: Name the installer babelscribe-setup.exe
         run: |
-          setup=$(ls desktop/src-tauri/target/release/bundle/nsis/*-setup.exe)
-          ls -l "$setup"
-          "$setup" //S
-          dir=$(dirname "$(find "$(cygpath -u "$LOCALAPPDATA")" -maxdepth 3 -name babelscribe-engine.exe 2>/dev/null | head -1)")
-          echo "installed in $dir"; ls "$dir"; ls "$dir/licenses"
-          test -f "$dir/_internal/base_library.zip"
-          "$dir/babelscribe-engine.exe" --version
-          echo "dir=$(cygpath -w "$dir")" >> "$GITHUB_OUTPUT"
-          echo "setup=$setup" >> "$GITHUB_OUTPUT"
-          echo "name=$(basename "$setup" .exe)" >> "$GITHUB_OUTPUT"
+          mkdir -p out
+          cp desktop/src-tauri/target/release/bundle/nsis/*-setup.exe out/babelscribe-setup.exe
+          ls -l out
+
+      - name: Silent install, then the files, Start menu shortcut and Apps list entry it wrote
+        shell: pwsh
+        run: desktop/scripts/check_install.ps1 -Step install -Setup out/babelscribe-setup.exe
 
       - name: The installed engine transcribes with --progress-json (real download, tiny model, CPU)
         run: |
           curl -sSfL -o jfk.wav https://github.com/ggml-org/whisper.cpp/raw/v1.9.4/samples/jfk.wav
-          python desktop/scripts/check_engine.py "${{ steps.setup.outputs.dir }}/babelscribe-engine.exe" jfk.wav
+          python desktop/scripts/check_engine.py "$LOCALAPPDATA/babelscribe/babelscribe-engine.exe" jfk.wav
 
       - name: The installed app starts and keeps running
         shell: pwsh
-        run: |
-          $exe = Get-ChildItem "${{ steps.setup.outputs.dir }}" -Filter *.exe |
-            Where-Object { $_.Name -notmatch 'engine|uninstall' } | Select-Object -First 1
-          Write-Host "starting $($exe.FullName)"
-          $p = Start-Process $exe.FullName -PassThru
-          Start-Sleep -Seconds 15
-          if ($p.HasExited) { throw "the app exited at start with code $($p.ExitCode)" }
-          Stop-Process -Id $p.Id -Force
+        run: desktop/scripts/check_install.ps1 -Step launch
+
+      - name: Silent uninstall removes it all
+        shell: pwsh
+        run: desktop/scripts/check_install.ps1 -Step uninstall
+
+      - name: One click - a plain run installs without questions and starts the app (with screenshots)
+        shell: pwsh
+        timeout-minutes: 5
+        run: desktop/scripts/check_install.ps1 -Step oneclick -Setup out/babelscribe-setup.exe -Shots out/shots
+
+      - name: Uninstall again
+        if: always()
+        shell: pwsh
+        run: if (Test-Path "$env:LOCALAPPDATA/babelscribe") { desktop/scripts/check_install.ps1 -Step uninstall }
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: ${{ steps.setup.outputs.name }}-unsigned
-          path: ${{ steps.setup.outputs.setup }}
+          name: babelscribe-setup
+          path: out/babelscribe-setup.exe
           retention-days: 30
           if-no-files-found: error
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: installer-screenshots
+          path: out/shots
+          retention-days: 30
+          if-no-files-found: ignore
