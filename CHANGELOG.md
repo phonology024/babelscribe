@@ -7,6 +7,10 @@ section into the release's section.
 
 ## [Unreleased]
 
+### Added
+- `--progress-json`: progress, log lines and the result as one JSON object per line on stdout, for programs
+  that drive the command line, such as the desktop app (`desktop/`, Windows, first version; see `docs/desktop-app.md`).
+
 ### Documentation
 - Shorter README. Full usage, benchmarks, FAQ, languages and the privacy policy moved to `docs/usage.md`,
   `docs/benchmarks.md`, `docs/faq.md`, `docs/languages.md` and `docs/privacy.md`.

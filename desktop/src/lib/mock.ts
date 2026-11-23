@@ -1,0 +1,75 @@
+// Stand-in for the Rust side in a plain browser (npm run dev): a fake engine that prints the same JSON lines
+// as `babelscribe --progress-json`. Nothing is read or run. The sample text is from J. F. Kennedy's 1961
+// inaugural address (public domain).
+import type { Backend, Exit, Line } from "./backend";
+
+export const SAMPLE = "C:\\Users\\you\\Videos\\jfk_inaugural_1961.mp4";
+
+const LINES: [number, number, string][] = [
+  [0.4, 4.6, "We observe today not a victory of party,"],
+  [4.6, 8.2, "but a celebration of freedom,"],
+  [8.2, 12.4, "symbolizing an end, as well as a beginning."],
+  [13.0, 17.0, "Let the word go forth from this time and place,"],
+  [17.0, 19.8, "to friend and foe alike."],
+  [21.0, 23.6, "And so, my fellow Americans:"],
+  [23.6, 26.6, "ask not what your country can do for you,"],
+  [26.6, 30.0, "ask what you can do for your country."],
+];
+
+function t(s: number, sep: string): string {
+  const p = (n: number, w = 2) => String(n).padStart(w, "0");
+  return `${p(Math.floor(s / 3600))}:${p(Math.floor((s % 3600) / 60))}:${p(Math.floor(s % 60))}${sep}${p(Math.round((s % 1) * 1000), 3)}`;
+}
+
+function file(path: string): string {
+  if (path.endsWith(".txt")) return LINES.map((l) => l[2]).join("\n") + "\n";
+  if (path.endsWith(".vtt")) return "WEBVTT\n\n" + LINES.map(([a, b, x]) => `${t(a, ".")} --> ${t(b, ".")}\n${x}`).join("\n\n") + "\n";
+  return LINES.map(([a, b, x], i) => `${i + 1}\n${t(a, ",")} --> ${t(b, ",")}\n${x}`).join("\n\n") + "\n";
+}
+
+const params = () => new URLSearchParams(typeof location === "undefined" ? "" : location.search);
+let timers: number[] = [];
+
+export const mock: Backend = {
+  async pickFile() {
+    return SAMPLE;
+  },
+  async fileInfo() {
+    return { exists: true, isFile: true, size: 48 * 1024 * 1024 };
+  },
+  async run(args: string[], onLine: Line, onExit: Exit) {
+    const src = args[0];
+    const formats = (args[args.indexOf("-f") + 1] || "srt").split(",");
+    const base = src.replace(/\.[^.\\/]+$/, "");
+    const hold = Number(params().get("hold") ?? 101); // ?hold=42 stops the fake run there, for screenshots
+    const say = (ms: number, line: string, stream: "stdout" | "stderr" = "stdout") =>
+      timers.push(window.setTimeout(() => onLine(stream, line), ms));
+    const ev = (o: object) => JSON.stringify(o);
+    let ms = 200;
+    if (!args.includes("-l")) say(ms += 300, ev({ event: "log", message: "language: en" }));
+    say(ms += 200, ev({ event: "log", message: "transcribing with turbo on vulkan GPU 0 ..." }));
+    for (let p = 0; p <= 100; p += 6) {
+      if (p > hold) return;
+      say(ms += 180, ev({ event: "progress", stage: "transcribe", percent: p }));
+    }
+    if (hold <= 100) return;
+    say(ms += 120, ev({ event: "progress", stage: "transcribe", percent: 100 }));
+    const files = formats.map((f) => `${base}.${f}`);
+    say(ms += 200, ev({ event: "done", files, lang: "en", segments: LINES.length, seconds: 6.1, model: "turbo",
+      device: "vulkan GPU 0", text: LINES.map((l) => l[2]).join("\n") }));
+    timers.push(window.setTimeout(() => onExit(0), ms + 50));
+  },
+  async cancel() {
+    timers.forEach(clearTimeout);
+    timers = [];
+  },
+  async readText(path: string) {
+    return file(path);
+  },
+  async openPath() {},
+  async showInFolder() {},
+  async setTheme() {},
+  async onDrop() {
+    return () => {};
+  },
+};

@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The main window: core events (file drops, theme). Everything else goes through the app's own commands in src/main.rs.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}
