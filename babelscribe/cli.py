@@ -111,7 +111,7 @@ def main(argv: list[str] | None = None) -> None:
         rest = [x for x in argv[1:] if x != "--exit-when-stdin-closes"]
         info = ram.detect()
         if rest == ["--json"]:                       # for programs: what fits this computer, and what to say if not
-            print(json.dumps(ram.report(info), ensure_ascii=True))
+            print(json.dumps(ram.report(info, ram.gpu_runs), ensure_ascii=True))
             return
         print("general (99 languages), with the free memory a run needs:")
         [print(f"  {k:16} {v:>7}  needs ~{ram.need_mb(k) / 1024:.1f} GB") for k, v in models.GENERAL.items()]
@@ -119,7 +119,7 @@ def main(argv: list[str] | None = None) -> None:
         [print(f"  {k:18} [{v['lang']}] {v['note']}") for k, v in models.FINETUNES.items()]
         if info:
             print(f"this computer: {info['available_mb'] / 1024:.1f} GB free of {info['total_mb'] / 1024:.1f} GB; "
-                  f"{ram.warning('turbo', info) or 'the default model (turbo) fits'}")
+                  f"{ram.warning('turbo', info, None, ram.gpu_runs) or 'the default model (turbo) fits'}")
         return
     ap = argparse.ArgumentParser(prog="babelscribe", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("input", nargs="+", help="audio/video files and/or folders, or 'devices'")

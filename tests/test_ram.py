@@ -1,5 +1,6 @@
 """Free memory (#18): detection on each OS from canned system output, the fit rule, and what transcribe_file does with it."""
 import json
+from pathlib import Path
 
 import pytest
 
@@ -164,12 +165,6 @@ def test_warning_for_the_smallest_model_has_no_smaller_one_to_offer():
     assert "-m" not in say and "Close other programs" in say
 
 
-def test_a_discrete_gpu_figure_is_mentioned_only_when_it_would_fit():
-    low = {"total_mb": 8 * GB, "available_mb": ram.need_mb("large-v3") - 1}      # CPU run does not fit, a GPU run does
-    assert "graphics card" in ram.warning("large-v3", low)
-    assert "graphics card" not in ram.warning("large-v3", machine(0.3, 4))
-
-
 def test_every_fine_tune_is_judged_like_a_large_model():
     for name in models.FINETUNES:
         assert ram.warning(name, machine(0.5, 4)) and ram.warning(name, machine(32)) is None
@@ -330,3 +325,116 @@ def test_transcribe_file_counts_the_length_of_the_recording(monkeypatch, tmp_pat
     monkeypatch.setattr(ram, "media_minutes", lambda p: 240.0)
     asked, said, r = _run(monkeypatch, tmp_path, ram.need_mb("turbo") / GB + 0.2)    # fits turbo for a short file only
     assert asked[0] != "turbo" and any("240 minute recording" in s for s in said)
+
+
+# ------------------------------------------------------------------------------------------------- a graphics card holds the weights
+
+from babelscribe import backend  # noqa: E402
+
+VULKAN_DISCRETE = {"backend": "vulkan", "id": 0, "name": "AMD Radeon RX 9070 XT", "detail": "uma: 0 | fp16: 1 | warp size: 64"}
+VULKAN_SHARED = {"backend": "vulkan", "id": 0, "name": "Intel(R) UHD Graphics", "detail": "uma: 1 | fp16: 1"}
+
+
+def with_devices(monkeypatch, found=None, boom=None):
+    monkeypatch.setattr(backend, "find_binary", lambda *a, **k: Path("whisper-cli"))
+    if boom:
+        monkeypatch.setattr(backend, "devices", lambda b: (_ for _ in ()).throw(boom))
+    else:
+        monkeypatch.setattr(backend, "devices", lambda b: found)
+
+
+@pytest.mark.parametrize("found,expected", [
+    ([VULKAN_DISCRETE], True),
+    ([VULKAN_SHARED], False),                                           # an integrated GPU uses the computer's own RAM
+    ([VULKAN_SHARED, VULKAN_DISCRETE], True),
+    ([{"backend": "cuda", "id": 0, "name": "NVIDIA GeForce RTX 4060", "detail": ""}], True),
+    ([{"backend": "metal", "id": 0, "name": "Apple M2", "detail": ""}], False),   # unified memory: the CPU numbers
+    ([{"backend": "vulkan", "id": 0, "name": "unknown", "detail": ""}], False),   # not certain it is discrete
+    ([], False)])
+def test_a_graphics_card_counts_only_when_it_is_certain(monkeypatch, found, expected):
+    with_devices(monkeypatch, found)
+    assert ram.gpu_runs() is expected
+
+
+@pytest.mark.parametrize("boom", [OSError("cannot run"), SystemExit("no whisper-cli"), RuntimeError("x"), FileNotFoundError("x")])
+def test_a_graphics_card_that_cannot_be_found_out_counts_as_none(monkeypatch, boom):
+    with_devices(monkeypatch, boom=boom)
+    assert ram.gpu_runs() is False
+
+
+def test_devices_keeps_what_whisper_cli_says_about_each_gpu(monkeypatch):
+    class Out:
+        stdout = ""
+        stderr = ("ggml_vulkan: Found 1 Vulkan devices:\n"
+                  "ggml_vulkan: 0 = AMD Radeon RX 9070 XT (AMD proprietary driver) | uma: 0 | fp16: 1\n")
+    monkeypatch.setattr(backend.subprocess, "run", lambda *a, **k: Out)
+    got = backend.devices(Path("whisper-cli"))
+    assert got[0]["backend"] == "vulkan" and got[0]["name"].startswith("AMD Radeon") and "uma: 0" in got[0]["detail"]
+
+
+def spy(answer):
+    calls = []
+    return (lambda: calls.append(1) or answer), calls
+
+
+def test_with_a_card_the_default_stays_when_only_the_cpu_numbers_say_no():
+    two_gb = machine(2.0)
+    assert not ram.fits("turbo", two_gb) and ram.fits("turbo", two_gb, gpu=True)
+    probe, calls = spy(True)
+    assert ram.choose_default("turbo", two_gb, None, probe) == ("turbo", None) and calls == [1]
+    assert ram.warning("turbo", two_gb, None, probe) is None
+    probe, calls = spy(False)
+    pick, say = ram.choose_default("turbo", two_gb, None, probe)
+    assert pick != "turbo" and "low memory" in say
+
+
+def test_the_card_is_not_asked_when_the_cpu_numbers_already_say_yes():
+    probe, calls = spy(True)
+    assert ram.choose_default("turbo", machine(16), None, probe) == ("turbo", None)
+    assert ram.warning("large-v3", machine(16), None, probe) is None
+    assert calls == []
+
+
+def test_with_a_card_a_computer_with_very_little_ram_still_gets_a_smaller_model_and_the_gpu_numbers_are_used():
+    low = {"total_mb": 2 * GB, "available_mb": ram.need_mb("small", gpu=True)}      # not even turbo fits the card's way
+    low["available_mb"] = ram.need_mb("turbo", gpu=True) - 1
+    pick, say = ram.choose_default("turbo", low, None, lambda: True)
+    assert ram.fits(pick, low, gpu=True) and f"needs about {ram.gb(ram.need_mb('turbo', gpu=True))}" in say
+    assert ram.need_mb("large-v3", gpu=True) < ram.need_mb("large-v3")
+
+
+def test_a_chosen_big_model_is_not_warned_about_when_a_card_will_run_it():
+    free = {"total_mb": 8 * GB, "available_mb": ram.need_mb("large-v3", gpu=True)}
+    assert ram.warning("large-v3", free, None, lambda: True) is None
+    assert "large-v3 needs about 4.5 GB" in ram.warning("large-v3", free, None, lambda: False)
+
+
+def test_report_for_the_app_judges_by_the_card_when_there_is_one():
+    two_gb = machine(2.0)
+    on = ram.report(two_gb, lambda: True)
+    off = ram.report(two_gb, lambda: False)
+    assert on["gpu"] is True and on["default_used"] == "turbo" and on["default_note"] is None
+    assert off["gpu"] is False and off["default_used"] != "turbo"
+    by = {m["name"]: m for m in on["models"]}
+    assert by["large-v3-turbo"]["fits"] is True and by["large-v3-turbo"]["ram_mb"] == ram.need_mb("turbo", gpu=True)
+    assert {m["name"]: m["fits"] for m in off["models"]}["large-v3-turbo"] is False
+
+
+def test_transcribe_file_keeps_turbo_when_a_card_holds_it_and_the_ram_is_low(monkeypatch, tmp_path):
+    monkeypatch.setattr(ram, "gpu_runs", lambda bin=None, flavor=None: True)
+    asked, said, r = _run(monkeypatch, tmp_path, 2.0)
+    assert asked == ["turbo"] and not any("low memory" in s or "needs about" in s for s in said)
+    monkeypatch.setattr(ram, "gpu_runs", lambda bin=None, flavor=None: False)
+    asked, said, r = _run(monkeypatch, tmp_path, 2.0)
+    assert asked[0] != "turbo" and any("low memory" in s for s in said)
+
+
+def test_the_card_is_looked_for_once_however_many_models_are_judged(monkeypatch):
+    calls = []
+    monkeypatch.setattr(ram, "gpu_runs", lambda bin=None, flavor=None: calls.append(1) or True)
+    monkeypatch.setattr(api, "_told", set())
+    api._memory(api.UNCHOSEN, None, False, False, lambda m: None)
+    monkeypatch.setattr(ram, "detect", lambda: machine(0.9))
+    calls.clear()
+    api._memory("large-v3", "thai-thonburian", False, False, lambda m: None)
+    assert len(calls) == 1
