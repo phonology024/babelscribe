@@ -7,6 +7,8 @@
 ;   - the progress page is one quiet near-black card: dark title bar, no buttons, no status line, no branding line,
 ;     a slim gold progress bar, and a shorter window (InstFilesShow below; only built-in NSIS commands and the
 ;     System plugin that ships with NSIS).
+;   - when the install stops, the header says so and what to do, and a WebView2 failure also shows its reason in a box
+;     (the page has no status line or buttons; the title bar's close button still closes it).
 ; Silent installs (/S) behave as before: nothing is started unless /R is given.
 Unicode true
 ManifestDPIAware true
@@ -449,6 +451,9 @@ Var AppStartMenuFolder
 !define MUI_PAGE_HEADER_SUBTEXT "It opens by itself when it is ready."
 !define MUI_INSTFILESPAGE_FINISHHEADER_TEXT "babelscribe is installed"
 !define MUI_INSTFILESPAGE_FINISHHEADER_SUBTEXT "Starting it now."
+; babelscribe: no status line or buttons on this page, so the header says what to do when it stops
+!define MUI_INSTFILESPAGE_ABORTHEADER_TEXT "babelscribe was not installed"
+!define MUI_INSTFILESPAGE_ABORTHEADER_SUBTEXT "Close babelscribe if it is open, then run the setup again."
 !define MUI_PAGE_CUSTOMFUNCTION_SHOW InstFilesShow
 !insertmacro MUI_PAGE_INSTFILES
 
@@ -715,6 +720,10 @@ Section WebView2
           DetailPrint "$(webview2DownloadSuccess)"
         ${Else}
           DetailPrint "$(webview2DownloadError)"
+          ; babelscribe: the progress page has no status line, so say why in a box of its own
+          ${IfNot} ${Silent}
+            MessageBox MB_ICONSTOP "$(webview2AbortError)"
+          ${EndIf}
           Abort "$(webview2AbortError)"
         ${EndIf}
         StrCpy $6 "$TEMP\MicrosoftEdgeWebview2Setup.exe"
@@ -747,6 +756,10 @@ Section WebView2
           DetailPrint "$(webview2InstallSuccess)"
         ${Else}
           DetailPrint "$(webview2InstallError)"
+          ; babelscribe: the progress page has no status line, so say why in a box of its own
+          ${IfNot} ${Silent}
+            MessageBox MB_ICONSTOP "$(webview2AbortError)"
+          ${EndIf}
           Abort "$(webview2AbortError)"
         ${EndIf}
       webview2_done:
