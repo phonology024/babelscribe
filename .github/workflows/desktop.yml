@@ -1,0 +1,101 @@
+# Desktop app (desktop/, #18): Tauri window + the standalone babelscribe.exe as its engine (sidecar).
+# Builds an unsigned Windows installer and keeps it as a workflow artifact (not a release). Windows shows
+# "unknown publisher" the first time it runs.
+name: desktop
+on:
+  push:
+    branches: [main]
+    paths:
+      - "desktop/**"
+      - "babelscribe/**"
+      - "packaging/standalone/**"
+      - "pyproject.toml"
+      - ".github/workflows/desktop.yml"
+  pull_request:
+    paths:
+      - "desktop/**"
+      - "babelscribe/**"
+      - "packaging/standalone/**"
+      - "pyproject.toml"
+      - ".github/workflows/desktop.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with: { python-version: "3.12" }
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22.23.4"
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master, 2026-11-15
+        with: { toolchain: "1.99.1" }
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with: { workspaces: "desktop/src-tauri -> target" }
+
+      - name: Build the engine (the standalone babelscribe.exe, as in build-standalone.yml)
+        run: |
+          pip install . pyinstaller==6.22.3
+          pyinstaller --noconfirm --distpath dist --workpath build packaging/standalone/babelscribe.spec
+          mkdir -p desktop/src-tauri/binaries desktop/src-tauri/engine
+          cp dist/babelscribe/babelscribe.exe desktop/src-tauri/binaries/babelscribe-engine-x86_64-pc-windows-msvc.exe
+          cp -r dist/babelscribe/_internal desktop/src-tauri/engine/_internal
+
+      - name: Frontend tests
+        working-directory: desktop
+        run: |
+          npm ci
+          npm test
+
+      - name: Build the app (Tauri, NSIS installer)
+        working-directory: desktop
+        run: npx tauri build --ci
+
+      - name: Install it silently and check what was installed
+        id: setup
+        run: |
+          setup=$(ls desktop/src-tauri/target/release/bundle/nsis/*-setup.exe)
+          ls -l "$setup"
+          "$setup" //S
+          dir=$(dirname "$(find "$(cygpath -u "$LOCALAPPDATA")" -maxdepth 3 -name babelscribe-engine.exe 2>/dev/null | head -1)")
+          echo "installed in $dir"; ls "$dir"; ls "$dir/licenses"
+          test -f "$dir/_internal/base_library.zip"
+          "$dir/babelscribe-engine.exe" --version
+          echo "dir=$(cygpath -w "$dir")" >> "$GITHUB_OUTPUT"
+          echo "setup=$setup" >> "$GITHUB_OUTPUT"
+          echo "name=$(basename "$setup" .exe)" >> "$GITHUB_OUTPUT"
+
+      - name: The installed engine transcribes with --progress-json (real download, tiny model, CPU)
+        run: |
+          curl -sSfL -o jfk.wav https://github.com/ggml-org/whisper.cpp/raw/v1.9.4/samples/jfk.wav
+          python desktop/scripts/check_engine.py "${{ steps.setup.outputs.dir }}/babelscribe-engine.exe" jfk.wav
+
+      - name: The installed app starts and keeps running
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem "${{ steps.setup.outputs.dir }}" -Filter *.exe |
+            Where-Object { $_.Name -notmatch 'engine|uninstall' } | Select-Object -First 1
+          Write-Host "starting $($exe.FullName)"
+          $p = Start-Process $exe.FullName -PassThru
+          Start-Sleep -Seconds 15
+          if ($p.HasExited) { throw "the app exited at start with code $($p.ExitCode)" }
+          Stop-Process -Id $p.Id -Force
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.setup.outputs.name }}-unsigned
+          path: ${{ steps.setup.outputs.setup }}
+          retention-days: 30
+          if-no-files-found: error

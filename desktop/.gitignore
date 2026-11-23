@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.tsbuildinfo
+# Rust build output and the engine copied in by CI (see .github/workflows/desktop.yml)
+src-tauri/target/
+src-tauri/gen/
+src-tauri/binaries/
+src-tauri/engine/

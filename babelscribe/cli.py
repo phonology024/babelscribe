@@ -17,7 +17,9 @@ Vulkan, NVIDIA via CUDA, Apple via Metal) or the CPU.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
+import traceback
 
 from . import __version__, api, backend, doctor, models
 
@@ -131,8 +133,68 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--flavor", help="prebuilt flavour to download: vulkan | cuda | metal | cpu")
     ap.add_argument("-v", "--verbose", action="store_true")
     ap.add_argument("--no-progress", action="store_true", help="never draw the progress bar")
+    ap.add_argument("--progress-json", action="store_true",
+                    help="for programs that run babelscribe (such as the desktop app): print one JSON object per "
+                         "line on stdout (progress, log, done, error) and everything else on stderr")
     ap.add_argument("--version", action="version", version=__version__)
     a = ap.parse_args(argv)
+    if a.progress_json:
+        return run_with_events(a)
+    return _run(a)
+
+
+def json_events(stream):
+    """emit(event, **fields) for --progress-json: one JSON object per line, flushed at once (stdout is a pipe).
+
+    ASCII-only JSON, so a reader on Windows never meets the ANSI code page of a piped stream."""
+    def emit(event: str, **fields) -> None:
+        stream.write(json.dumps({"event": event, **fields}) + "\n")
+        stream.flush()
+    return emit
+
+
+def run_with_events(a: argparse.Namespace) -> None:
+    """Run with --progress-json. Events on stdout:
+
+      {"event": "log", "message": "..."}                       what the CLI would print
+      {"event": "progress", "stage": "transcribe", "percent": 42.0}   0-100 per stage, never going back
+      {"event": "done", "files": [...], "lang": "en", ...}      the transcribe_file summary (one file) or the
+                                                                transcribe_many summary (several files)
+      {"event": "error", "message": "..."}                     then exit code 1
+
+    Anything else that is printed (downloads, whisper-cli with -v) goes to stderr, so stdout stays parseable."""
+    emit = json_events(sys.stdout)
+    saved, sys.stdout = sys.stdout, sys.stderr
+    try:
+        _run(a, emit)
+    except SystemExit as e:
+        if isinstance(e.code, str):
+            emit("error", message=e.code)
+            raise SystemExit(1) from None
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        emit("error", message=f"{type(e).__name__}: {e}")
+        raise SystemExit(1) from None
+    finally:
+        sys.stdout = saved
+
+
+def _run(a: argparse.Namespace, emit=None) -> None:
+    """The main command after its arguments are parsed. emit: see run_with_events."""
+    from pathlib import Path
+
+    from . import llm_translate
+
+    def stage_progress(stage: str):
+        last = [-1.0]
+
+        def report(pct: float) -> None:
+            pct = round(min(max(float(pct), 0.0), 100.0), 1)
+            if pct > last[0]:
+                last[0] = pct
+                emit("progress", stage=stage, percent=pct)
+        return report
 
     if a.input == ["devices"]:
         _, _, found = api.setup(a.model, a.bin, a.flavor)
@@ -152,10 +214,12 @@ def main(argv: list[str] | None = None) -> None:
         prompt=a.prompt,
         translate=a.translate,
     )
-    if sys.stderr.isatty() and not a.verbose and not a.no_progress:   # a bar only where a person is watching
+    if emit:
+        options["log"] = lambda message: emit("log", message=str(message))
+        options["progress"] = stage_progress("transcribe")
+    elif sys.stderr.isatty() and not a.verbose and not a.no_progress:   # a bar only where a person is watching
         options["progress"] = progress_bar()
     formats = [f.strip() for f in a.formats.split(",") if f.strip()]
-    from pathlib import Path
     if a.burn:
         from . import burn
         if "json" not in formats:
@@ -179,7 +243,7 @@ def main(argv: list[str] | None = None) -> None:
     def burn_one(src, files: list[str]) -> dict:
         saved = next(f for f in files if f.endswith(".json"))
         return burn.burn_file(src, saved, a.style, saved[:-len(".json")] + ".subbed.mp4", a.font,
-                              progress=options.get("progress"))
+                              progress=stage_progress("burn") if emit else options.get("progress"))
 
     try:
         if len(a.input) == 1 and not Path(a.input[0]).expanduser().is_dir():   # one file: -o is the output base path
@@ -187,10 +251,11 @@ def main(argv: list[str] | None = None) -> None:
             if a.burn and src.is_file():
                 burn.video_size(src, burn.burn_ffmpeg())   # an audio file has no picture: say so before transcribing it
             r = api.transcribe_file(src=a.input[0], formats=formats, out=a.out, **options)
-            if a.translate_to:
-                translate_one(r["files"])
-            if a.burn:
-                burn_one(src, r["files"])
+            translated = translate_one(r["files"]) if a.translate_to else None
+            burned = burn_one(src, r["files"]) if a.burn else None
+            if emit:
+                more = (translated["files"] if translated else []) + ([burned["file"]] if burned else [])
+                emit("done", **{**r, "files": r["files"] + more})
             return
         if a.burn:
             burn.burn_ffmpeg()
@@ -218,6 +283,8 @@ def main(argv: list[str] | None = None) -> None:
         raise SystemExit(str(e))
     if not done["total"]:
         raise SystemExit("no audio or video files found" + ("" if a.recursive else " (use -r to look in sub-folders)"))
+    if emit:
+        emit("done", **done)
     print(f"{done['succeeded']} done, {done['skipped']} skipped, {done['failed']} failed")
     for r in done["files"]:
         if not r["ok"]:
