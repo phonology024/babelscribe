@@ -47,7 +47,7 @@ def collect_report() -> tuple[list[tuple[str, str]], str]:
     mem = ram.detect()
     checks.append(("Memory", "could not be found out" if not mem else
                    f"{ram.gb(mem['available_mb'])} free of {ram.gb(mem['total_mb'])}; "
-                   + (ram.warning("turbo", mem, None, ram.gpu_runs) or "the default model (turbo) fits")))
+                   + (ram.warning("turbo", mem, None, lambda: ram.gpu_runs(download=False)) or "the default model (turbo) fits")))
 
     ffmpeg = shutil.which("ffmpeg")
     if ffmpeg:

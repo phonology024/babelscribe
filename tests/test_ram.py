@@ -9,6 +9,12 @@ from babelscribe import api, cli, hybrid, models, ram, transcribe
 GB = 1024
 
 
+@pytest.fixture(autouse=True)
+def _no_graphics_card_unless_a_test_says_so(monkeypatch):
+    """No test looks for (or downloads) a real whisper-cli to find out about a graphics card."""
+    monkeypatch.setattr(ram, "gpu_runs", lambda bin=None, flavor=None, download=True: False)
+
+
 def machine(free_gb, total_gb=16):
     return {"total_mb": int(total_gb * GB), "available_mb": int(free_gb * GB)}
 
@@ -352,12 +358,14 @@ def with_devices(monkeypatch, found=None, boom=None):
     ([{"backend": "vulkan", "id": 0, "name": "unknown", "detail": ""}], False),   # not certain it is discrete
     ([], False)])
 def test_a_graphics_card_counts_only_when_it_is_certain(monkeypatch, found, expected):
+    monkeypatch.undo()
     with_devices(monkeypatch, found)
     assert ram.gpu_runs() is expected
 
 
 @pytest.mark.parametrize("boom", [OSError("cannot run"), SystemExit("no whisper-cli"), RuntimeError("x"), FileNotFoundError("x")])
 def test_a_graphics_card_that_cannot_be_found_out_counts_as_none(monkeypatch, boom):
+    monkeypatch.undo()
     with_devices(monkeypatch, boom=boom)
     assert ram.gpu_runs() is False
 
