@@ -12,25 +12,24 @@ own graphics card — AMD Radeon, NVIDIA, Intel Arc or Apple Silicon — or the 
 It runs OpenAI Whisper through [whisper.cpp](https://github.com/ggml-org/whisper.cpp) with Vulkan, CUDA or Metal, and works
 from the command line, from Python, or from AI apps (Claude, Codex, Antigravity, Gemini CLI, Cursor) as an MCP server.
 
+## Install
 ```bash
 pip install babelscribe          # Python 3.9+
-babelscribe interview.mp4                 # auto-detects language, picks your best GPU -> interview.srt + interview.json
 ```
+On first use babelscribe downloads a prebuilt `whisper-cli` for your system (Vulkan, CUDA, Metal or CPU), so there is
+nothing to compile. Which build your hardware gets: [How it works](https://github.com/phonology024/babelscribe/blob/main/docs/usage.md#how-it-works).
+Docker: [docs/usage.md#docker](https://github.com/phonology024/babelscribe/blob/main/docs/usage.md#docker).
 
-babelscribe is a thin, friendly layer on top of [whisper.cpp](https://github.com/ggml-org/whisper.cpp). It exists because
-getting fast Whisper on a non-NVIDIA card (e.g. an AMD Radeon on Windows) still means building whisper.cpp with the
-Vulkan SDK yourself. babelscribe downloads a prebuilt `whisper-cli` for your system and handles the rest.
-
-| Your hardware | Backend used | Prebuilt asset |
-|---|---|---|
-| AMD / NVIDIA / Intel GPU on Windows | Vulkan | `windows-x64-vulkan` |
-| NVIDIA on Windows | Vulkan (same build) | `windows-x64-vulkan` |
-| NVIDIA on Linux (alternative) | CUDA | `linux-x64-cuda` (`--flavor cuda`) |
-| AMD / NVIDIA / Intel GPU on Linux | Vulkan | `linux-x64-vulkan` |
-| Apple Silicon | Metal | `macos-arm64-metal` |
-| No usable GPU | CPU | `*-cpu` (`--flavor cpu`) |
-
-A 19-minute English TED talk transcribes in 48 seconds on an AMD Radeon RX 9070 XT with 1.5% word error — see the benchmark below.
+## Quick start
+```bash
+babelscribe interview.mp4                 # auto-detects language, picks your best GPU -> interview.srt + interview.json
+babelscribe talk.mp4 -f srt,vtt,txt,json  # all formats
+babelscribe ./recordings -o ./subs --skip-existing   # a whole folder; leave files that are already done
+babelscribe talk.mp4 -l th --accurate     # slower, fewest errors (best model per language)
+babelscribe clip.mp4 --burn --style shorts   # also clip.subbed.mp4: the video with the captions drawn on
+```
+All options, Python, translation, burn-in and re-export:
+[docs/usage.md](https://github.com/phonology024/babelscribe/blob/main/docs/usage.md).
 
 ## Use it from an AI app (MCP) — no terminal needed
 
@@ -41,14 +40,9 @@ transcribe files on **your** computer with **your** GPU. Ask in plain words — 
 my Downloads"* — and the app finds the file, transcribes it, writes `.srt` / `.txt` next to it, and can then proofread names,
 translate or summarise the text for you.
 
-Tools: `transcribe` (file → subtitles + text), `transcribe_folder` (every audio/video in a folder, one summary
-back), `convert_subtitles` (re-wrap or re-export from the saved JSON, no transcription), `burn_subtitles` (the video with
-the subtitles drawn on it), `translate_subtitles` (into any language, through an LLM on your computer), `find_media` (newest audio/video in Downloads, Videos, Desktop, …), `list_devices`,
-`list_languages_and_models`.
-
-`transcribe_folder` goes on after a file fails and lists the failure in the summary. Subtitles land next to each
-file, or under `output_dir` with the same sub-folders. Two files that would share a subtitle name (`talk.mp4` and
-`talk.mp3`) keep their full name: `talk.mp4.srt`, `talk.mp3.srt`.
+Tools: `transcribe`, `transcribe_folder`, `convert_subtitles`, `burn_subtitles`, `translate_subtitles`, `find_media`,
+`list_devices`, `list_languages_and_models`. What each one does:
+[docs/usage.md#mcp-tools](https://github.com/phonology024/babelscribe/blob/main/docs/usage.md#mcp-tools).
 
 **Claude Desktop (one click):** download `babelscribe.mcpb` from the [latest release](https://github.com/phonology024/babelscribe/releases/latest)
 and double-click it (or *Settings → Extensions → Install extension*).
@@ -75,239 +69,23 @@ and double-click it (or *Settings → Extensions → Install extension*).
 (`timeout` is in milliseconds and only some apps read it.) Already installed with pip? Use `"command": "babelscribe", "args": ["mcp"]`.
 Web-only chat apps (e.g. grok.com, chatgpt.com) can only reach servers on the internet, not your computer, so they can't use your GPU or files.
 
-The MCP tools use the `turbo` model (1.6 GB). On a small machine set `BABELSCRIBE_MODEL` in the server's
-environment to pick another one, e.g. `"env": {"BABELSCRIBE_MODEL": "small"}` in the JSON above.
+## Results
+GPU: AMD Radeon RX 9070 XT via Vulkan. *default* = `large-v3-turbo`; *accurate* = `--accurate`.
 
-## Benchmark: real talks, human captions as the answer key
-Four TED / TEDx talks, scored against the **human-made captions in the spoken language** (`bench/bench.py`, reproducible).
-Error = word error rate (WER) for space-separated languages, character error rate (CER) for Japanese and Thai.
-GPU: AMD Radeon RX 9070 XT via Vulkan. *default* = `large-v3-turbo`; *accurate* = `--accurate` (see the FLEURS section).
+| Test | default | `--accurate` |
+|---|---|---|
+| English TED talk, 19.3 min, WER vs human captions | 48 s (24x) · 1.5% | 107 s (11x) · 1.5% |
+| Thai, Google FLEURS, CER | 15.9% | 8.9% |
+| Hindi, Google FLEURS, WER | 28.4% | 12.6% |
+| English, Google FLEURS, WER | 6.1% | 5.7% |
 
-| Language | Talk | Length | default: time / error | `--accurate`: time / error |
-|---|---|---|---|---|
-| English | [Matt Walker — Sleep Is Your Superpower (TED)](https://youtu.be/5MuIMqhT8DM) | 19.3 min | 48 s (24x) · WER **1.5%** | 107 s (11x) · WER **1.5%** |
-| Japanese | [Kazunari Taguchi (TEDxHimi)](https://youtu.be/cjtmDEG-B7U) | 16.2 min | 47 s (20x) · CER 4.7% | 115 s (8x) · CER **4.2%** |
-| Spanish | [Adrià Solà Pastor — Cómo hablar (TEDxESIC University)](https://youtu.be/XUqrvbsTfck) | 19.9 min | 56 s (21x) · WER 13.8% | 134 s (9x) · WER 13.5% |
-| Thai | [นิติ ชัยชิตาทร — โปรดเรียกฉันด้วยนามอันแท้จริง (TEDxBangkok)](https://youtu.be/48A9SU6_bQ8) | 14.1 min | 74 s (12x) · CER 22.7% | 565 s (2x) · CER **16.4%** |
-
-How to read it: TED captions are edited for reading (fillers dropped, light rewording), so these numbers are an upper bound —
-most of the Spanish "errors" are the speaker's actual words versus the tidied caption. Thai is genuinely harder: fast,
-casual speech with slang; `--accurate` (Pathumma Whisper text + turbo timing) cuts its error by more than a quarter.
-Talks are used only to measure accuracy; their transcripts are not redistributed (TED content is CC BY-NC-ND).
-
-## Benchmark: 16 languages on FLEURS
-[Google FLEURS](https://huggingface.co/datasets/google/fleurs) test set, 50 utterances per language, human-verified
-verbatim transcripts (`bench/fleurs.py`, reproducible). Same normaliser for every language (Whisper's rule: lower-case,
-drop punctuation and non-spacing marks, numbers spelled out). WER for space-separated languages, CER for ja / zh / ko / th.
-
-| Language | default (turbo) | `--accurate` | model `--accurate` uses | `--accurate`, edge-trimmed* |
-|---|---|---|---|---|
-| English | 6.1% | 5.7% | large-v3, beam 5 | 5.6% |
-| Spanish | 4.1% | 4.2% | large-v3, beam 5 | **2.6%** |
-| French | 7.4% | 7.3% | large-v3, beam 5 | 7.2% |
-| German | 4.3% | 4.0% | large-v3, beam 5 | **3.3%** |
-| Portuguese | 8.5% | 7.7% | large-v3, beam 5 | 5.3% |
-| Italian | 6.7% | 6.5% | large-v3, beam 5 | **3.8%** |
-| Russian | 6.8% | 5.8% | large-v3, beam 5 | 5.6% |
-| Arabic | 11.0% | 10.6% | large-v3, beam 5 | 9.7% |
-| Hindi | 28.4% | **12.6%** | [vasista22/whisper-hindi-large-v2](https://huggingface.co/vasista22/whisper-hindi-large-v2) + turbo timing | 11.1% |
-| Indonesian | 9.8% | 7.8% | large-v3, beam 5 | 5.6% |
-| Vietnamese | 10.8% | 9.1% | large-v3, beam 5 | 9.1% |
-| Turkish | 6.2% | 6.7% | large-v3, beam 5 | 5.8% |
-| Japanese (CER) | 6.4% | 5.7% | large-v3, beam 5 | **4.6%** |
-| Chinese (CER) | 6.3% | 5.3% | large-v3, beam 5 | **4.8%** |
-| Korean (CER) | 4.1% | 3.9% | large-v3, beam 5 | **3.1%** |
-| Thai (CER) | 15.9% | **8.9%** | [Pathumma Whisper](https://huggingface.co/nectec/Pathumma-whisper-th-large-v3) (NECTEC) + turbo timing | 8.8% |
-
-\* Some FLEURS clips contain more speech than their reference transcript, so a correct model is charged for words the
-reference leaves out. *Edge-trimmed* ignores extra words before the first / after the last reference word; both numbers
-are stored by `bench/fleurs.py`. 50 utterances per language means differences under ~0.5 points are noise.
-
-Also measured and **not** used, because large-v3 was as good or better: large-v2 (all languages),
-PhoWhisper-large (vi 19.0%), whisper-large-v3 dialectal / code-switching Arabic fine-tunes (12.2% / 15.2%),
-Typhoon Whisper (th 11.9%), Thonburian Whisper (th 9.1% — kept as an option), Vaani Hindi (16.5%).
-
-## Why babelscribe (vs. what already exists)
-| | GPU on AMD / Intel | Windows, no build step | Video in, subtitles out | Long files don't loop | Better text for your language |
-|---|---|---|---|---|---|
-| **babelscribe** | ✅ Vulkan | ✅ prebuilt `whisper-cli` downloaded for you | ✅ ffmpeg bundled | ✅ `--max-context 0` by default | ✅ hybrid fine-tune text + turbo timing |
-| whisper.cpp (raw) | ✅ Vulkan — if you compile it | ❌ official releases ship no Windows Vulkan build | ❌ WAV 16 kHz only | ⚠️ you must know the flag | ❌ |
-| faster-whisper / WhisperX | ❌ GPU = NVIDIA CUDA only | ✅ pip | ✅ | ⚠️ | ⚠️ manual |
-| Cloud APIs | n/a (cloud) | ✅ | ✅ | ✅ | ❌ — and your audio leaves your machine, paid per minute |
-
-babelscribe does **not** replace those projects — it stands on whisper.cpp and simply removes the hard parts:
-compiling for your GPU, converting media, picking the right device, avoiding the long-file repeat bug, and combining
-a language-specific fine-tune with accurate timestamps.
-
-## FAQ
-**How do I run Whisper on an AMD GPU on Windows?**
-`pip install babelscribe`, then `babelscribe video.mp4`. It downloads a Vulkan build of whisper.cpp that runs on AMD Radeon
-(and Intel Arc / NVIDIA) cards on Windows and Linux — no ROCm, no CUDA, no compiling.
-
-**How do I make subtitles (SRT) from a video for free, offline?**
-`babelscribe video.mp4 -f srt` writes `video.srt` next to the video. Nothing is uploaded; it runs on your own computer.
-
-**What is the most accurate free transcription for Thai?**
-`babelscribe video.mp4 -l th --accurate` — Pathumma Whisper (NECTEC) for the text plus Whisper turbo for timing:
-CER 8.9% on Google FLEURS vs 15.9% for plain Whisper turbo. Thonburian Whisper is available too (`--text-model thai-thonburian`).
-
-**Can Claude / ChatGPT Codex / Gemini transcribe a video on my computer?**
-Yes — add babelscribe as an MCP server (see *Use it from an AI app*). Claude Desktop installs it with one click from
-`babelscribe.mcpb`. The AI app can then find a file, transcribe it on your GPU, and proofread, translate or summarise the text.
-
-**How fast is it?**
-About 20x real time with Whisper large-v3-turbo on an AMD Radeon RX 9070 XT: a 19-minute talk in 48 seconds.
-
-**Which languages are supported?**
-All 99 Whisper languages, with automatic language detection. FLEURS error rates for 16 of them are in the benchmark table.
-
-**Is it better than faster-whisper or WhisperX?**
-Those are excellent on NVIDIA GPUs; on AMD / Intel GPUs they fall back to the CPU. babelscribe's niche is any GPU, zero setup,
-and better Thai / Hindi through community fine-tunes. If you have an NVIDIA card and like Python, faster-whisper is a fine choice.
+FLEURS: 50 utterances per language. All 16 languages, four TED / TEDx talks, method and the models that were tried and
+not used: [docs/benchmarks.md](https://github.com/phonology024/babelscribe/blob/main/docs/benchmarks.md).
 
 ## Languages
-All 99 languages Whisper was trained on, auto-detected or forced with `-l`:
-af am ar as az ba be bg bn bo br bs ca cs cy da de el en es et eu fa fi fo fr gl gu ha haw he hi hr ht hu hy id is it ja jw ka kk km kn ko la lb ln lo lt lv mg mi mk ml mn mr ms mt my ne nl nn no oc pa pl ps pt ro ru sa sd si sk sl sn so sq sr su sv sw ta te tg th tk tl tr tt uk ur uz vi yi yo yue zh
-
-Accuracy follows Whisper's own training data: excellent for high-resource languages (English, Spanish, Japanese, …),
-weaker for low-resource ones. That is what hybrid mode is for — a community fine-tune for one language can be plugged in
-with one line in `babelscribe/models.py` (Thai and Hindi so far). PRs adding fine-tunes for other
-languages are the most valuable contribution.
-
-## Limitations (honest)
-- Tested end to end so far on an AMD Radeon RX 9070 XT (Windows, Vulkan). CUDA, Linux and macOS builds are produced by CI; reports from those machines are welcome.
-- Hybrid mode runs two models, so it is slower (≈1 min per minute of audio with a large fine-tune on that GPU).
-- Proper nouns can still be misspelled — check names before publishing subtitles.
-
-## Features
-- **Any input** — mp4, mkv, mov, mp3, wav, m4a… (ffmpeg is bundled through `imageio-ffmpeg`).
-- **Any language** — `-l auto` detects it; or pass `-l th`, `-l ja`, `-l es`…
-- **Picks the right GPU** — prefers a discrete card over an integrated one; `babelscribe devices` lists them, `--device N` overrides.
-- **Long files that don't loop** — runs whisper with `--max-context 0`, which stops the classic "same sentence repeated forever" hallucination on long recordings.
-- **Hybrid mode for better spelling in your language** — community fine-tunes (e.g. Thai *Thonburian Whisper*) spell far better but often lose timestamps. `--text-model` takes the text from the fine-tune and the timing from `large-v3-turbo`, aligned character by character (works for languages without spaces), cut only at word boundaries, with the timing model filling any words the fine-tune skipped.
-- **`--accurate`** — slower, fewest errors: large-v3 with beam search, or for Thai and Hindi the best community fine-tune (hybrid). Chosen per language from the FLEURS benchmark above.
-- **Custom vocabulary** — `--prompt "Pitakpong, babelscribe"` gives whisper an initial prompt that biases the spelling of names and jargon. In the MCP `transcribe` tool the same thing is the `vocabulary` argument. While a prompt is set, `--max-context 0` is not passed (whisper.cpp ignores the prompt otherwise).
-- **Translate to English** — `--translate` writes the transcript translated to English (whisper's translate task, any source language). It uses `large-v3` because turbo was not trained to translate, and cannot be combined with `--text-model`. In the MCP `transcribe` tool it is the `translate` argument.
-- **Progress** — in a terminal the CLI draws a progress bar per file (`--no-progress` turns it off; it is never drawn into a pipe or a log). MCP clients get a notification every 5 seconds with the real percentage (`progress` of `total` 100 for one file; files done plus the fraction of the current one for a folder). From Python: `transcribe_file(..., progress=callback)`, called with 0 to 100.
-- **Outputs** — `srt`, `vtt`, `txt`, `json` (segments with token timings), `ass` (karaoke: each word highlights
-  as it is spoken, from the token timings — for short-form video and players that read ASS).
-
-## Usage
-```bash
-babelscribe talk.mp4 -f srt,vtt,txt,json          # all formats
-babelscribe a.mp4 b.mp3 c.wav                      # several files in one run
-babelscribe ./recordings                           # every audio/video file in a folder (-r: sub-folders too)
-babelscribe ./recordings -o ./subs --skip-existing # write into a folder; leave files that are already done
-babelscribe reel.mp4 -f ass                        # karaoke subtitles, one highlight per word
-babelscribe podcast.mp3 -l en -m large-v3          # pick language and model
-babelscribe talk.mp4 -l hi --accurate              # slower, fewest errors (best model per language)
-babelscribe vo.wav -l th --text-model thai-thonburian   # hybrid: pick a Thai fine-tune yourself
-babelscribe talk.mp4 --prompt "Pitakpong, babelscribe"   # bias the spelling of names and terms
-babelscribe talk.mp4 --translate                   # subtitles translated to English
-babelscribe talk.mp4 --translate-to th             # also talk.th.srt: any language, through your local LLM
-babelscribe convert talk.json -f srt,ass --max-line-chars 20   # re-wrap / re-export, no transcription
-babelscribe clip.mp4 --burn --style shorts         # also clip.subbed.mp4: the video with the captions drawn on
-babelscribe devices                                # GPUs whisper.cpp can see
-babelscribe models                                 # models and fine-tunes
-babelscribe talk.mp4 --bin /path/to/whisper-cli    # use your own whisper.cpp build
-```
-With several files or a folder, a file that fails does not stop the rest: the run ends with a summary line
-(`12 done, 0 skipped, 1 failed`) and a non-zero exit code if anything failed. `-o` is then an output folder, and
-two files that would share a subtitle name (`talk.mp4` and `talk.mp3`) keep their full name.
-
-**Fix and re-export.** Transcribing is the slow part; how the subtitles look is the part you redo. Keep the JSON
-and the rest takes no time:
-```bash
-babelscribe talk.mp4 -f json,srt                 # once
-# correct names or words in the "text" fields of talk.json, then:
-babelscribe convert talk.json -f srt,vtt,ass     # every format gets the corrected text, with its timing
-```
-`convert` also takes `--max-line-chars`, `--max-lines 1`, and three reading-speed rules that are off unless asked
-for: `--max-duration 7` (cut subtitles that stay up longer), `--min-duration 1` and `--max-cps 17` (keep short or
-fast subtitles up longer, never into the next one). In MCP it is the `convert_subtitles` tool, which is why the
-MCP tools now write a `.json` by default.
-
-**Translate into any language, with your own LLM.** `--translate` is whisper's own translator and only writes
-English. For any other direction (English to Thai, Japanese to Spanish, ...) babelscribe can hand the finished
-subtitles to an LLM running on your computer: Ollama, LM Studio, llama-server, or anything else with an
-OpenAI-compatible API. babelscribe downloads no model for this; it uses the one you already run.
-```bash
-babelscribe talk.mp4 --translate-to th                      # talk.srt as usual, plus talk.th.srt
-babelscribe translate talk.json --to ja -f srt,vtt          # later, from the saved JSON (or from any .srt / .vtt)
-babelscribe talk.mp4 --translate-to es --llm http://127.0.0.1:11434/v1 --llm-model gemma3
-```
-Only the text is translated: every sentence keeps its own start and end time, and the lines are wrapped again by
-the rules of the target language (shorter lines for Thai, Japanese and Chinese). The original files are not
-changed. Without `--llm`, the usual local ports are tried (llama-server 8080, Ollama 11434, LM Studio 1234), or
-set `BABELSCRIBE_LLM`. If nothing answers, babelscribe says so before it starts transcribing. The endpoint must
-be on this computer; `--allow-remote` is the explicit switch for sending the text to another machine.
-
-Measured: a 3 min 18 s English recording into Thai with Gemma (26B, Q4) in llama-server on a Radeon RX 9070 XT:
-17 s to transcribe, 38 s to translate. Translation quality is the model's: a small model translates fast and
-loosely, so read the result before you publish it. In MCP it is `translate_to` on `transcribe`, and the
-`translate_subtitles` tool.
-
-**Burn the subtitles into the video.** For TikTok, Reels and Shorts the result you post is the video with the
-captions on it, not an `.srt`:
-```bash
-babelscribe clip.mp4 --burn                   # clip.subbed.mp4, white subtitles at the bottom
-babelscribe clip.mp4 --burn --style karaoke   # each word lights up as it is spoken
-babelscribe clip.mp4 --burn --style shorts    # big, two or three words at a time, placed for vertical video
-babelscribe burn clip.mp4                     # again from the saved clip.json (after fixing words, or another style)
-babelscribe burn clip.mp4 clip.ass            # an .ass you styled yourself is drawn exactly as it is
-```
-| `babelscribe jfk.mp4 --burn --style karaoke` | `babelscribe clip.mp4 -l th --burn --style shorts` |
-|---|---|
-| ![English clip with karaoke subtitles](https://raw.githubusercontent.com/phonology024/babelscribe/main/docs/img/burn-karaoke-en.jpg) | ![Vertical Thai clip with shorts captions](https://raw.githubusercontent.com/phonology024/babelscribe/main/docs/img/burn-shorts-th.jpg) |
-
-Frames from real runs (speech: JFK's 1961 inaugural address, public domain; a Thai sentence from Google FLEURS, CC BY 4.0).
-
-The input video is never changed and its audio is copied as it is. Text size and position follow the picture
-(a phone video counts as vertical), and the font is one that has the letters of the language: Thai, Japanese,
-Chinese, Korean, Arabic and Devanagari are looked up among the fonts on your computer, and if none has them
-babelscribe says which to install instead of drawing empty boxes (`--font "Name"` to choose yourself). The video is
-encoded on the GPU when it can be (NVIDIA, AMD, Intel, Apple), otherwise with x264. An `.srt` or `.vtt` can be
-burned too, plain only, since it has no word timings. For Thai in the shorts look, `pip install "babelscribe[thai]"`
-keeps words whole. In MCP it is the `burn_subtitles` tool.
-
-From Python:
-```python
-from babelscribe.api import transcribe_file
-r = transcribe_file("talk.mp4", lang="auto", formats=["srt", "txt"])   # or accurate=True, prompt="names, terms"
-print(r["lang"], r["device"], r["files"]); print(r["text"][:200])
-
-from babelscribe.api import transcribe_many
-done = transcribe_many(["a.mp4", "./recordings"], recursive=True, formats=["srt"])   # other options as above
-print(done["succeeded"], done["failed"])
-```
-Models download on first use to `~/.babelscribe/models` (`BABELSCRIBE_MODELS` to change). Hybrid fine-tunes are converted on your
-machine from their original Hugging Face repo — install `pip install "babelscribe[finetune]"` once; converted weights are never
-redistributed, so each fine-tune keeps its own licence. Thai word boundaries: `pip install "babelscribe[thai]"`.
-
-## Docker
-No Python, ffmpeg or whisper.cpp on the host — the image has them, and the model is cached in a volume. There is no
-published image yet, so build it from a checkout, then run it on the folder that holds your media:
-```bash
-docker build -t babelscribe -f docker/Dockerfile .
-docker run --rm -v "$PWD:/media" -v babelscribe-models:/models babelscribe talk.mp4   # writes talk.srt next to the input
-```
-CPU by default, linux/amd64; a Vulkan image for GPU hosts is one `--build-arg` away. Details: [docker/README.md](docker/README.md).
-
-## Roadmap
-What's planned next (real progress percentages, folders on the command line, verified downloads, more fine-tunes, burn-in subtitles, a desktop app) is in [ROADMAP.md](ROADMAP.md) and the [open issues](https://github.com/phonology024/babelscribe/issues).
-
-## Add a language fine-tune
-Add one entry to `FINETUNES` in `babelscribe/models.py` (Hugging Face repo, language code, whether it needs beam search) and open a PR.
-
-## Prebuilt binaries
-`.github/workflows/build-binaries.yml` builds `whisper-cli` + `whisper-quantize` for every row of the table above and attaches
-them to each `v*` release, with a `SHA256SUMS` file.
-
-Each babelscribe version downloads the binaries of one fixed release (`BINARY_TAG` in `babelscribe/backend.py`), not
-"latest", and checks the zip's sha256 before unpacking it. A download that does not match is deleted and nothing is
-run. `babelscribe doctor` shows which release the cached binary came from and whether its files changed since.
-Point `BABELSCRIBE_RELEASES` at another URL to self-host: a mirror of the official zips is checked the same way; a
-mirror with your own builds needs `BABELSCRIBE_SKIP_VERIFY=1`.
+All 99 languages Whisper was trained on, auto-detected or forced with `-l`. For Thai and Hindi, `--accurate` uses a
+community fine-tune. The full list and how to add a fine-tune:
+[docs/languages.md](https://github.com/phonology024/babelscribe/blob/main/docs/languages.md).
 
 ## ภาษาไทย
 ใช้ผ่าน Claude Desktop ได้โดยไม่ต้องพิมพ์คำสั่ง: โหลด `babelscribe.mcpb` จากหน้า Releases แล้วดับเบิลคลิก จากนั้นพิมพ์ในแชทว่า *"ทำซับไทยให้คลิปล่าสุดในโฟลเดอร์ดาวน์โหลด"*
@@ -315,28 +93,19 @@ mirror with your own builds needs `BABELSCRIBE_SKIP_VERIFY=1`.
 ภาษาไทยแนะนำ `babelscribe ไฟล์.mp4 -l th --accurate` — ข้อความจาก Pathumma Whisper (NECTEC) ที่ผิดน้อยที่สุดใน FLEURS (CER 8.9% เทียบ turbo 15.9%) + เวลาจาก large-v3-turbo
 หรือเลือก Thonburian Whisper เอง: `--text-model thai-thonburian`
 
-## Privacy Policy
-babelscribe runs entirely on your own computer. Last updated 2026-11-10.
+## More docs
+- [Usage](https://github.com/phonology024/babelscribe/blob/main/docs/usage.md): features, every command, Python, MCP tools, Docker, prebuilt binaries
+- [Benchmarks](https://github.com/phonology024/babelscribe/blob/main/docs/benchmarks.md): TED talks and 16 languages on FLEURS
+- [FAQ](https://github.com/phonology024/babelscribe/blob/main/docs/faq.md): common questions, limitations, how it compares
+- [Languages](https://github.com/phonology024/babelscribe/blob/main/docs/languages.md): all 99 languages, adding a fine-tune
+- [Roadmap](https://github.com/phonology024/babelscribe/blob/main/ROADMAP.md) and [open issues](https://github.com/phonology024/babelscribe/issues)
+- [Contributing](https://github.com/phonology024/babelscribe/blob/main/CONTRIBUTING.md) · [Changelog](https://github.com/phonology024/babelscribe/blob/main/CHANGELOG.md)
 
-- **Data collection:** none. babelscribe has no telemetry, analytics, accounts or crash reporting, and never uploads your
-  audio, video, transcripts or file names anywhere.
-- **What it processes and where:** the media file you choose is converted and transcribed locally; subtitles and text are
-  written to your disk (next to the file, or the folder you choose). Through MCP, the transcript text is returned to the AI
-  app that called the tool — what that app does with it is governed by that app's own privacy policy.
-- **Optional translation (`--translate-to`, off unless you ask):** the subtitle text is sent to the LLM endpoint you
-  run, which must be on this computer (`127.0.0.1` / `localhost`). It goes to another machine only if you pass
-  `--allow-remote` yourself (for the MCP server: `BABELSCRIBE_LLM_ALLOW_REMOTE=1` in its settings; an AI app cannot
-  switch it on). Audio and video are never sent.
-- **Network access (downloads only):** on first use it downloads the `whisper-cli` program from this project's GitHub
-  releases, speech models from Hugging Face (`huggingface.co/ggerganov/whisper.cpp`, and for `--accurate` Thai/Hindi the
-  fine-tune's own repository), and Python packages from PyPI when installed with pip/uv. These are plain downloads;
-  no personal data is sent. GitHub, Hugging Face and PyPI see a normal download request (IP address, user agent) under
-  their own privacy policies.
-- **Storage and retention:** downloaded programs and models are cached in `~/.babelscribe` (or `BABELSCRIBE_HOME` /
-  `BABELSCRIBE_MODELS`) until you delete that folder. Outputs stay wherever they were written until you delete them.
-  babelscribe keeps no other data.
-- **Third-party sharing:** none.
-- **Contact:** open an issue at https://github.com/phonology024/babelscribe/issues
+## Privacy Policy
+babelscribe runs entirely on your own computer. It has no telemetry, analytics, accounts or crash reporting, and never
+uploads your audio, video, transcripts or file names. The network is used only to download `whisper-cli`, models and
+Python packages. Optional translation (`--translate-to`) sends subtitle text only to an LLM on this computer, unless you
+pass `--allow-remote`. Full policy: [docs/privacy.md](https://github.com/phonology024/babelscribe/blob/main/docs/privacy.md).
 
 ## Credits & licence
 MIT. Built on [whisper.cpp](https://github.com/ggml-org/whisper.cpp) (MIT) and OpenAI Whisper models (MIT).
