@@ -21,6 +21,12 @@ section into the release's section.
   `--flavor` is preferred.
 - Intel Macs: `babelscribe` downloads the CPU build of whisper-cli (`whisper-cli-macos-x64-cpu`, from release v0.5.0, with
   a pinned checksum) instead of failing with "no prebuilt whisper-cli". Every other platform keeps the v0.4.0 builds.
+- Free memory (RAM) is looked at before a model is downloaded (Windows, Linux including container limits, macOS; no new
+  dependency). With no `-m` and not enough free memory for the default model (turbo), the largest model that fits is used
+  and one line says which and why; `-m turbo` keeps it. A model you named (`-m`, `--text-model`, `--accurate`,
+  `--translate`) is never changed, only warned about. If the memory cannot be found out, nothing changes. `babelscribe
+  models` shows what each model needs, and `babelscribe models --json` (used by the desktop app) says what fits and why not.
+  The peak memory of every model is measured and listed in `docs/memory.md`.
 
 ### Documentation
 - Shorter README. Full usage, benchmarks, FAQ, languages and the privacy policy moved to `docs/usage.md`,

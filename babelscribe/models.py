@@ -36,6 +36,14 @@ FINETUNES = {
 # with beam search, which beat every public fine-tune we tried for vi / ar.
 ACCURATE = {"th": "thai-pathumma", "hi": "hindi-vasista"}
 MODELS = Path(os.environ.get("BABELSCRIBE_MODELS", CACHE / "models"))
+# Peak RAM in MB of one whisper-cli run on a 2 minute recording, measured (docs/memory.md says how): "cpu" = the CPU
+# build, "gpu" = the Vulkan build, whose weights live in the card's own memory. A fine-tune is a large-v3-sized model
+# stored as q8_0 (measured as large-v3 quantized to q8_0). Longer recordings need more: ram.LENGTH_MB_PER_MIN.
+RAM_MB = {
+    "tiny": {"cpu": 309, "gpu": 420}, "base": {"cpu": 418, "gpu": 534}, "small": {"cpu": 887, "gpu": 635},
+    "medium": {"cpu": 2191, "gpu": 683}, "large-v3-turbo": {"cpu": 1939, "gpu": 670}, "large-v3": {"cpu": 4046, "gpu": 871},
+    **{name: {"cpu": 2665, "gpu": 835} for name in FINETUNES},
+}
 
 
 def resolve(name: str) -> tuple[str, dict | None]:

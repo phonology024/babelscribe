@@ -120,6 +120,8 @@ print(done["succeeded"], done["failed"])
 Models download on first use to `~/.babelscribe/models` (`BABELSCRIBE_MODELS` to change). Hybrid fine-tunes are converted on your
 machine from their original Hugging Face repo — install `pip install "babelscribe[finetune]"` once; converted weights are never
 redistributed, so each fine-tune keeps its own licence. Thai word boundaries: `pip install "babelscribe[thai]"`.
+A computer with little free memory gets a smaller model than `turbo` when you do not name one, and a warning when you name one
+that will not fit; what each model needs is in [memory.md](memory.md).
 
 ## MCP tools
 Setup for each app is in the [README](../README.md#use-it-from-an-ai-app-mcp--no-terminal-needed).
@@ -133,8 +135,9 @@ the subtitles drawn on it), `translate_subtitles` (into any language, through an
 file, or under `output_dir` with the same sub-folders. Two files that would share a subtitle name (`talk.mp4` and
 `talk.mp3`) keep their full name: `talk.mp4.srt`, `talk.mp3.srt`.
 
-The MCP tools use the `turbo` model (1.6 GB). On a small machine set `BABELSCRIBE_MODEL` in the server's
-environment to pick another one, e.g. `"env": {"BABELSCRIBE_MODEL": "small"}` in the JSON above.
+The MCP tools use the `turbo` model (1.6 GB), or a smaller one when the computer has too little free memory for it
+(see [memory.md](memory.md)). To choose yourself, set `BABELSCRIBE_MODEL` in the server's environment, e.g.
+`"env": {"BABELSCRIBE_MODEL": "small"}` in the JSON above.
 
 ## Docker
 No Python, ffmpeg or whisper.cpp on the host — the image has them, and the model is cached in a volume. There is no

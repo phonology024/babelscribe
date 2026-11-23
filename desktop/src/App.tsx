@@ -5,7 +5,7 @@ import { ConfirmDialog, DialogClose } from "./components/ui/dialog";
 import { Logo } from "./components/logo";
 import { useToast } from "./components/toast";
 import { backend, inApp } from "./lib/backend";
-import { chosenFormats, DEFAULT_OPTIONS, engineArgs, exited, newRun, step as stepRun, type Options as Opts, type Run } from "./lib/engine";
+import { chosenFormats, DEFAULT_OPTIONS, engineArgs, exited, newRun, parseFit, step as stepRun, type Fit, type Options as Opts, type Run } from "./lib/engine";
 import { addRecent, loadRecent, saveRecent, type Recent } from "./lib/recent";
 import { parseFile, parseText, subtitleSource, type Cue } from "./lib/subtitles";
 import { applyTheme, savedTheme, saveTheme, systemDark, themeFromUrl, type Theme } from "./lib/theme";
@@ -25,6 +25,7 @@ export default function App() {
   const [file, setFile] = useState<{ path: string; size: number | null } | null>(null);
   const [opts, setOpts] = useState<Opts>(DEFAULT_OPTIONS);
   const [run, setRun] = useState<Run | null>(null);
+  const [fit, setFit] = useState<Fit | null>(null);
   const [running, setRunning] = useState(false);
   const [cues, setCues] = useState<Cue[]>([]);
   const [recent, setRecent] = useState<Recent[]>(() => loadRecent());
@@ -34,6 +35,7 @@ export default function App() {
   const [theme, setTheme] = useState<Theme | null>(() => themeFromUrl() ?? savedTheme());
   const [osDark, setOsDark] = useState(systemDark());
   const runId = useRef(0);
+  const fitAsked = useRef<Promise<void>>(Promise.resolve()); // the engine runs one thing at a time
   const finished = useRef(0);
   const stepRef = useRef(step);
   stepRef.current = step;
@@ -86,6 +88,26 @@ export default function App() {
     setFile({ path, size });
     setOpts((o) => ({ ...o, lang: known?.lang ?? "auto", accurate: known?.lang === "th" || known?.lang === "hi" ? true : o.accurate }));
     setRecent((l) => addRecent(l, { path, when: Date.now() }));
+    // which models fit this computer's free memory: the engine decides, this only asks (never blocks the screen)
+    fitAsked.current = fitAsked.current.then(
+      () =>
+        new Promise<void>((resolve) => {
+          let out = "";
+          // never keep a run waiting for a note: end the question, then let the run have the engine
+          const giveUp = setTimeout(() => b.cancel().catch(() => {}).then(() => resolve()), 8000);
+          const done = () => {
+            clearTimeout(giveUp);
+            resolve();
+          };
+          b.run(["models", "--json"], (stream, line) => stream === "stdout" && (out += line), () => {
+            setFit(parseFit(out));
+            done();
+          }).catch(() => {
+            setFit(null);
+            done();
+          });
+        }),
+    );
     setReached(2);
     go(2);
   }, [go, toast]);
@@ -131,6 +153,8 @@ export default function App() {
     setReached(3);
     go(3);
     try {
+      await fitAsked.current; // the memory question is a second or two at most; the engine runs one thing at a time
+      if (id !== runId.current) return; // Stop was pressed while waiting
       await (await backend()).run(
         engineArgs(file.path, opts),
         (stream, line) => id === runId.current && setRun((r) => r && stepRun(r, stream, line, Date.now())),
@@ -313,7 +337,7 @@ export default function App() {
               />
             )}
             {step === 2 && file && (
-              <Options path={file.path} size={file.size} opts={opts} setOpts={setOpts} onChangeFile={() => go(1)} onStart={start} />
+              <Options path={file.path} size={file.size} fit={fit} opts={opts} setOpts={setOpts} onChangeFile={() => go(1)} onStart={start} />
             )}
             {step === 3 && file && run && (
               <Progress

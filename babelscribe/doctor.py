@@ -7,7 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from . import backend, models
+from . import backend, models, ram
 
 
 def directory_size(path: Path) -> int:
@@ -44,6 +44,10 @@ def collect_report() -> tuple[list[tuple[str, str]], str]:
 
     checks.append(("Python", f"{platform.python_version()} ({sys.executable})"))
     checks.append(("Operating system", f"{platform.system()} {platform.release()} ({platform.machine()})"))
+    mem = ram.detect()
+    checks.append(("Memory", "could not be found out" if not mem else
+                   f"{ram.gb(mem['available_mb'])} free of {ram.gb(mem['total_mb'])}; "
+                   + (ram.warning("turbo", mem) or "the default model (turbo) fits")))
 
     ffmpeg = shutil.which("ffmpeg")
     if ffmpeg:
