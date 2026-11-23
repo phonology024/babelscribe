@@ -109,10 +109,15 @@ case "$step" in
     Xvfb :99 -screen 0 1280x800x24 > xvfb.log 2>&1 &
     xvfb=$!
     trap 'kill $xvfb 2>/dev/null || true' EXIT
-    sleep 2
+    # wait until the X server answers: a program started before that cannot open the display (no fixed sleeps)
+    for _ in $(seq 1 60); do xdpyinfo -display :99 > /dev/null 2>&1 && break; sleep 0.5; done
+    xdpyinfo -display :99 > /dev/null 2>&1 || { cat xvfb.log; fail "the X server (Xvfb) does not answer after 30 s"; }
+    ok "the X server answers"
     eval "$(dbus-launch --sh-syntax)"       # a session bus, as on a desktop
     openbox > openbox.log 2>&1 &            # a window manager: closing a window needs one to ask the app politely
-    sleep 2
+    for _ in $(seq 1 60); do wmctrl -m > /dev/null 2>&1 && break; sleep 0.5; done
+    wmctrl -m > /dev/null 2>&1 || { cat openbox.log; fail "no window manager is running after 30 s"; }
+    ok "the window manager is running: $(wmctrl -m | head -1)"
     export LIBGL_ALWAYS_SOFTWARE=1
     "$@" > app.log 2>&1 &
     app=$!
