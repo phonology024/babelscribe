@@ -9,6 +9,7 @@
 ;     System plugin that ships with NSIS).
 ;   - when the install stops, the header says so and what to do, and a WebView2 failure also shows its reason in a box
 ;     (the page has no status line or buttons; the title bar's close button still closes it).
+;   - a running babelscribe is closed only after the user says OK, and the install and uninstall also end its engine.
 ; Silent installs (/S) behave as before: nothing is started unless /R is given.
 Unicode true
 ManifestDPIAware true
@@ -803,7 +804,17 @@ Section Install
     !insertmacro NSIS_HOOK_PREINSTALL
   !endif
 
+  ; babelscribe: one-click mode would close a running babelscribe without asking and lose a transcription in
+  ; progress. Ask first (OK closes it, Cancel stops the install), then go back to one-click mode.
+  ${IfNot} ${Silent}
+    StrCpy $PassiveMode 0
+  ${EndIf}
   !insertmacro CheckIfAppIsRunning "$INSTDIR\${MAINBINARYNAME}.exe" "${PRODUCTNAME}"
+  StrCpy $PassiveMode 1
+  ; babelscribe: a forced close skips the app's own clean-up, so end the engine and what it started (whisper-cli,
+  ; ffmpeg) too; otherwise they keep running and keep files in the install folder open.
+  nsExec::Exec 'taskkill /F /T /IM babelscribe-engine.exe'
+  Pop $0
 
   ; Copy main executable
   File "${MAINBINARYSRCPATH}"
@@ -947,6 +958,10 @@ Section Uninstall
   !endif
 
   !insertmacro CheckIfAppIsRunning "$INSTDIR\${MAINBINARYNAME}.exe" "${PRODUCTNAME}"
+  ; babelscribe: a forced close skips the app's own clean-up, so end the engine and what it started (whisper-cli,
+  ; ffmpeg) too; otherwise they keep running and keep files in the install folder open.
+  nsExec::Exec 'taskkill /F /T /IM babelscribe-engine.exe'
+  Pop $0
 
   ; Delete the app directory and its content from disk
   ; Copy main executable
