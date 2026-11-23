@@ -33,6 +33,9 @@ Vulkan SDK yourself. babelscribe downloads a prebuilt `whisper-cli` for your sys
 A 19-minute English TED talk transcribes in 48 seconds on an AMD Radeon RX 9070 XT with 1.5% word error — see the benchmark below.
 
 ## Use it from an AI app (MCP) — no terminal needed
+
+[![babelscribe MCP server](https://mcprush.com/badge/babelscribe-mcp/card.svg)](https://mcprush.com/to/babelscribe-mcp?ref=badge)
+
 babelscribe is also an [MCP](https://modelcontextprotocol.io) server, so any AI app that supports local MCP servers can
 transcribe files on **your** computer with **your** GPU. Ask in plain words — *"make Thai subtitles for the newest video in
 my Downloads"* — and the app finds the file, transcribes it, writes `.srt` / `.txt` next to it, and can then proofread names,
