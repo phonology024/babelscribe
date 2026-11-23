@@ -149,13 +149,14 @@ def best_fit(ram: dict, candidates=SMALLER, minutes: float | None = None, gpu: b
     return next((n for n in candidates if fits(n, ram, minutes, gpu)), None)
 
 
-def gpu_runs(bin: str | None = None, flavor: str | None = None) -> bool:
+def gpu_runs(bin: str | None = None, flavor: str | None = None, download: bool = True) -> bool:
     """Will the weights live in a graphics card's own memory? True only when it is certain: the whisper-cli that will run is a
     Vulkan or CUDA build and it sees a discrete GPU (CUDA, or Vulkan with `uma: 0`). An integrated GPU shares the computer's
-    RAM, Apple's Metal uses the same (unified) memory, and anything that cannot be found out counts as no: the CPU numbers."""
+    RAM, Apple's Metal uses the same (unified) memory, and anything that cannot be found out counts as no: the CPU numbers.
+    download=False: only look at a whisper-cli that is already on this computer (a question must not fetch one)."""
     try:
         from . import backend
-        found = backend.devices(backend.find_binary(bin, flavor))
+        found = backend.devices(backend.find_binary(bin, flavor, download))
     except (Exception, SystemExit):
         return False
     return any(d["backend"] == "cuda" or (d["backend"] == "vulkan" and "uma: 0" in d.get("detail", "")) for d in found)
