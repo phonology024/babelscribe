@@ -15,6 +15,8 @@ contains, the following software, each under its own licence.
 | clsx | MIT | https://github.com/lukeed/clsx |
 | tailwind-merge | MIT | https://github.com/dcastil/tailwind-merge |
 | Poppins font (latin and latin-ext, weights 400/500/600, from the @fontsource/poppins package), bundled so the app needs no network | SIL Open Font License 1.1, `src/assets/fonts/OFL.txt` | https://github.com/itfoundry/Poppins |
+| The babelscribe logo's "b": outlines of the Poppins SemiBold glyph (artwork made with the font) | SIL Open Font License 1.1 | as above |
+| The installer script `src-tauri/installer/installer.nsi`, adapted from Tauri's NSIS template | MIT / Apache-2.0 | https://github.com/tauri-apps/tauri |
 | Vite, TypeScript, Vitest (build and test tools only, not shipped) | MIT / Apache-2.0 | |
 
 The engine, `babelscribe-engine.exe` and its `_internal` folder, is the standalone babelscribe build

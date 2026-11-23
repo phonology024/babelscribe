@@ -2,6 +2,7 @@ import { Check, Moon, Plug, ShieldCheck, Sun } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
 import { Button } from "./components/ui/button";
 import { ConfirmDialog, DialogClose } from "./components/ui/dialog";
+import { Logo } from "./components/logo";
 import { useToast } from "./components/toast";
 import { backend, inApp } from "./lib/backend";
 import { chosenFormats, DEFAULT_OPTIONS, engineArgs, exited, newRun, step as stepRun, type Options as Opts, type Run } from "./lib/engine";
@@ -226,6 +227,10 @@ export default function App() {
   return (
     <div className="flex h-full">
       <aside className="flex w-[232px] shrink-0 flex-col gap-3.5 border-r border-border bg-background px-2.5 py-3.5">
+        <div className="flex items-center gap-2 px-2 pt-0.5 text-[12.5px]">
+          <Logo />
+          <span>babelscribe</span>
+        </div>
         <div className="px-2 text-[10.5px] font-medium tracking-[.16em] text-muted-foreground uppercase">Steps</div>
         <nav className="flex flex-col gap-0.5">
           {([1, 2, 3, 4] as Step[]).map((k) => {
