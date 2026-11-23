@@ -81,7 +81,8 @@ def main() -> None:
         check(all(r["state"] == "not-connected" for r in rows if r["app"] != "claude-code"), "none is connected in a fresh home")
 
         code, plan = connect(engine, env, "show", "cursor")
-        check(code == 0 and str(mcp) in plan.get("text", "") and plan.get("problem") is None, "show names the program shipped in the app")
+        shown = json.loads(plan["text"])["mcpServers"]["babelscribe"]["command"] if code == 0 else ""   # a Windows path has doubled backslashes in JSON
+        check(code == 0 and Path(shown).resolve() == mcp and plan.get("problem") is None, "show names the program shipped in the app")
 
         files = {r["app"]: Path(r["path"]) for r in rows if r["path"]}
         old = {"claude-desktop": '{\n  "globalShortcut": "Ctrl+Space",\n  "mcpServers": {"other": {"command": "x"}}\n}\n',
