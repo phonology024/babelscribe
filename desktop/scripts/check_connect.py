@@ -42,29 +42,40 @@ def connect(engine: Path, env: dict, *args: str) -> tuple[int, dict]:
 
 
 def handshake(command: str, args: list[str], env: dict) -> bool:
-    """Start the server the way an AI app does and ask it for its tools."""
+    """Start the server the way an AI app does and ask it for its tools. On a failure, say what the server itself said."""
     p = subprocess.Popen([command, *args], env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    seen: list[str] = []
+
+    def rpc(msg: dict) -> dict | None:
+        p.stdin.write((json.dumps(msg) + "\n").encode("utf-8"))
+        p.stdin.flush()
+        while "id" in msg:
+            line = p.stdout.readline()
+            if not line:
+                seen.append(f"the server closed its output (exit code {p.poll()}) before answering {msg['method']}")
+                return None
+            seen.append(line.decode("utf-8", "replace").strip()[:300])
+            reply = json.loads(line)
+            if reply.get("id") == msg["id"]:
+                return reply
+        return None
     try:
-        def rpc(msg: dict) -> dict | None:
-            p.stdin.write((json.dumps(msg) + "\n").encode("utf-8"))
-            p.stdin.flush()
-            while "id" in msg:
-                line = p.stdout.readline()
-                if not line:
-                    return None
-                reply = json.loads(line)
-                if reply.get("id") == msg["id"]:
-                    return reply
-            return None
         init = rpc({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
             "protocolVersion": "2025-03-26", "capabilities": {}, "clientInfo": {"name": "ci", "version": "0"}}})
         rpc({"jsonrpc": "2.0", "method": "notifications/initialized"})
         tools = rpc({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
         names = [t["name"] for t in (tools or {}).get("result", {}).get("tools", [])]
-        return bool(init and "transcribe" in names)
+        ok = bool(init and "transcribe" in names)
+    except (BrokenPipeError, OSError, ValueError) as e:
+        seen.append(f"{type(e).__name__}: {e}")
+        ok = False
     finally:
         p.kill()
+        err = p.stderr.read().decode("utf-8", "replace")
         p.wait()
+    if not ok:
+        print("--- what the server said ---\n" + "\n".join(seen) + "\n--- its stderr (end) ---\n" + err[-2500:] + "\n---", flush=True)
+    return ok
 
 
 def main() -> None:
