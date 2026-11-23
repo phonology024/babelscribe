@@ -113,12 +113,55 @@ APPS = {a.key: a for a in (
 )}
 
 
+CLAUDE_CONFIG = "claude_desktop_config.json"
+
+
+def _newest(paths: list[Path]) -> Path | None:
+    def when(p: Path) -> float:
+        try:
+            return p.stat().st_mtime
+        except OSError:
+            return 0.0
+    return max(paths, key=when) if paths else None
+
+
+def _glob(folder: Path, pattern: str) -> list[Path]:
+    try:
+        return [p for p in folder.glob(pattern)]
+    except OSError:
+        return []
+
+
+def claude_desktop_windows(env: Env) -> Path:
+    """Claude Desktop's settings file on Windows. The Store (MSIX) install keeps it in %LOCALAPPDATA%\\Claude-Data\\claude_*\\,
+    the same app's package folder has a LocalCache\\Roaming\\Claude copy, and the plain installer uses %APPDATA%\\Claude. A file
+    that exists wins, in that order (the most recently changed one when there are several); with none, the folder of the first
+    layout that is on this computer; else the plain installer's."""
+    local = env.localappdata()
+    store = _glob(local / "Claude-Data", "claude_*")
+    package = _glob(local / "Packages", "Claude_*")
+    layouts = [                          # (the app's own folder, the file inside it)
+        [(d, d / CLAUDE_CONFIG) for d in store],
+        [(d, d / "LocalCache" / "Roaming" / "Claude" / CLAUDE_CONFIG) for d in package],
+        [(env.appdata() / "Claude", env.appdata() / "Claude" / CLAUDE_CONFIG)],
+    ]
+    for group in layouts:
+        found = _newest([f for _, f in group if f.is_file()])
+        if found:
+            return found
+    for group in layouts[:2]:
+        folder = _newest([d for d, _ in group if d.is_dir()])
+        if folder:
+            return next(f for d, f in group if d == folder)
+    return layouts[2][0][1]
+
+
 def config_path(app: str, env: Env) -> Path | None:
     """The settings file an app reads (None for Claude Code, which keeps its own)."""
     h = env.home
     if app == "claude-desktop":
         if env.platform == "win32":
-            return env.appdata() / "Claude" / "claude_desktop_config.json"
+            return claude_desktop_windows(env)
         if env.platform == "darwin":
             return h / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"
         return Path(env.environ.get("XDG_CONFIG_HOME") or h / ".config") / "Claude" / "claude_desktop_config.json"
@@ -150,15 +193,23 @@ def installed(app: str, env: Env) -> bool:
     cfg = config_path(app, env)                                                       # Claude Desktop
     places = [cfg.parent]                                                              # type: ignore[union-attr]
     if env.platform == "win32":
-        places.append(env.localappdata() / "AnthropicClaude")
+        local = env.localappdata()
+        places += [local / "AnthropicClaude", local / "Claude-Data", env.appdata() / "Claude"]
+        places += _glob(local / "Packages", "Claude_*")
     elif env.platform == "darwin":
         places.append(Path("/Applications/Claude.app"))
     return any(ex(p) for p in places)
 
 
-def entry(env: Env) -> dict:
+TIMEOUT_KEY = {"gemini"}     # the apps whose settings document a per-server "timeout" (milliseconds); the others get no extra key
+
+
+def entry(env: Env, app: str) -> dict:
     cmd, args = env.server()
-    return {"command": cmd, "args": list(args), "timeout": TOOL_TIMEOUT_MS}
+    out: dict = {"command": cmd, "args": list(args)}
+    if app in TIMEOUT_KEY:
+        out["timeout"] = TOOL_TIMEOUT_MS
+    return out
 
 
 def _quote(text: str) -> str:
@@ -171,9 +222,9 @@ def toml_block(env: Env) -> str:
             f"tool_timeout_sec = {TOOL_TIMEOUT_S}\nstartup_timeout_sec = {STARTUP_TIMEOUT_S}\n")
 
 
-def command_line(env: Env) -> list[str]:
+def command_line(env: Env, exe: str = "claude") -> list[str]:
     cmd, args = env.server()
-    return ["claude", "mcp", "add", "--scope", "user", NAME, "--", cmd, *args]
+    return [exe, "mcp", "add", "--scope", "user", NAME, "--", cmd, *args]
 
 
 def _shown(cmd: list[str]) -> str:
@@ -402,7 +453,7 @@ def plan(app: str, env: Env | None = None) -> dict:
     st, why = state(app, env)
     path = config_path(app, env)
     shown = (_shown(command_line(env)) if a.kind == "command" else toml_block(env) if a.kind == "toml"
-             else json.dumps({"mcpServers": {NAME: entry(env)}}, indent=2, ensure_ascii=False))
+             else json.dumps({"mcpServers": {NAME: entry(env, app)}}, indent=2, ensure_ascii=False))
     problem = why
     if a.kind == "command" and not env.which("claude"):
         problem = problem or ("Claude Code was not found on this computer (the `claude` command). Install it, or use Copy "
@@ -443,24 +494,24 @@ def add(app: str, env: Env | None = None, make_backup: bool = True) -> dict:
                 "message": f"{a.name} is connected. {a.after}"}
     f = load_json(path)                                                                  # type: ignore[arg-type]
     servers = _servers(f, True)
-    if servers.get(NAME) == entry(env):
+    if servers.get(NAME) == entry(env, app):
         return {"ok": True, "changed": False, "path": str(path), "backup": None, "message": f"{a.name} was already connected."}
     data = dict(f.data)
-    data["mcpServers"] = {**servers, NAME: entry(env)}
+    data["mcpServers"] = {**servers, NAME: entry(env, app)}
     text = dump_json(f, data)
-    _json_check(path, text, True, env)                                                   # type: ignore[arg-type]
+    _json_check(path, text, True, env, app)                                              # type: ignore[arg-type]
     bak = backup(path) if make_backup else None                                          # type: ignore[arg-type]
     write_atomic(path, text, f.bom)                                                      # type: ignore[arg-type]
     return {"ok": True, "changed": True, "path": str(path), "backup": str(bak) if bak else None,
             "message": f"{a.name} is connected. {a.after}"}
 
 
-def _json_check(path: Path, text: str, want_present: bool, env: Env) -> None:
+def _json_check(path: Path, text: str, want_present: bool, env: Env, app: str) -> None:
     try:
         got = (json.loads(text).get("mcpServers") or {}).get(NAME)
     except (json.JSONDecodeError, AttributeError):
         got = "broken"
-    if want_present and got != entry(env) or not want_present and got is not None:
+    if want_present and got != entry(env, app) or not want_present and got is not None:
         raise ConnectError(f"babelscribe could not edit {path} safely; nothing was changed. Use Copy and add it yourself.")
 
 
@@ -490,7 +541,7 @@ def remove(app: str, env: Env | None = None, make_backup: bool = True) -> dict:
     data = dict(f.data)
     data["mcpServers"] = {k: v for k, v in servers.items() if k != NAME}
     text = dump_json(f, data)
-    _json_check(path, text, False, env)                                                  # type: ignore[arg-type]
+    _json_check(path, text, False, env, app)                                             # type: ignore[arg-type]
     bak = backup(path) if make_backup else None                                          # type: ignore[arg-type]
     write_atomic(path, text, f.bom)                                                      # type: ignore[arg-type]
     return {"ok": True, "changed": True, "path": str(path), "backup": str(bak) if bak else None,
@@ -498,17 +549,18 @@ def remove(app: str, env: Env | None = None, make_backup: bool = True) -> dict:
 
 
 def _code_add(env: Env) -> dict:
-    if not env.which("claude"):
+    exe = env.which("claude")        # the full path: Windows does not apply PATHEXT to a bare "claude" that is a claude.cmd
+    if not exe:
         raise ConnectError("Claude Code was not found on this computer (the `claude` command). Install it, or use Copy and run "
                            "the command yourself.")
     st, _ = _state_code(env)
     if st == "connected":
         return {"ok": True, "changed": False, "path": None, "backup": None, "message": "Claude Code was already connected."}
     if st == "other":                                        # an older babelscribe entry: replace it, nothing else
-        code, out = env.run(["claude", "mcp", "remove", "--scope", "user", NAME])
+        code, out = env.run([exe, "mcp", "remove", "--scope", "user", NAME])
         if code != 0:
             raise ConnectError(f"Claude Code did not take the old babelscribe entry out: {out or 'no message'}")
-    code, out = env.run(command_line(env))
+    code, out = env.run(command_line(env, exe))
     if code != 0:
         raise ConnectError(f"Claude Code did not accept the command: {out or 'no message'}")
     return {"ok": True, "changed": True, "path": None, "backup": None,
@@ -519,9 +571,10 @@ def _code_remove(env: Env) -> dict:
     st, _ = _state_code(env)
     if st == "not-connected":
         return {"ok": True, "changed": False, "path": None, "backup": None, "message": "babelscribe was not in Claude Code's settings."}
-    if not env.which("claude"):
+    exe = env.which("claude")
+    if not exe:
         raise ConnectError("Claude Code was not found on this computer (the `claude` command), so babelscribe could not be taken out.")
-    code, out = env.run(["claude", "mcp", "remove", "--scope", "user", NAME])
+    code, out = env.run([exe, "mcp", "remove", "--scope", "user", NAME])
     if code != 0:
         raise ConnectError(f"Claude Code did not take babelscribe out: {out or 'no message'}")
     return {"ok": True, "changed": True, "path": None, "backup": None, "message": "babelscribe was taken out of Claude Code's settings."}

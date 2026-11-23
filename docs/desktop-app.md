@@ -39,12 +39,17 @@ terminal: `babelscribe connect status | show APP | add APP | remove APP` (`--jso
 - A file that has a **syntax error**, or is not the kind of file the app writes, is **left exactly as it is**, and the
   window says why and where (line and column). Nothing is changed, not even a backup is made.
 - *Remove* takes out only the `babelscribe` entry (with a backup, too). *Copy instead, I'll add it myself* copies the text.
-- Where it writes: Claude Desktop `claude_desktop_config.json` (Windows `%APPDATA%\Claude`, macOS
-  `~/Library/Application Support/Claude`, Linux `~/.config/Claude`), Cursor `~/.cursor/mcp.json`, Gemini CLI
-  `~/.gemini/settings.json`, Codex CLI `~/.codex/config.toml` (`$CODEX_HOME`; with `tool_timeout_sec = 3600` and
-  `startup_timeout_sec = 120`, because its defaults of 60 and 10 seconds are too short for a long video). Claude Code is
-  set up with its own command, `claude mcp add --scope user babelscribe -- PROGRAM` (and `claude mcp remove`), so its
-  own settings file is never edited by babelscribe. JSON apps get `"timeout": 3600000` (milliseconds; only some apps read it).
+- Where it writes: Claude Desktop `claude_desktop_config.json` (Windows: the Store install keeps it in
+  `%LOCALAPPDATA%\Claude-Data\claude_*\` (the most recently changed one if there are several), the same package has a
+  `%LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude\` copy, and the plain installer uses `%APPDATA%\Claude`; a file
+  that exists wins in that order, else the folder of the first layout found; macOS `~/Library/Application Support/Claude`;
+  Linux `~/.config/Claude`), Cursor `~/.cursor/mcp.json`, Gemini CLI `~/.gemini/settings.json` (with
+  `"timeout": 3600000`, the one setting of this kind its documentation lists), Codex CLI `~/.codex/config.toml`
+  (`$CODEX_HOME`; with `tool_timeout_sec = 3600` and `startup_timeout_sec = 120`, because its defaults of 60 and 10
+  seconds are too short for a long video). Claude Code is set up with its own command, `claude mcp add --scope user
+  babelscribe -- PROGRAM` (and `claude mcp remove`), run by the full path of the `claude` that was found (a `claude.cmd`
+  from npm cannot be started by its bare name on Windows), so its own settings file is never edited by babelscribe.
+  Claude Desktop and Cursor get only `command` and `args`.
 - The command written into a config is the full path of `babelscribe-mcp` in the installed app. If you move or
   uninstall the app, connect again (or *Remove*).
 - Apps are found by their program or their settings folder. Connect also works for an app that is not found (the file is

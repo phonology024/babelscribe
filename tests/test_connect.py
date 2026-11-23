@@ -1,4 +1,6 @@
 """Connect to AI apps: merge, backup, remove and refuse, for each app's file format, on fake home folders."""
+from __future__ import annotations
+
 import json
 import os
 import sys
@@ -10,7 +12,12 @@ from babelscribe import cli, connect
 from babelscribe.connect import APPS, ConnectError, Env
 
 SERVER = ("C:/Program Files/babelscribe/babelscribe-mcp.exe", [])
-OURS = {"command": SERVER[0], "args": [], "timeout": 3_600_000}
+OURS = {"command": SERVER[0], "args": []}                      # Claude Desktop and Cursor: no key their docs do not list
+GEMINI = {**OURS, "timeout": 3_600_000}                        # Gemini CLI documents "timeout" (milliseconds)
+
+
+def ours(app):
+    return GEMINI if app == "gemini" else OURS
 JSON_APPS = ["claude-desktop", "cursor", "gemini"]
 toml_only = pytest.mark.skipif(connect.tomllib is None, reason="needs tomllib (Python 3.11+)")
 
@@ -94,7 +101,7 @@ def test_add_creates_the_file_when_there_is_none(tmp_path, app):
     r = connect.add(app, env)
     path = connect.config_path(app, env)
     assert r["changed"] and r["backup"] is None
-    assert json.loads(path.read_text(encoding="utf-8")) == {"mcpServers": {"babelscribe": OURS}}
+    assert json.loads(path.read_text(encoding="utf-8")) == {"mcpServers": {"babelscribe": ours(app)}}
     assert only_files(path.parent) == [path.name]                       # no stray temporary file
 
 
@@ -110,7 +117,7 @@ def test_add_keeps_everything_else_and_the_look_of_the_file(tmp_path, app):
     data = json.loads(new)
     assert data["theme"] == "dark" and data["ünï"] == [1, 2.5, None, True]
     assert data["mcpServers"]["other"] == {"command": "x", "args": ["a", "b"]}
-    assert data["mcpServers"]["babelscribe"] == OURS
+    assert data["mcpServers"]["babelscribe"] == ours(app)
     assert list(data) == ["theme", "mcpServers", "ünï"]                 # same order
     assert new.count("\r\n") == new.count("\n") and new.endswith("\r\n")  # still Windows line endings
     assert '\n        "other"' in new.replace("\r\n", "\n")                # the four-space indentation is kept
@@ -132,7 +139,7 @@ def test_an_empty_file_is_treated_as_an_empty_object(tmp_path, text):
     env = make_env(tmp_path)
     path = put(connect.config_path("gemini", env), text)
     connect.add("gemini", env)
-    assert json.loads(path.read_text(encoding="utf-8")) == {"mcpServers": {"babelscribe": OURS}}
+    assert json.loads(path.read_text(encoding="utf-8")) == {"mcpServers": {"babelscribe": GEMINI}}
 
 
 def test_adding_twice_changes_nothing_the_second_time(tmp_path):
@@ -152,7 +159,7 @@ def test_an_older_babelscribe_entry_is_replaced_and_nothing_else(tmp_path):
     assert connect.plan("claude-desktop", env)["state"] == "other"
     connect.add("claude-desktop", env)
     got = json.loads(path.read_text(encoding="utf-8"))["mcpServers"]
-    assert got == {"babelscribe": OURS, "keep": {"command": "k"}}
+    assert got == {"babelscribe": OURS, "keep": {"command": "k"}}   # Claude Desktop: command and args only
     assert connect.plan("claude-desktop", env)["state"] == "connected"
 
 
@@ -367,7 +374,7 @@ def test_codex_without_tomllib_refuses_to_edit_and_says_how_to_do_it_by_hand(tmp
 def test_claude_code_runs_its_own_command_for_the_user_scope(tmp_path):
     env = make_env(tmp_path, found=("claude",))
     r = connect.add("claude-code", env)
-    assert r["changed"] and env.ran == [["claude", "mcp", "add", "--scope", "user", "babelscribe", "--", SERVER[0]]]
+    assert r["changed"] and env.ran == [["/bin/claude", "mcp", "add", "--scope", "user", "babelscribe", "--", SERVER[0]]]
 
 
 def test_claude_code_already_connected_runs_nothing(tmp_path):
@@ -381,7 +388,7 @@ def test_claude_code_replaces_an_older_entry_by_removing_it_first(tmp_path):
     env = make_env(tmp_path, found=("claude",))
     put(env.home / ".claude.json", json.dumps({"mcpServers": {"babelscribe": {"command": "uvx"}}}))
     connect.add("claude-code", env)
-    assert env.ran[0][:5] == ["claude", "mcp", "remove", "--scope", "user"] and env.ran[1][:3] == ["claude", "mcp", "add"]
+    assert env.ran[0][:5] == ["/bin/claude", "mcp", "remove", "--scope", "user"] and env.ran[1][:3] == ["/bin/claude", "mcp", "add"]
 
 
 def test_claude_code_that_fails_says_what_it_said(tmp_path):
@@ -401,7 +408,7 @@ def test_claude_code_remove(tmp_path):
     env = make_env(tmp_path, found=("claude",))
     assert connect.remove("claude-code", env)["changed"] is False and env.ran == []
     put(env.home / ".claude.json", json.dumps({"mcpServers": {"babelscribe": OURS}}))
-    assert connect.remove("claude-code", env)["changed"] and env.ran == [["claude", "mcp", "remove", "--scope", "user", "babelscribe"]]
+    assert connect.remove("claude-code", env)["changed"] and env.ran == [["/bin/claude", "mcp", "remove", "--scope", "user", "babelscribe"]]
 
 
 def test_claude_codes_own_file_is_only_ever_read(tmp_path):
@@ -466,3 +473,125 @@ def test_command_line_reports_a_refusal_as_json_and_exit_code_1(tmp_path, monkey
     with pytest.raises(SystemExit) as e:
         cli.main(["connect", "add"])
     assert "usage" in str(e.value.code)
+
+
+# ------------------------------------------------------------------------------------------------- Claude Desktop on Windows
+
+DESKTOP = "claude_desktop_config.json"
+
+
+def layouts(tmp_path):
+    local, roaming = tmp_path / "AppData" / "Local", tmp_path / "AppData" / "Roaming"
+    return {"store": local / "Claude-Data" / "claude_pzs8sxrjxfjjc", "package": local / "Packages" / "Claude_pzs8sxrjxfjjc" / "LocalCache" / "Roaming" / "Claude",
+            "plain": roaming / "Claude"}
+
+
+def test_the_store_install_keeps_its_file_in_claude_data(tmp_path):
+    env = make_env(tmp_path)
+    L = layouts(tmp_path)
+    put(L["store"] / DESKTOP, "{}")
+    (L["package"]).mkdir(parents=True)
+    (L["package"] / "marker").write_text("x")                       # the package's Roaming\Claude folder holds only a marker
+    assert connect.config_path("claude-desktop", env) == L["store"] / DESKTOP
+    connect.add("claude-desktop", env)
+    assert json.loads((L["store"] / DESKTOP).read_text(encoding="utf-8"))["mcpServers"]["babelscribe"] == OURS
+    assert only_files(L["package"]) == ["marker"] and not L["plain"].exists()
+
+
+def test_the_store_install_before_its_file_exists_gets_it_in_claude_data(tmp_path):
+    env = make_env(tmp_path)
+    L = layouts(tmp_path)
+    L["store"].mkdir(parents=True)
+    assert connect.config_path("claude-desktop", env) == L["store"] / DESKTOP
+    connect.add("claude-desktop", env)
+    assert (L["store"] / DESKTOP).is_file() and not L["plain"].exists()
+
+
+def test_with_several_claude_data_folders_the_most_recently_changed_file_wins(tmp_path):
+    import os
+    env = make_env(tmp_path)
+    local = tmp_path / "AppData" / "Local" / "Claude-Data"
+    old, new = put(local / "claude_aaa" / DESKTOP, "{}"), put(local / "claude_zzz" / DESKTOP, "{}")
+    os.utime(old, (1_000_000, 1_000_000))
+    os.utime(new, (2_000_000, 2_000_000))
+    assert connect.config_path("claude-desktop", env) == new
+    os.utime(old, (3_000_000, 3_000_000))
+    assert connect.config_path("claude-desktop", env) == old
+
+
+def test_the_package_folder_is_used_when_there_is_no_claude_data(tmp_path):
+    env = make_env(tmp_path)
+    L = layouts(tmp_path)
+    (tmp_path / "AppData" / "Local" / "Packages" / "Claude_pzs8sxrjxfjjc").mkdir(parents=True)
+    assert connect.config_path("claude-desktop", env) == L["package"] / DESKTOP
+    put(L["package"] / DESKTOP, "{}")
+    assert connect.config_path("claude-desktop", env) == L["package"] / DESKTOP
+
+
+def test_the_plain_installer_keeps_its_file_in_appdata(tmp_path):
+    env = make_env(tmp_path)
+    L = layouts(tmp_path)
+    assert connect.config_path("claude-desktop", env) == L["plain"] / DESKTOP               # nothing installed: the old default
+    put(L["plain"] / DESKTOP, "{}")
+    assert connect.config_path("claude-desktop", env) == L["plain"] / DESKTOP
+
+
+def test_an_existing_file_beats_a_folder_and_the_stores_beats_the_plain_one(tmp_path):
+    env = make_env(tmp_path)
+    L = layouts(tmp_path)
+    put(L["plain"] / DESKTOP, "{}")
+    L["store"].mkdir(parents=True)
+    assert connect.config_path("claude-desktop", env) == L["plain"] / DESKTOP              # a file that exists wins over an empty folder
+    put(L["store"] / DESKTOP, "{}")
+    assert connect.config_path("claude-desktop", env) == L["store"] / DESKTOP              # both exist: the Store's
+
+
+@pytest.mark.parametrize("make", ["Claude-Data/claude_x", "Packages/Claude_x", "AnthropicClaude", "Roaming/Claude"])
+def test_claude_desktop_is_found_in_every_windows_layout(tmp_path, make):
+    env = make_env(tmp_path)
+    assert not connect.installed("claude-desktop", env)
+    base = tmp_path / "AppData" / ("Roaming" if make.startswith("Roaming") else "Local")
+    (base / make.replace("Roaming/", "")).mkdir(parents=True)
+    assert connect.installed("claude-desktop", env)
+
+
+# ------------------------------------------------------------------------------------------------- the settings keys, and full paths
+
+def test_only_gemini_gets_a_timeout_key_because_only_its_docs_list_it(tmp_path):
+    env = make_env(tmp_path)
+    for app in JSON_APPS:
+        connect.add(app, env)
+        got = json.loads(connect.config_path(app, env).read_text(encoding="utf-8"))["mcpServers"]["babelscribe"]
+        assert ("timeout" in got) == (app == "gemini"), app
+        assert ("timeout" in json.loads(connect.plan(app, env)["text"])["mcpServers"]["babelscribe"]) == (app == "gemini")
+    assert connect.plan("codex", env)["text"].count("timeout_sec") == 2 if connect.tomllib else True
+
+
+def test_an_entry_that_only_differs_by_the_timeout_key_is_still_connected(tmp_path):
+    env = make_env(tmp_path)
+    put(connect.config_path("cursor", env), json.dumps({"mcpServers": {"babelscribe": {**OURS, "timeout": 5}}}))
+    assert connect.plan("cursor", env)["state"] == "connected"          # the command is what counts
+
+
+@pytest.mark.parametrize("path", ["C:/Users/me/AppData/Roaming/npm/claude.cmd", "/usr/local/bin/claude", "C:/Users/me/.local/bin/claude.exe"])
+def test_claude_code_is_run_by_the_full_path_which_found(tmp_path, path):
+    env = make_env(tmp_path)
+    env.which = lambda name: path if name == "claude" else None
+    connect.add("claude-code", env)
+    assert env.ran[0][0] == path and env.ran[0][1:5] == ["mcp", "add", "--scope", "user"]
+    put(env.home / ".claude.json", json.dumps({"mcpServers": {"babelscribe": OURS}}))
+    connect.remove("claude-code", env)
+    assert env.ran[-1][0] == path and env.ran[-1][1:3] == ["mcp", "remove"]
+
+
+def test_replacing_an_older_claude_code_entry_also_uses_the_full_path(tmp_path):
+    env = make_env(tmp_path)
+    env.which = lambda name: "C:/npm/claude.cmd" if name == "claude" else None
+    put(env.home / ".claude.json", json.dumps({"mcpServers": {"babelscribe": {"command": "uvx"}}}))
+    connect.add("claude-code", env)
+    assert [c[0] for c in env.ran] == ["C:/npm/claude.cmd", "C:/npm/claude.cmd"]
+
+
+def test_the_command_shown_to_copy_says_claude_plainly(tmp_path):
+    env = make_env(tmp_path, found=("claude",))
+    assert connect.plan("claude-code", env)["text"].startswith("claude mcp add --scope user babelscribe")
