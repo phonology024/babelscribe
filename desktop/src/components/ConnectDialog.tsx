@@ -53,7 +53,7 @@ export function ConnectDialog(props: {
 
   // opening the dialog: look at the apps, pick the first one that is on this computer
   useEffect(() => {
-    if (!open) return;
+    if (!open || busy) return; // while a run has the engine there is nothing to ask it; the banner says so
     setDone(null);
     setProblem(null);
     setPlan(null);
@@ -61,14 +61,14 @@ export function ConnectDialog(props: {
       if (!list || !alive.current) return;
       setApp((cur) => cur ?? (list.find((r) => r.installed) ?? list[0])?.app ?? null);
     });
-  }, [open, loadRows]);
+  }, [open, busy, loadRows]);
 
   useEffect(() => {
-    if (open && app) {
+    if (open && app && !busy) {
       setPlan(null);
       loadPlan(app);
     }
-  }, [open, app, loadPlan]);
+  }, [open, busy, app, loadPlan]);
 
   const act = async (what: "add" | "remove") => {
     if (!app || !plan || working || busy) return;

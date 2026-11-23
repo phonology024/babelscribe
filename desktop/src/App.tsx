@@ -101,7 +101,12 @@ export default function App() {
     }
     const known = loadRecent().find((r) => r.path.toLowerCase() === path.toLowerCase());
     setFile({ path, size });
-    setOpts((o) => ({ ...o, lang: known?.lang ?? "auto", accurate: known?.lang === "th" || known?.lang === "hi" ? true : o.accurate }));
+    setOpts((o) => ({
+      ...o,
+      lang: known?.lang ?? "auto",
+      accurate: known?.lang === "th" || known?.lang === "hi" ? true : o.accurate,
+      target: known?.lang === "th" || known?.lang === "hi" ? "en" : "th", // translate into something other than what is spoken
+    }));
     setRecent((l) => addRecent(l, { path, when: Date.now() }));
     // which models fit this computer's free memory, and which local models can translate: the engine decides, this
     // only asks (never blocks the screen; a run waits for the answers, a second or two at most)
