@@ -10,8 +10,10 @@ AI apps: `uvx babelscribe mcp` (stdio MCP server: transcribe, transcribe_folder,
 list_languages_and_models); Claude Desktop one-click: babelscribe.mcpb from the GitHub releases.
 
 ## Docs
-- [README](https://github.com/phonology024/babelscribe/blob/main/README.md): install, usage, MCP setup for Claude Desktop / Claude Code / Codex / Antigravity / Gemini CLI / Cursor / VS Code, FAQ
-- [Benchmarks](https://github.com/phonology024/babelscribe#benchmark-16-languages-on-fleurs): Google FLEURS error rates for 16 languages, TED talk speed and accuracy
+- [README](https://github.com/phonology024/babelscribe/blob/main/README.md): install, quick start, MCP setup for Claude Desktop / Claude Code / Codex / Antigravity / Gemini CLI / Cursor / VS Code
+- [Usage](https://github.com/phonology024/babelscribe/blob/main/docs/usage.md): every command, Python, Docker, MCP tools
+- [FAQ](https://github.com/phonology024/babelscribe/blob/main/docs/faq.md): common questions and limitations
+- [Benchmarks](https://github.com/phonology024/babelscribe/blob/main/docs/benchmarks.md#benchmark-16-languages-on-fleurs): Google FLEURS error rates for 16 languages, TED talk speed and accuracy
 - [Roadmap](https://github.com/phonology024/babelscribe/blob/main/ROADMAP.md): planned features and open issues
 - [Use babelscribe from Claude, Codex, Gemini CLI (MCP)](https://phonology024.github.io/babelscribe/mcp-transcribe-audio-video.html): setup guide
 - [faster-whisper alternative for AMD and Intel GPUs](https://phonology024.github.io/babelscribe/faster-whisper-alternative-amd-intel-gpu.html)

@@ -7,6 +7,10 @@ section into the release's section.
 
 ## [Unreleased]
 
+### Documentation
+- Shorter README. Full usage, benchmarks, FAQ, languages and the privacy policy moved to `docs/usage.md`,
+  `docs/benchmarks.md`, `docs/faq.md`, `docs/languages.md` and `docs/privacy.md`.
+
 ## [0.5.0] - 2026-11-22
 
 ### Added

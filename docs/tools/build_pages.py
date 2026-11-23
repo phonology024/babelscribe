@@ -117,7 +117,7 @@ babelscribe lecture.mp4 --accurate   # fewer errors, slower</code></pre>
 <h2>Why offline</h2>
 <p>Online subtitle generators upload your video, often limit length, and charge per minute. babelscribe runs OpenAI's Whisper model on your own GPU — AMD Radeon and Intel Arc via Vulkan, NVIDIA via Vulkan or CUDA, Apple Silicon via Metal — so private recordings never leave your machine and there are no limits.</p>
 <h2>Accuracy</h2>
-<p>On Google FLEURS, error rates with <code>--accurate</code> include English 5.7%, Spanish 4.2%, German 4.0%, Japanese 5.7% (CER) and Korean 3.9% (CER). The full 16-language table is in the <a href="https://github.com/phonology024/babelscribe#benchmark-16-languages-on-fleurs">README</a>.</p>""",
+<p>On Google FLEURS, error rates with <code>--accurate</code> include English 5.7%, Spanish 4.2%, German 4.0%, Japanese 5.7% (CER) and Korean 3.9% (CER). The full 16-language table is in the <a href="https://github.com/phonology024/babelscribe/blob/main/docs/benchmarks.md#benchmark-16-languages-on-fleurs">benchmarks</a>.</p>""",
      [("How do I make subtitles for a video for free?",
        "Install babelscribe with pip and run babelscribe video.mp4 -f srt. It creates video.srt using Whisper on your own "
        "computer, free and without uploading the video."),
