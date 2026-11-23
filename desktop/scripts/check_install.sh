@@ -34,6 +34,8 @@ no_leftovers() {
 installed_engine_checks() {   # $1 = the engine program, $2 = the folder that holds licenses/
   need "$1"
   need "$(dirname "$1")/_internal/base_library.zip"
+  need "$(dirname "$1")/babelscribe-mcp"
+  [[ -x "$(dirname "$1")/babelscribe-mcp" ]] || fail "babelscribe-mcp (the server AI apps start) is not executable"
   need "$2/licenses/LICENSE.txt"
   need "$2/licenses/THIRD-PARTY-app.md"
   [[ -x "$1" ]] || fail "$1 is not executable"

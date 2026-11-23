@@ -1,15 +1,17 @@
 import { Check, Moon, Plug, ShieldCheck, Sun } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
 import { Button } from "./components/ui/button";
+import { ConnectDialog } from "./components/ConnectDialog";
 import { ConfirmDialog, DialogClose } from "./components/ui/dialog";
 import { Logo } from "./components/logo";
 import { useToast } from "./components/toast";
 import { backend, inApp } from "./lib/backend";
-import { chosenFormats, DEFAULT_OPTIONS, engineArgs, exited, newRun, parseFit, step as stepRun, type Fit, type Options as Opts, type Run } from "./lib/engine";
+import { engineCall, parseLlms, stateLabel, whenIdle, type AppRow, type Llm } from "./lib/ai";
+import { chosenFormats, DEFAULT_OPTIONS, engineArgs, exited, newRun, parseFit, stagesFor, step as stepRun, type Fit, type Options as Opts, type Run } from "./lib/engine";
 import { addRecent, loadRecent, saveRecent, type Recent } from "./lib/recent";
-import { parseFile, parseText, subtitleSource, type Cue } from "./lib/subtitles";
+import { parseFile, parseText, subtitleSource, translatedSource, type Cue } from "./lib/subtitles";
 import { applyTheme, savedTheme, saveTheme, systemDark, themeFromUrl, type Theme } from "./lib/theme";
-import { cn, splitPath } from "./lib/utils";
+import { cn, languageName, splitPath } from "./lib/utils";
 import { ChooseFile } from "./screens/ChooseFile";
 import { Options } from "./screens/Options";
 import { Progress } from "./screens/Progress";
@@ -26,6 +28,12 @@ export default function App() {
   const [opts, setOpts] = useState<Opts>(DEFAULT_OPTIONS);
   const [run, setRun] = useState<Run | null>(null);
   const [fit, setFit] = useState<Fit | null>(null);
+  const [llms, setLlms] = useState<Llm[] | null>(null); // local models that can translate; null while looking
+  const [scanning, setScanning] = useState(false);
+  const [connectOpen, setConnectOpen] = useState(false);
+  const [apps, setApps] = useState<AppRow[] | null>(null);
+  const [ranWith, setRanWith] = useState<Opts>(DEFAULT_OPTIONS); // the options of the run on screen
+  const [translated, setTranslated] = useState<Cue[] | null>(null);
   const [running, setRunning] = useState(false);
   const [cues, setCues] = useState<Cue[]>([]);
   const [recent, setRecent] = useState<Recent[]>(() => loadRecent());
@@ -35,7 +43,6 @@ export default function App() {
   const [theme, setTheme] = useState<Theme | null>(() => themeFromUrl() ?? savedTheme());
   const [osDark, setOsDark] = useState(systemDark());
   const runId = useRef(0);
-  const fitAsked = useRef<Promise<void>>(Promise.resolve()); // the engine runs one thing at a time
   const finished = useRef(0);
   const stepRef = useRef(step);
   stepRef.current = step;
@@ -66,6 +73,14 @@ export default function App() {
     document.getElementById("content")?.scrollTo(0, 0);
   }, []);
 
+  const scan = useCallback(async () => {
+    if (runningRef.current) return;
+    setScanning(true);
+    const r = await engineCall(await backend(), ["llms", "--json"], 15000);
+    setLlms(parseLlms(r.out) ?? []);
+    setScanning(false);
+  }, []);
+
   const openFile = useCallback(async (path: string) => {
     if (runningRef.current) return;
     const b = await backend();
@@ -88,29 +103,13 @@ export default function App() {
     setFile({ path, size });
     setOpts((o) => ({ ...o, lang: known?.lang ?? "auto", accurate: known?.lang === "th" || known?.lang === "hi" ? true : o.accurate }));
     setRecent((l) => addRecent(l, { path, when: Date.now() }));
-    // which models fit this computer's free memory: the engine decides, this only asks (never blocks the screen)
-    fitAsked.current = fitAsked.current.then(
-      () =>
-        new Promise<void>((resolve) => {
-          let out = "";
-          // never keep a run waiting for a note: end the question, then let the run have the engine
-          const giveUp = setTimeout(() => b.cancel().catch(() => {}).then(() => resolve()), 8000);
-          const done = () => {
-            clearTimeout(giveUp);
-            resolve();
-          };
-          b.run(["models", "--json"], (stream, line) => stream === "stdout" && (out += line), () => {
-            setFit(parseFit(out));
-            done();
-          }).catch(() => {
-            setFit(null);
-            done();
-          });
-        }),
-    );
+    // which models fit this computer's free memory, and which local models can translate: the engine decides, this
+    // only asks (never blocks the screen; a run waits for the answers, a second or two at most)
+    engineCall(b, ["models", "--json"], 8000).then((r) => setFit(parseFit(r.out.join("\n"))));
+    scan();
     setReached(2);
     go(2);
-  }, [go, toast]);
+  }, [go, toast, scan]);
 
   const pick = useCallback(async () => {
     try {
@@ -147,13 +146,15 @@ export default function App() {
       return;
     }
     const id = ++runId.current;
-    setRun(newRun(Date.now()));
+    setRanWith(opts);
+    setTranslated(null);
+    setRun(newRun(Date.now(), stagesFor(file.path, opts)));
     setCues([]);
     setRunning(true);
     setReached(3);
     go(3);
     try {
-      await fitAsked.current; // the memory question is a second or two at most; the engine runs one thing at a time
+      await whenIdle(); // the questions asked while choosing options are a second or two; the engine runs one thing at a time
       if (id !== runId.current) return; // Stop was pressed while waiting
       await (await backend()).run(
         engineArgs(file.path, opts),
@@ -176,7 +177,8 @@ export default function App() {
     finished.current = runId.current;
     const result = run.result;
     (async () => {
-      const source = subtitleSource(result.files);
+      const target = ranWith.translate ? ranWith.target : undefined;
+      const source = subtitleSource(result.files, target);
       let lines: Cue[] = [];
       try {
         if (source) lines = parseFile(source, await (await backend()).readText(source));
@@ -184,12 +186,20 @@ export default function App() {
         lines = parseText(result.text ?? "");
       }
       setCues(lines);
+      const other = target ? translatedSource(result.files, target) : null;
+      if (other) {
+        try {
+          setTranslated(parseFile(other, await (await backend()).readText(other)));
+        } catch {
+          setTranslated(null); // the translated file is listed under Files written; its lines just are not shown here
+        }
+      }
       setRecent((l) => addRecent(l, { path: file.path, when: Date.now(), lang: result.lang }));
       setReached(4);
       go(4);
       toast("Subtitles ready", splitPath(file.path).name, "ok");
     })();
-  }, [running, run, file, go, toast]);
+  }, [running, run, file, ranWith, go, toast]);
 
   const stop = useCallback(async () => {
     setConfirmStop(false);
@@ -292,7 +302,18 @@ export default function App() {
             </div>
             <p className="text-[11.5px] text-muted-foreground">Nothing is uploaded.</p>
           </div>
-          <Button variant="outline" disabled>
+          {apps && apps.some((a) => a.state === "connected") && (
+            <div className="flex flex-col gap-1">
+              {apps.map((a) => (
+                <div key={a.app} className="flex items-center gap-2 text-[12.5px]">
+                  <span className={cn("size-1.5 shrink-0 rounded-full bg-gold", a.state !== "connected" && "bg-muted-foreground/50")} aria-hidden />
+                  <span className="min-w-0 flex-1 truncate">{a.name}</span>
+                  <span className="text-[11.5px] text-muted-foreground">{stateLabel(a.state)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <Button variant="outline" onClick={() => setConnectOpen(true)}>
             <Plug aria-hidden />
             Connect to an AI app
           </Button>
@@ -305,6 +326,12 @@ export default function App() {
             {TITLES[step]}
             {file && step > 1 ? ` · ${splitPath(file.path).name}` : ""}
           </b>
+          <Button variant="outline" size="sm" className="ml-auto" onClick={() => setConnectOpen(true)}>
+            <Plug aria-hidden />
+            <span>
+              Connect<span className="max-[760px]:hidden"> to AI app</span>
+            </span>
+          </Button>
           <Button
             variant="ghost"
             size="icon"
@@ -337,13 +364,14 @@ export default function App() {
               />
             )}
             {step === 2 && file && (
-              <Options path={file.path} size={file.size} fit={fit} opts={opts} setOpts={setOpts} onChangeFile={() => go(1)} onStart={start} />
+              <Options path={file.path} size={file.size} fit={fit} llms={llms} scanning={scanning} onRescan={scan} opts={opts} setOpts={setOpts} onChangeFile={() => go(1)} onStart={start} />
             )}
             {step === 3 && file && run && (
               <Progress
                 path={file.path}
                 run={run}
-                formats={chosenFormats(opts)}
+                formats={chosenFormats(ranWith)}
+                opts={ranWith}
                 now={now}
                 onCancel={() => setConfirmStop(true)}
                 onBack={() => {
@@ -355,8 +383,10 @@ export default function App() {
             {step === 4 && file && run?.result && (
               <Result
                 result={run.result}
-                detected={opts.lang === "auto"}
+                detected={ranWith.lang === "auto"}
                 cues={cues}
+                translated={translated}
+                targetName={languageName(ranWith.target)}
                 onNew={() => {
                   setReached(2);
                   go(1);
@@ -368,6 +398,8 @@ export default function App() {
           </section>
         </div>
       </main>
+
+      <ConnectDialog open={connectOpen} onOpenChange={setConnectOpen} busy={running} onRows={setApps} toast={toast} />
 
       <ConfirmDialog
         open={confirmStop}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { commandLine, DEFAULT_OPTIONS, engineArgs, exited, formatLeft, memoryNote, newRun, parseEvent, parseFit, secondsLeft, step, type Run } from "./engine";
+import { burning, commandLine, DEFAULT_OPTIONS, engineArgs, exited, formatLeft, memoryNote, newRun, overall, parseEvent, parseFit, secondsLeft, stagesFor, step, type Run } from "./engine";
 
 const path = "C:\\Users\\you\\My Videos\\talk.mp4";
 
@@ -120,5 +120,78 @@ describe("what fits this computer", () => {
     expect(memoryNote({ ...fit, default_note: null }, { lang: "en", accurate: false })).toBeNull();
     expect(memoryNote(null, { lang: "en", accurate: true })).toBeNull();
     expect(memoryNote({ ...fit, models: [] }, { lang: "th", accurate: true })).toBeNull();
+  });
+});
+
+
+describe("translate and burn", () => {
+  const video = "C:\\Videos\\talk.mp4";
+  const on = { ...DEFAULT_OPTIONS, translate: true, target: "th", burn: true, style: "shorts" as const };
+  it("adds nothing by default", () => {
+    expect(engineArgs(video, DEFAULT_OPTIONS)).toEqual([video, "-f", "srt,txt", "--progress-json"]);
+  });
+  it("passes the target language, the chosen model and the style", () => {
+    expect(engineArgs(video, { ...on, llm: "http://127.0.0.1:11434/v1", llmModel: "gemma3" })).toEqual([
+      video, "-f", "srt,txt", "--translate-to", "th", "--llm", "http://127.0.0.1:11434/v1", "--llm-model", "gemma3",
+      "--burn", "--style", "shorts", "--progress-json"]);
+  });
+  it("lets the engine look for a model when none was picked", () => {
+    expect(engineArgs(video, on)).not.toContain("--llm");
+  });
+  it("draws the translated subtitles only when translating and asked to", () => {
+    expect(engineArgs(video, { ...on, burnTranslated: true })).toContain("--burn-translated");
+    expect(engineArgs(video, { ...on, translate: false, burnTranslated: true })).not.toContain("--burn-translated");
+    expect(engineArgs(video, { ...on, burnTranslated: false })).not.toContain("--burn-translated");
+  });
+  it("never burns into an audio file, however the switch was left", () => {
+    expect(burning("C:\\a\\talk.WAV", on)).toBe(false);
+    expect(engineArgs("C:\\a\\talk.mp3", on)).not.toContain("--burn");
+    expect(stagesFor("C:\\a\\talk.mp3", on)).not.toContain("burn");
+  });
+  it("shows the same run on the command line", () => {
+    expect(commandLine(video, { ...on, burnTranslated: true })).toBe(
+      "babelscribe C:\\Videos\\talk.mp4 -f srt,txt --translate-to th --burn --style shorts --burn-translated");
+  });
+  it("has the steps of what was asked for, in order", () => {
+    expect(stagesFor(video, DEFAULT_OPTIONS)).toEqual(["prepare", "transcribe", "save"]);
+    expect(stagesFor(video, { ...DEFAULT_OPTIONS, burn: true })).toEqual(["prepare", "transcribe", "burn", "save"]);
+    expect(stagesFor(video, on)).toEqual(["prepare", "transcribe", "translate", "burn", "save"]);
+  });
+  it("weighs the steps into one percentage that only ever goes up and ends at 100", () => {
+    const stages = stagesFor(video, on);
+    expect(overall(stages, {})).toBe(0);
+    expect(overall(stages, { transcribe: 100 })).toBeCloseTo(62.5, 1);
+    expect(overall(stages, { transcribe: 100, translate: 100, burn: 100 })).toBe(100);
+    expect(overall(stagesFor(video, DEFAULT_OPTIONS), { transcribe: 40 })).toBe(40);
+    let r = newRun(0, stages);
+    const seen: number[] = [];
+    for (const [stage, pct] of [["transcribe", 50], ["transcribe", 100], ["translate", 30], ["translate", 100], ["burn", 10], ["burn", 5], ["burn", 100]] as const) {
+      r = step(r, "stdout", JSON.stringify({ event: "progress", stage, percent: pct }), 1000);
+      seen.push(r.percent);
+    }
+    expect(seen).toEqual([...seen].sort((a, b) => a - b));
+    expect(r.percent).toBe(100);
+    expect(r.stage).toBe("save");
+  });
+  it("moves on to the next step as soon as one is finished", () => {
+    let r = newRun(0, stagesFor(video, on));
+    expect(r.stage).toBe("prepare");
+    r = step(r, "stdout", '{"event": "progress", "stage": "transcribe", "percent": 20}', 5);
+    expect(r.stage).toBe("transcribe");
+    r = step(r, "stdout", '{"event": "progress", "stage": "transcribe", "percent": 100}', 6);
+    expect(r.stage).toBe("translate");
+    r = step(r, "stdout", '{"event": "progress", "stage": "translate", "percent": 100}', 7);
+    expect(r.stage).toBe("burn");
+  });
+  it("ignores the progress of a step this run does not have", () => {
+    const r = step(newRun(0), "stdout", '{"event": "progress", "stage": "burn", "percent": 90}', 1);
+    expect(r.percent).toBe(0);
+    expect(r.stagePercent).toEqual({});
+  });
+  it("is complete only with the result, and every step shows as done then", () => {
+    let r = newRun(0, stagesFor(video, on));
+    r = step(r, "stdout", '{"event": "done", "files": ["a.srt", "a.th.srt", "a.subbed.mp4"]}', 9);
+    expect(r.percent).toBe(100);
+    expect(r.stagePercent).toEqual({ transcribe: 100, translate: 100, burn: 100 });
   });
 });

@@ -21,6 +21,15 @@ section into the release's section.
   `--flavor` is preferred.
 - Intel Macs: `babelscribe` downloads the CPU build of whisper-cli (`whisper-cli-macos-x64-cpu`, from release v0.5.0, with
   a pinned checksum) instead of failing with "no prebuilt whisper-cli". Every other platform keeps the v0.4.0 builds.
+- `babelscribe connect add|remove|show|status APP` (`--json`): put babelscribe into Claude Desktop, Claude Code, Codex CLI,
+  Cursor or Gemini CLI as an MCP server, or take it out again. A settings file is merged, never replaced; the old file is
+  kept as `NAME.bak`; a file with a syntax error is refused and left as it is. The desktop app uses it
+  (`docs/desktop-app.md`), and now ships `babelscribe-mcp` for it.
+- `babelscribe llms [--json]`: which local models answer on the usual ports (for the desktop app's list of translators).
+- `--burn-translated` (with `--burn` and `--translate-to`): draw the translated subtitles, into `NAME.LANG.subbed.mp4`.
+- `--progress-json` also reports the progress of the translation (`"stage": "translate"`).
+- Desktop app: translate the subtitles and burn them into the video (Plain, Karaoke or Shorts) from the Options screen,
+  progress per step, a tab for the translated lines on the result screen, and a *Connect to an AI app* window.
 - Free memory (RAM) is looked at before a model is downloaded (Windows, Linux including container limits, macOS; no new
   dependency). With no `-m` and not enough free memory for the default model (turbo), the largest model that fits is used
   and one line says which and why; `-m turbo` keeps it. A model you named (`-m`, `--text-model`, `--accurate`,

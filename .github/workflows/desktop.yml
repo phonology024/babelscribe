@@ -57,6 +57,7 @@ jobs:
           mkdir -p desktop/src-tauri/binaries desktop/src-tauri/engine
           cp dist/babelscribe/babelscribe.exe desktop/src-tauri/binaries/babelscribe-engine-x86_64-pc-windows-msvc.exe
           cp -r dist/babelscribe/_internal desktop/src-tauri/engine/_internal
+          cp dist/babelscribe/babelscribe-mcp.exe desktop/src-tauri/engine/babelscribe-mcp.exe
 
       - name: Frontend tests
         working-directory: desktop
@@ -82,6 +83,9 @@ jobs:
         run: |
           curl -sSfL -o jfk.wav https://github.com/ggml-org/whisper.cpp/raw/v1.9.4/samples/jfk.wav
           python desktop/scripts/check_engine.py "$LOCALAPPDATA/babelscribe/babelscribe-engine.exe" jfk.wav
+
+      - name: Connect to AI apps with the installed engine (merge, backup, remove, refuse a broken file; the server starts)
+        run: python desktop/scripts/check_connect.py "$LOCALAPPDATA/babelscribe/babelscribe-engine.exe" "$LOCALAPPDATA/babelscribe/babelscribe-mcp.exe"
 
       - name: Killing the app leaves nothing running (the engine ends itself, and whisper-cli with it)
         env:
@@ -160,6 +164,7 @@ jobs:
           mkdir -p desktop/src-tauri/engine
           cp dist/babelscribe/babelscribe desktop/src-tauri/engine/babelscribe-engine
           cp -R dist/babelscribe/_internal desktop/src-tauri/engine/_internal
+          cp dist/babelscribe/babelscribe-mcp desktop/src-tauri/engine/babelscribe-mcp
           desktop/src-tauri/engine/babelscribe-engine --version
 
       - name: Frontend tests
@@ -188,6 +193,9 @@ jobs:
         run: |
           curl -sSfL -o jfk.wav https://github.com/ggml-org/whisper.cpp/raw/v1.9.4/samples/jfk.wav
           python desktop/scripts/check_engine.py "${{ steps.install.outputs.engine }}" jfk.wav ${{ matrix.flavor }}
+
+      - name: Connect to AI apps with the installed engine (merge, backup, remove, refuse a broken file; the server starts)
+        run: python desktop/scripts/check_connect.py "${{ steps.install.outputs.engine }}" "$(dirname "${{ steps.install.outputs.engine }}")/babelscribe-mcp"
 
       - name: Stopping the engine as the app does ends whisper-cli and ffmpeg with it (unit tests + the real engine)
         env:
@@ -260,6 +268,7 @@ jobs:
           mkdir -p desktop/src-tauri/engine
           cp dist/babelscribe/babelscribe desktop/src-tauri/engine/babelscribe-engine
           cp -R dist/babelscribe/_internal desktop/src-tauri/engine/_internal
+          cp dist/babelscribe/babelscribe-mcp desktop/src-tauri/engine/babelscribe-mcp
           desktop/src-tauri/engine/babelscribe-engine --version
 
       - name: Frontend tests
@@ -292,6 +301,9 @@ jobs:
         run: |
           curl -sSfL -o jfk.wav https://github.com/ggml-org/whisper.cpp/raw/v1.9.4/samples/jfk.wav
           python desktop/scripts/check_engine.py "${{ steps.install.outputs.engine }}" jfk.wav cpu
+
+      - name: Connect to AI apps with the installed engine (merge, backup, remove, refuse a broken file; the server starts)
+        run: python desktop/scripts/check_connect.py "${{ steps.install.outputs.engine }}" "$(dirname "${{ steps.install.outputs.engine }}")/babelscribe-mcp"
 
       - name: Stopping the engine as the app does ends whisper-cli and ffmpeg with it (unit tests + the real engine)
         env:

@@ -23,6 +23,7 @@ function Check-Installed {
   Assert (Test-Path $app) "the app is at $app"
   Assert (Test-Path (Join-Path $dir "babelscribe-engine.exe")) "the engine is next to it"
   Assert (Test-Path (Join-Path $dir "_internal\base_library.zip")) "the engine's _internal folder is there"
+  Assert (Test-Path (Join-Path $dir "babelscribe-mcp.exe")) "babelscribe-mcp.exe (the server AI apps start) is next to the engine"
   Assert (Test-Path (Join-Path $dir "licenses\LICENSE.txt")) "the licences are in the install folder"
   Assert (Test-Path $lnk) "Start menu shortcut $lnk"
   $target = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk).TargetPath

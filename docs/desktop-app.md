@@ -7,14 +7,48 @@ macOS asks you to confirm the first start (see below).
 ## What it does
 
 1. **Choose a file**: drop a video or audio file on the window, or pick one. Recent files are listed.
-2. **Options**: spoken language (or auto detect), accurate mode, which files to write (`.srt`, `.vtt`, `.txt`), and
-   under *Advanced* names and terms to spell correctly, plus the same run as a command line.
-3. **Working**: the real progress of the transcription, with an estimate of the time left. *Cancel* stops the run and
-   every process it started (whisper-cli, ffmpeg).
-4. **Result**: the subtitle lines, the files written next to the input, *Open* and *Show in folder*.
+2. **Options**: spoken language (or auto detect), accurate mode, **translate the subtitles** into another language with a
+   model on this computer (Ollama, LM Studio or llama-server, found on their usual ports; *Check again* looks once
+   more), **burn the subtitles into the video** in the *Plain*, *Karaoke* or *Shorts* look (the small pictures use the
+   colours the engine really draws; an audio file has no picture, so the switch is off for it), which files to write
+   (`.srt`, `.vtt`, `.txt`), and under *Advanced* names and terms to spell correctly, plus the same run as a command line.
+   When the computer has too little free memory for the default model, the engine's note says which model is used
+   instead ([memory.md](memory.md)).
+3. **Working**: the real progress, step by step (transcribe, translate, burn), with an estimate of the time left.
+   *Cancel* stops the run and every process it started (whisper-cli, ffmpeg).
+4. **Result**: the subtitle lines (with a tab for the translation), the files written next to the input (the translated
+   `.srt` and the video with captions included), *Open* and *Show in folder*.
+5. **Connect to an AI app** (button at the top and in the sidebar): puts babelscribe into Claude Desktop, Claude Code,
+   Codex CLI, Cursor or Gemini CLI, so that you can ask them for subtitles in plain words. See below.
 
 Light and dark follow the system; the button at the top right switches. Everything runs on the computer; the network is
 only used, as with the command line, to download whisper-cli and the model on first use.
+
+## Connect to an AI app
+
+The window starts `babelscribe-mcp`, the MCP server that ships inside the app (next to the engine: `babelscribe-mcp.exe`
+in the install folder on Windows, `engine/babelscribe-mcp` in the app on macOS and Linux), so nothing else has to be
+installed (no `uv`, no `uvx`, no Python). The work is done by the engine's own command, which you can also run in a
+terminal: `babelscribe connect status | show APP | add APP | remove APP` (`--json`, `--no-backup`). `APP` is
+`claude-desktop`, `claude-code`, `codex`, `cursor` or `gemini`. The rules:
+
+- Before anything is changed the window shows **exactly what will be added** and to which file (or which command will run).
+- A settings file is **merged, never replaced**: the other servers and settings stay, and so do the indentation and the
+  line endings. The old file is copied to `NAME.bak` first (`NAME.bak2`, ... if that exists); the box can be unticked.
+  The new content is checked before it replaces the file, and is written through a temporary file in the same folder.
+- A file that has a **syntax error**, or is not the kind of file the app writes, is **left exactly as it is**, and the
+  window says why and where (line and column). Nothing is changed, not even a backup is made.
+- *Remove* takes out only the `babelscribe` entry (with a backup, too). *Copy instead, I'll add it myself* copies the text.
+- Where it writes: Claude Desktop `claude_desktop_config.json` (Windows `%APPDATA%\Claude`, macOS
+  `~/Library/Application Support/Claude`, Linux `~/.config/Claude`), Cursor `~/.cursor/mcp.json`, Gemini CLI
+  `~/.gemini/settings.json`, Codex CLI `~/.codex/config.toml` (`$CODEX_HOME`; with `tool_timeout_sec = 3600` and
+  `startup_timeout_sec = 120`, because its defaults of 60 and 10 seconds are too short for a long video). Claude Code is
+  set up with its own command, `claude mcp add --scope user babelscribe -- PROGRAM` (and `claude mcp remove`), so its
+  own settings file is never edited by babelscribe. JSON apps get `"timeout": 3600000` (milliseconds; only some apps read it).
+- The command written into a config is the full path of `babelscribe-mcp` in the installed app. If you move or
+  uninstall the app, connect again (or *Remove*).
+- Apps are found by their program or their settings folder. Connect also works for an app that is not found (the file is
+  created); Claude Code needs its `claude` command, and Codex's file needs the engine's Python 3.11+ (the app has it).
 
 ## Installing
 
@@ -85,6 +119,10 @@ Silicon the Metal build, Intel Macs the CPU build. Each download is checked agai
   - On Linux the engine starts whisper-cli and ffmpeg with the library path the app was started with, not the
     PyInstaller folder's (`packaging/standalone/frozen_env.py`): the GPU driver whisper-cli loads must not run against
     the libraries the engine was built with.
+- **AI apps and local models**: the window never touches an app's files itself. It runs `babelscribe connect ... --json`
+  and `babelscribe llms --json` (which local models answer), `babelscribe models --json` (what fits this computer's
+  memory), and shows the answers; the rules and the words are in the engine, `babelscribe/connect.py`. The app ships both
+  programs of the standalone build, `babelscribe-engine` and `babelscribe-mcp`, which share one `_internal` folder.
 - **Logo and icons**: a rounded square with a lowercase "b" in Poppins SemiBold, as outlines (`desktop/src-tauri/icons/logo.svg`).
   `desktop/scripts/make_icons.py` draws every icon size from it (the small ones on the pixel grid, with a heavier "b")
   and the installer pictures, and the same mark for the website, the `.mcpb` bundle and the Claude plugin; the Square*Logo files come from `npx @tauri-apps/cli@2.12.6 icon icons/icon-source.png`.
@@ -103,6 +141,11 @@ Silicon the Metal build, Intel Macs the CPU build. Each download is checked agai
     the ad-hoc signature, starts the app and quits it the way Cmd+Q does.
   - `ubuntu-22.04`: `apt install` of the `.deb` and its dependencies, the AppImage (unpacked, and started), the app
     under Xvfb with a window manager, closed the way a window is closed.
+  - On all three systems `desktop/scripts/check_connect.py` runs the *installed* engine against a fake home folder: it
+    adds babelscribe to Claude Desktop, Cursor, Gemini CLI and Codex configs that already hold other things, and
+    requires that the other things stay, the old file is kept byte for byte as `.bak`, remove takes out only
+    babelscribe, a config with a syntax error is refused and left untouched, and the command that was written really
+    starts and answers an MCP handshake with the `transcribe` tool.
   - On macOS and Linux a Rust test also starts the *installed* engine on an 11-minute recording, stops it as the app
     does while whisper-cli is working, and checks that no process of its group is left. On all three systems a script
     plays the app (a pipe on the engine's standard input, a long recording), kills it outright once whisper-cli is

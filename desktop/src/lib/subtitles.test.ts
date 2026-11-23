@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseCues, parseFile, stamp, subtitleSource } from "./subtitles";
+import { parseCues, parseFile, stamp, subtitleSource, translatedSource } from "./subtitles";
 
 describe("parseCues", () => {
   it("reads SRT, including CRLF, a BOM and two-line subtitles", () => {
@@ -37,4 +37,21 @@ describe("which file is shown", () => {
 it("formats times as m:ss.mmm", () => {
   expect(stamp(4.6)).toBe("0:04.600");
   expect(stamp(62.5)).toBe("1:02.500");
+});
+
+
+describe("a run that translated", () => {
+  const files = ["C:/v/talk.srt", "C:/v/talk.txt", "C:/v/talk.json", "C:/v/talk.th.srt", "C:/v/talk.th.txt", "C:/v/talk.th.subbed.mp4"];
+  it("reads the original lines from the original file, not the translation", () => {
+    expect(subtitleSource(files, "th")).toBe("C:/v/talk.srt");
+    expect(subtitleSource(["C:/v/talk.th.srt", "C:/v/talk.txt"], "th")).toBe("C:/v/talk.txt");
+    expect(subtitleSource(["C:/v/talk.th.srt"], "th")).toBeNull();
+    expect(subtitleSource(["C:/v/talk.th.srt"])).toBe("C:/v/talk.th.srt"); // no translation asked: nothing is skipped
+  });
+  it("finds the translated file, timed formats first, and nothing else", () => {
+    expect(translatedSource(files, "th")).toBe("C:/v/talk.th.srt");
+    expect(translatedSource(["C:/v/talk.th.txt"], "TH")).toBe("C:/v/talk.th.txt");
+    expect(translatedSource(files, "ja")).toBeNull();
+    expect(translatedSource(["C:/v/talk.th.subbed.mp4"], "th")).toBeNull();
+  });
 });

@@ -1,15 +1,25 @@
 // Talking to the engine: babelscribe-engine (the Python CLI, bundled with the app) run with --progress-json.
 // The command line is the single source of truth; this file only builds its arguments and reads its events.
-import { isWindowsPath } from "./utils";
+import { isAudio, isWindowsPath } from "./utils";
 
 export type Format = "srt" | "vtt" | "txt";
 export const FORMATS: Format[] = ["srt", "vtt", "txt"];
+
+export type Style = "plain" | "karaoke" | "shorts";
+export const STYLES: Style[] = ["plain", "karaoke", "shorts"];
 
 export interface Options {
   lang: string; // "auto" or a Whisper language code
   accurate: boolean;
   formats: Record<Format, boolean>;
   prompt: string; // names and terms to spell correctly
+  translate: boolean; // also write NAME.LANG.srt, translated by a local model
+  target: string; // language code to translate into
+  llm: string; // "" = the engine looks at the usual local ports; else the endpoint URL
+  llmModel: string; // "" = the first model the endpoint lists
+  burn: boolean; // also write a video with the subtitles drawn on it
+  style: Style;
+  burnTranslated: boolean; // draw the translated subtitles instead of the original ones
 }
 
 export const DEFAULT_OPTIONS: Options = {
@@ -17,7 +27,19 @@ export const DEFAULT_OPTIONS: Options = {
   accurate: false,
   formats: { srt: true, vtt: false, txt: true },
   prompt: "",
+  translate: false,
+  target: "en",
+  llm: "",
+  llmModel: "",
+  burn: false,
+  style: "karaoke",
+  burnTranslated: false,
 };
+
+/** Is burning in on for this file? An audio file has no picture to draw on. */
+export function burning(path: string, o: Options): boolean {
+  return o.burn && !isAudio(path);
+}
 
 export function chosenFormats(o: Options): Format[] {
   return FORMATS.filter((f) => o.formats[f]);
@@ -30,6 +52,15 @@ export function engineArgs(path: string, o: Options): string[] {
   if (o.accurate) args.push("--accurate");
   args.push("-f", chosenFormats(o).join(","));
   if (o.prompt.trim()) args.push("--prompt", o.prompt.trim());
+  if (o.translate) {
+    args.push("--translate-to", o.target);
+    if (o.llm) args.push("--llm", o.llm);
+    if (o.llmModel) args.push("--llm-model", o.llmModel);
+  }
+  if (burning(path, o)) {
+    args.push("--burn", "--style", o.style);
+    if (o.translate && o.burnTranslated) args.push("--burn-translated");
+  }
   args.push("--progress-json");
   return args;
 }
@@ -71,10 +102,33 @@ export function parseEvent(line: string): EngineEvent | null {
   return null;
 }
 
-export type Stage = "prepare" | "transcribe" | "save";
+export type Stage = "prepare" | "transcribe" | "translate" | "burn" | "save";
 export const STAGES: Stage[] = ["prepare", "transcribe", "save"];
 
+/** The steps a run goes through for these options, in order. */
+export function stagesFor(path: string, o: Options): Stage[] {
+  return ["prepare", "transcribe", ...(o.translate ? (["translate"] as Stage[]) : []),
+    ...(burning(path, o) ? (["burn"] as Stage[]) : []), "save"];
+}
+
+// How much of the whole run each step is, for the one percentage on screen (transcribing is the long part).
+const WEIGHT: Partial<Record<Stage, number>> = { transcribe: 100, translate: 35, burn: 25 };
+
+function working(stages: Stage[]): Stage[] {
+  return stages.filter((s) => s !== "prepare" && s !== "save");
+}
+
+/** The whole run's percentage from each step's own. */
+export function overall(stages: Stage[], pct: Partial<Record<Stage, number>>): number {
+  const w = working(stages);
+  const total = w.reduce((a, s) => a + (WEIGHT[s] ?? 0), 0);
+  if (total === 0) return 0;
+  return Math.min(100, w.reduce((a, s) => a + ((WEIGHT[s] ?? 0) * (pct[s] ?? 0)) / 100, 0) / total * 100);
+}
+
 export interface Run {
+  stages: Stage[];
+  stagePercent: Partial<Record<Stage, number>>; // each step's own 0-100, never going back
   percent: number; // 0-100, never going back
   stage: Stage;
   activity: string; // the latest thing the engine said
@@ -85,9 +139,9 @@ export interface Run {
   error: string | null;
 }
 
-export function newRun(now: number): Run {
-  return { percent: 0, stage: "prepare", activity: "", startedAt: now, transcribeAt: null, log: [], result: null,
-    error: null };
+export function newRun(now: number, stages: Stage[] = STAGES): Run {
+  return { stages, stagePercent: {}, percent: 0, stage: "prepare", activity: "", startedAt: now, transcribeAt: null, log: [],
+    result: null, error: null };
 }
 
 const KEEP = 200;
@@ -108,13 +162,16 @@ export function step(run: Run, stream: "stdout" | "stderr", line: string, now: n
     case "log":
       return { ...run, log: remember(run, ev.message), activity: ev.message };
     case "progress": {
-      if (ev.stage !== "transcribe") return run;
-      const percent = Math.max(run.percent, Math.min(100, ev.percent));
-      return { ...run, percent, stage: percent >= 100 ? "save" : "transcribe",
-        transcribeAt: run.transcribeAt ?? now };
+      const s = ev.stage as Stage;
+      if (!working(run.stages).includes(s)) return run;
+      const stagePercent = { ...run.stagePercent, [s]: Math.max(run.stagePercent[s] ?? 0, Math.min(100, ev.percent)) };
+      const next = working(run.stages).find((w) => (stagePercent[w] ?? 0) < 100);
+      return { ...run, stagePercent, percent: Math.max(run.percent, overall(run.stages, stagePercent)),
+        stage: next ?? "save", transcribeAt: run.transcribeAt ?? (s === "transcribe" ? now : null) };
     }
     case "done":
-      return { ...run, percent: 100, stage: "save", result: ev };
+      return { ...run, percent: 100, stage: "save", result: ev,
+        stagePercent: Object.fromEntries(working(run.stages).map((s) => [s, 100])) };
     case "error":
       return { ...run, error: ev.message, log: remember(run, ev.message) };
   }

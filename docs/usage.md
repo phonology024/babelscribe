@@ -123,6 +123,15 @@ redistributed, so each fine-tune keeps its own licence. Thai word boundaries: `p
 A computer with little free memory gets a smaller model than `turbo` when you do not name one, and a warning when you name one
 that will not fit; what each model needs is in [memory.md](memory.md).
 
+## Connect to an AI app from a terminal
+`babelscribe connect status` lists Claude Desktop, Claude Code, Codex CLI, Cursor and Gemini CLI and whether babelscribe
+is in each; `babelscribe connect show cursor` prints exactly what would be added; `babelscribe connect add cursor` does it
+(`--no-backup` skips the `.bak` copy) and `babelscribe connect remove cursor` undoes it. Other servers and settings in the
+app's file are kept, and a file with a syntax error is refused and left as it is. `babelscribe llms` lists the local models
+that can translate. `--burn-translated` (with `--burn` and `--translate-to`) draws the translated subtitles
+(`NAME.LANG.subbed.mp4`). The desktop app does the same through its *Connect to an AI app* window
+([desktop-app.md](desktop-app.md)).
+
 ## MCP tools
 Setup for each app is in the [README](../README.md#use-it-from-an-ai-app-mcp--no-terminal-needed).
 

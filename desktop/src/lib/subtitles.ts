@@ -36,10 +36,27 @@ export function parseText(text: string): Cue[] {
     .map((t) => ({ start: null, end: null, text: t }));
 }
 
-/** Which written file to read the lines from: timed formats first. */
-export function subtitleSource(files: string[]): string | null {
-  for (const ext of [".srt", ".vtt", ".txt"]) {
-    const f = files.find((x) => x.toLowerCase().endsWith(ext));
+const TIMED_FIRST = [".srt", ".vtt", ".txt"];
+
+/** NAME.th.srt: what the translation of a run into Thai writes. */
+function isTranslation(file: string, target: string): boolean {
+  const f = file.toLowerCase();
+  return TIMED_FIRST.some((ext) => f.endsWith(`.${target.toLowerCase()}${ext}`));
+}
+
+/** Which written file to read the lines from: timed formats first. With `target`, the translated files are not it. */
+export function subtitleSource(files: string[], target?: string): string | null {
+  for (const ext of TIMED_FIRST) {
+    const f = files.find((x) => x.toLowerCase().endsWith(ext) && !(target && isTranslation(x, target)));
+    if (f) return f;
+  }
+  return null;
+}
+
+/** The translated subtitles a run wrote (NAME.LANG.srt, .vtt or .txt), or null. */
+export function translatedSource(files: string[], target: string): string | null {
+  for (const ext of TIMED_FIRST) {
+    const f = files.find((x) => x.toLowerCase().endsWith(`.${target.toLowerCase()}${ext}`));
     if (f) return f;
   }
   return null;
