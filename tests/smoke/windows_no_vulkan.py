@@ -1,5 +1,6 @@
 """Windows without vulkan-1.dll (a virtual machine, the basic display driver, some server installs), for real: the real
-whisper-cli builds, the real "DLL not found" exit, real transcriptions. CI's Windows machines are such computers.
+whisper-cli builds, the real "DLL not found" exit, real transcriptions. CI makes one by hiding the library on its
+throw-away Windows machine (.github/workflows/ci.yml).
 
   python tests/smoke/windows_no_vulkan.py jfk.wav
 

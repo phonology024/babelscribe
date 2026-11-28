@@ -73,7 +73,24 @@ jobs:
         shell: bash
         run: curl -sSfL -o jfk.wav https://github.com/ggml-org/whisper.cpp/raw/v1.9.4/samples/jfk.wav
       - run: python tests/smoke/real_transcription.py jfk.wav
-      - name: Windows without the Vulkan library (as these machines are) - the CPU build takes over
+      # Last, because it changes the machine (which is thrown away): a Windows without vulkan-1.dll, as a virtual machine
+      # or the basic display driver gives. These runners have the library, so every copy a program could load is hidden.
+      - name: Take the Vulkan library away from this throw-away machine
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $copies = @("$env:SystemRoot\System32\vulkan-1.dll", "$env:SystemRoot\SysWOW64\vulkan-1.dll")
+          $copies += $env:PATH -split ';' | Where-Object { $_ } | ForEach-Object { Join-Path $_ 'vulkan-1.dll' }
+          foreach ($dll in ($copies | Sort-Object -Unique)) {
+            if (Test-Path -LiteralPath $dll) {
+              takeown /f $dll | Out-Null
+              icacls $dll /grant 'Administrators:F' | Out-Null
+              Rename-Item -LiteralPath $dll -NewName 'vulkan-1.dll.hidden' -ErrorAction Stop
+              Write-Output "hidden: $dll"
+            }
+          }
+          exit 0
+      - name: Windows without the Vulkan library - the CPU build takes over
         if: runner.os == 'Windows'
         shell: bash
         run: python tests/smoke/windows_no_vulkan.py jfk.wav
