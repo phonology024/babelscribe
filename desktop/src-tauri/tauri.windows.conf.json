@@ -8,7 +8,8 @@
       "binaries/babelscribe-engine"
     ],
     "resources": {
-      "engine/_internal/": "_internal/"
+      "engine/_internal/": "_internal/",
+      "engine/babelscribe-mcp.exe": "babelscribe-mcp.exe"
     },
     "windows": {
       "nsis": {

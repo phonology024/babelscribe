@@ -52,11 +52,15 @@ jobs:
 
       - name: Build the engine (the standalone babelscribe.exe, as in build-standalone.yml)
         run: |
-          pip install . pyinstaller==6.22.3
+          # cryptography (needed by the mcp SDK) only from a prebuilt wheel: built from source on an Intel Mac it links the
+          # Homebrew OpenSSL dynamically and breaks against the older libssl that Python brings (babelscribe-mcp failed to start)
+          pip install --only-binary=cryptography . pyinstaller==6.22.3
+          pip show cryptography mcp | grep -E "^(Name|Version):"        # which versions this engine got
           pyinstaller --noconfirm --distpath dist --workpath build packaging/standalone/babelscribe.spec
           mkdir -p desktop/src-tauri/binaries desktop/src-tauri/engine
           cp dist/babelscribe/babelscribe.exe desktop/src-tauri/binaries/babelscribe-engine-x86_64-pc-windows-msvc.exe
           cp -r dist/babelscribe/_internal desktop/src-tauri/engine/_internal
+          cp dist/babelscribe/babelscribe-mcp.exe desktop/src-tauri/engine/babelscribe-mcp.exe
 
       - name: Frontend tests
         working-directory: desktop
@@ -83,6 +87,9 @@ jobs:
           curl -sSfL -o jfk.wav https://github.com/ggml-org/whisper.cpp/raw/v1.9.4/samples/jfk.wav
           python desktop/scripts/check_engine.py "$LOCALAPPDATA/babelscribe/babelscribe-engine.exe" jfk.wav
 
+      - name: Connect to AI apps with the installed engine (merge, backup, remove, refuse a broken file; the server starts)
+        run: python desktop/scripts/check_connect.py "$LOCALAPPDATA/babelscribe/babelscribe-engine.exe" "$LOCALAPPDATA/babelscribe/babelscribe-mcp.exe"
+
       - name: Killing the app leaves nothing running (the engine ends itself, and whisper-cli with it)
         env:
           BABELSCRIBE_HOME: ${{ runner.temp }}/babelscribe-home
@@ -95,9 +102,15 @@ jobs:
         shell: pwsh
         run: desktop/scripts/check_install.ps1 -Step launch
 
+      - name: Connect AI apps (this throw-away runner's own settings), so that uninstalling has something to take out
+        run: python desktop/scripts/check_connect_uninstall.py prepare "$LOCALAPPDATA/babelscribe/babelscribe-engine.exe"
+
       - name: Silent uninstall removes it all
         shell: pwsh
         run: desktop/scripts/check_install.ps1 -Step uninstall
+
+      - name: Uninstalling took babelscribe out of the AI apps it was connected to, and nothing else
+        run: python desktop/scripts/check_connect_uninstall.py verify
 
       - name: One click - a plain run installs without questions and starts the app (with screenshots)
         shell: pwsh
@@ -153,13 +166,35 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with: { workspaces: "desktop/src-tauri -> target" }
 
+      - name: Intel only - cryptography 50.0.2 built against a static OpenSSL (it has no Intel wheel; 48.0.1, the last one that has, has 3 advisories)
+        if: matrix.name == 'x64'
+        env:
+          MACOSX_DEPLOYMENT_TARGET: "13.0"          # so the compiled extension still runs on macOS 13
+          OPENSSL_STATIC: "1"                       # openssl-sys links libssl.a / libcrypto.a into the extension
+        run: |
+          export OPENSSL_DIR="$(brew --prefix openssl@3)"
+          ls "$OPENSSL_DIR/lib" | grep -E "libssl.a|libcrypto.a"
+          # first, so that nothing replaces it; --no-binary builds it here (Rust is on the runner)
+          pip install --no-binary=cryptography "cryptography==50.0.2"
+          so="$(python -c 'import cryptography.hazmat.bindings._rust as m; print(m.__file__)')"
+          echo "$so"; otool -L "$so"
+          if otool -L "$so" | grep -E "libssl|libcrypto"; then echo "::error::the extension still links an OpenSSL dylib"; exit 1; fi
+          minos="$(otool -l "$so" | awk '/LC_BUILD_VERSION/{f=1} f&&/minos/{print $2; exit} /LC_VERSION_MIN_MACOSX/{g=1} g&&/version/{print $2; exit}')"
+          echo "minimum macOS of the extension: $minos"
+          if [ -z "$minos" ] || [ "${minos%%.*}" -gt 13 ]; then echo "::error::minimum macOS $minos is newer than 13"; exit 1; fi
+
       - name: Build the engine (PyInstaller, the same recipe as Windows)
         run: |
-          pip install . pyinstaller==6.22.3
+          # cryptography (needed by the mcp SDK) only from a prebuilt wheel on Apple Silicon (the Intel build above is already
+          # installed and satisfies the requirement): built from source against Homebrew's OpenSSL dynamically, it broke against
+          # the older libssl that Python brings (babelscribe-mcp failed to start)
+          pip install --only-binary=cryptography . pyinstaller==6.22.3
+          pip show cryptography mcp | grep -E "^(Name|Version):"        # which versions this engine got
           pyinstaller --noconfirm --distpath dist --workpath build packaging/standalone/babelscribe.spec
           mkdir -p desktop/src-tauri/engine
           cp dist/babelscribe/babelscribe desktop/src-tauri/engine/babelscribe-engine
           cp -R dist/babelscribe/_internal desktop/src-tauri/engine/_internal
+          cp dist/babelscribe/babelscribe-mcp desktop/src-tauri/engine/babelscribe-mcp
           desktop/src-tauri/engine/babelscribe-engine --version
 
       - name: Frontend tests
@@ -188,6 +223,20 @@ jobs:
         run: |
           curl -sSfL -o jfk.wav https://github.com/ggml-org/whisper.cpp/raw/v1.9.4/samples/jfk.wav
           python desktop/scripts/check_engine.py "${{ steps.install.outputs.engine }}" jfk.wav ${{ matrix.flavor }}
+
+      - name: The installed app's cryptography links no OpenSSL dylib, and still runs on the oldest macOS we claim
+        run: |
+          so="$(dirname "${{ steps.install.outputs.engine }}")/_internal/cryptography/hazmat/bindings/_rust.abi3.so"
+          ls -l "$so"; otool -L "$so"
+          if otool -L "$so" | grep -E "libssl|libcrypto"; then echo "::error::the app's cryptography links an OpenSSL dylib"; exit 1; fi
+          minos="$(otool -l "$so" | awk '/LC_BUILD_VERSION/{f=1} f&&/minos/{print $2; exit} /LC_VERSION_MIN_MACOSX/{g=1} g&&/version/{print $2; exit}')"
+          echo "minimum macOS of the extension: $minos"
+          if [ -z "$minos" ] || [ "${minos%%.*}" -gt 13 ]; then echo "::error::minimum macOS $minos is newer than 13"; exit 1; fi
+          pip show cryptography | grep -E "^Version:"
+          ls -l "$(dirname "${{ steps.install.outputs.engine }}")/_internal" | grep -E "libssl|libcrypto" || echo "no libssl or libcrypto in _internal"
+
+      - name: Connect to AI apps with the installed engine (merge, backup, remove, refuse a broken file; the server starts)
+        run: python desktop/scripts/check_connect.py "${{ steps.install.outputs.engine }}" "$(dirname "${{ steps.install.outputs.engine }}")/babelscribe-mcp"
 
       - name: Stopping the engine as the app does ends whisper-cli and ffmpeg with it (unit tests + the real engine)
         env:
@@ -255,11 +304,15 @@ jobs:
 
       - name: Build the engine (PyInstaller, the same recipe as Windows)
         run: |
-          pip install . pyinstaller==6.22.3
+          # cryptography (needed by the mcp SDK) only from a prebuilt wheel: built from source on an Intel Mac it links the
+          # Homebrew OpenSSL dynamically and breaks against the older libssl that Python brings (babelscribe-mcp failed to start)
+          pip install --only-binary=cryptography . pyinstaller==6.22.3
+          pip show cryptography mcp | grep -E "^(Name|Version):"        # which versions this engine got
           pyinstaller --noconfirm --distpath dist --workpath build packaging/standalone/babelscribe.spec
           mkdir -p desktop/src-tauri/engine
           cp dist/babelscribe/babelscribe desktop/src-tauri/engine/babelscribe-engine
           cp -R dist/babelscribe/_internal desktop/src-tauri/engine/_internal
+          cp dist/babelscribe/babelscribe-mcp desktop/src-tauri/engine/babelscribe-mcp
           desktop/src-tauri/engine/babelscribe-engine --version
 
       - name: Frontend tests
@@ -292,6 +345,9 @@ jobs:
         run: |
           curl -sSfL -o jfk.wav https://github.com/ggml-org/whisper.cpp/raw/v1.9.4/samples/jfk.wav
           python desktop/scripts/check_engine.py "${{ steps.install.outputs.engine }}" jfk.wav cpu
+
+      - name: Connect to AI apps with the installed engine (merge, backup, remove, refuse a broken file; the server starts)
+        run: python desktop/scripts/check_connect.py "${{ steps.install.outputs.engine }}" "$(dirname "${{ steps.install.outputs.engine }}")/babelscribe-mcp"
 
       - name: Stopping the engine as the app does ends whisper-cli and ffmpeg with it (unit tests + the real engine)
         env:

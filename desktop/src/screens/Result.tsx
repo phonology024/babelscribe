@@ -1,4 +1,5 @@
 import { FileText, FolderOpen, Plus } from "lucide-react";
+import { useState } from "react";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import type { EngineEvent } from "../lib/engine";
@@ -11,11 +12,15 @@ export function Result(props: {
   result: Done;
   detected: boolean;
   cues: Cue[];
+  translated: Cue[] | null; // the lines of NAME.LANG.srt, when the run translated
+  targetName: string;
   onNew: () => void;
   onOpen: (path: string) => void;
   onShow: (path: string) => void;
 }) {
   const { result } = props;
+  const [track, setTrack] = useState<"orig" | "tr">("orig");
+  const shown = track === "tr" && props.translated ? props.translated : props.cues;
   const n = result.segments ?? props.cues.length;
   const summary = [
     `${n} subtitle${n === 1 ? "" : "s"}`,
@@ -38,14 +43,29 @@ export function Result(props: {
 
       <div className="grid grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] items-start gap-4">
         <Card>
-          <div className="px-[18px] pt-4 pb-2.5">
+          <div className="flex items-center justify-between gap-2 px-[18px] pt-4 pb-2.5">
             <h3>Subtitles</h3>
+            {props.translated && (
+              <div role="tablist" className="inline-flex gap-0.5 rounded-md bg-muted p-[3px]">
+                {([["orig", "Original"], ["tr", props.targetName]] as const).map(([k, label]) => (
+                  <button
+                    key={k}
+                    role="tab"
+                    aria-selected={track === k}
+                    onClick={() => setTrack(k)}
+                    className="rounded-[5px] border-0 bg-transparent px-2.5 py-1 text-[12.5px] font-medium text-muted-foreground aria-selected:bg-background aria-selected:text-foreground aria-selected:shadow-sm"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           <div className="max-h-[430px] overflow-y-auto">
-            {props.cues.length === 0 && (
+            {shown.length === 0 && (
               <p className="border-t border-border px-3.5 py-2.5 text-[12.5px] text-muted-foreground">No lines to show.</p>
             )}
-            {props.cues.map((c, i) => (
+            {shown.map((c, i) => (
               <div key={i} className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-2.5 gap-y-1 border-t border-border px-3.5 py-2.5">
                 <span className="grid size-[22px] place-items-center rounded-[5px] bg-secondary text-[11px]">{i + 1}</span>
                 <div className="flex flex-col gap-0.5">

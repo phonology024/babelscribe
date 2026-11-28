@@ -10,6 +10,8 @@
 ;   - when the install stops, the header says so and what to do, and a WebView2 failure also shows its reason in a box
 ;     (the page has no status line or buttons; the title bar's close button still closes it).
 ;   - a running babelscribe is closed only after the user says OK, and the install and uninstall also end its engine.
+;   - uninstalling takes babelscribe out of the AI apps it was connected to (`babelscribe-engine connect remove --all`),
+;     but not on an update or a reinstall (/UPDATE, /KEEPAPPS).
 ; Silent installs (/S) behave as before: nothing is started unless /R is given.
 Unicode true
 ManifestDPIAware true
@@ -86,6 +88,7 @@ ${StrLoc}
 
 Var PassiveMode
 Var UpdateMode
+Var KeepApps       ; babelscribe: set by the installer when it runs the old uninstaller for a reinstall
 Var NoShortcutMode
 Var WixMode
 Var OldMainBinaryName
@@ -394,6 +397,8 @@ Function PageLeaveReinstall
       ReadRegStr $4 SHCTX "${MANUPRODUCTKEY}" ""
       ReadRegStr $R1 SHCTX "${UNINSTKEY}" "UninstallString"
       ${IfThen} $UpdateMode = 1 ${|} StrCpy $R1 "$R1 /UPDATE" ${|} ; append /UPDATE
+      ; babelscribe: a reinstall keeps the program where it is, so the AI apps stay connected to it
+      StrCpy $R1 "$R1 /KEEPAPPS"
       ${IfThen} $PassiveMode = 1 ${|} StrCpy $R1 "$R1 /P" ${|} ; append /P
       StrCpy $R1 "$R1 _?=$4" ; append uninstall directory
       ExecWait '$R1' $0
@@ -949,6 +954,11 @@ Function un.onInit
   ${IfNot} ${Errors}
     StrCpy $UpdateMode 1
   ${EndIf}
+
+  ${GetOptions} $CMDLINE "/KEEPAPPS" $KeepApps
+  ${IfNot} ${Errors}
+    StrCpy $KeepApps 1
+  ${EndIf}
 FunctionEnd
 
 Section Uninstall
@@ -958,6 +968,19 @@ Section Uninstall
   !endif
 
   !insertmacro CheckIfAppIsRunning "$INSTDIR\${MAINBINARYNAME}.exe" "${PRODUCTNAME}"
+
+  ; babelscribe: take babelscribe out of the AI apps it was connected to (Claude Desktop, Cursor, ...): their settings
+  ; point at babelscribe-mcp.exe in this folder, which is about to be deleted. Not for an update or a reinstall, where the
+  ; program stays where it is. Only entries that point at this program go; every file changed is kept as NAME.bak; a
+  ; failure is ignored (the engine reports it for each app and never stops the uninstall).
+  ${If} $UpdateMode <> 1
+  ${AndIf} $KeepApps <> 1
+    ${If} ${FileExists} "$INSTDIR\babelscribe-engine.exe"
+      nsExec::Exec '"$INSTDIR\babelscribe-engine.exe" connect remove --all'
+      Pop $0
+    ${EndIf}
+  ${EndIf}
+
   ; babelscribe: a forced close skips the app's own clean-up, so end the engine and what it started (whisper-cli,
   ; ffmpeg) too; otherwise they keep running and keep files in the install folder open.
   nsExec::Exec 'taskkill /F /T /IM babelscribe-engine.exe'

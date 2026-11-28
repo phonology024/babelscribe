@@ -260,3 +260,64 @@ def test_real_burn_of_an_edited_ass_and_of_an_srt(ffmpeg, tmp_path):
     assert any("no word timings" in m for m in said), "an .srt can only be drawn plain, and says so"
     with pytest.raises(SystemExit, match="overwrite the input"):
         burn.burn_file(video, tmp_path / "clip.srt", out=video)
+
+
+# ---------------------------------------------------------------- --burn-translated
+
+def _translated_run(tmp_path, monkeypatch, argv):
+    """A transcription whose translation is NAME.th.srt, with burn_file and translate_file recorded."""
+    from babelscribe import llm_translate
+    video = tmp_path / "clip.mp4"; video.touch()
+    seen = {}
+    monkeypatch.setattr(api, "transcribe_file", lambda src, formats, out, **kw: seen.update(formats=formats) or
+                        {"files": [str(tmp_path / "clip.srt"), str(tmp_path / "clip.json")]})
+    monkeypatch.setattr(llm_translate, "language", lambda t: ("th", "Thai"))
+    monkeypatch.setattr(llm_translate, "find_endpoint", lambda *a, **k: ("http://x/v1", []))
+
+    def fake_translate(saved, target, llm, model, formats, out=None, allow_remote=False, max_line_chars=None, progress=None, **kw):
+        seen["translate"] = (formats, progress is not None)
+        return {"files": [str(tmp_path / f"clip.th.{f}") for f in formats]}
+    monkeypatch.setattr(llm_translate, "translate_file", fake_translate)
+    monkeypatch.setattr(burn, "burn_ffmpeg", lambda: "ffmpeg")
+    monkeypatch.setattr(burn, "video_size", lambda path, ffmpeg=None: (1920, 1080))
+    monkeypatch.setattr(burn, "burn_file", lambda *a, **kw: seen.update(burn=a))
+    cli.main([str(video), *argv])
+    return seen
+
+
+def test_burn_translated_draws_the_translated_srt_into_a_video_of_its_own(tmp_path, monkeypatch):
+    seen = _translated_run(tmp_path, monkeypatch, ["-f", "txt", "--translate-to", "th", "--burn", "--burn-translated", "--style", "karaoke"])
+    assert seen["burn"][1] == str(tmp_path / "clip.th.srt") and seen["burn"][2] == "karaoke"
+    assert seen["burn"][3] == str(tmp_path / "clip.th.subbed.mp4")
+    assert seen["translate"][0] == ["txt", "srt"], "the .srt it draws is written even when .srt was not asked for"
+
+
+def test_without_burn_translated_the_original_is_drawn_as_before(tmp_path, monkeypatch):
+    seen = _translated_run(tmp_path, monkeypatch, ["-f", "srt", "--translate-to", "th", "--burn"])
+    assert seen["burn"][1] == str(tmp_path / "clip.json") and seen["burn"][3] == str(tmp_path / "clip.subbed.mp4")
+    assert seen["translate"][0] == ["srt"]
+
+
+@pytest.mark.parametrize("argv", [["--burn-translated"], ["--burn", "--burn-translated"], ["--translate-to", "th", "--burn-translated"]])
+def test_burn_translated_needs_burn_and_translate_and_says_so_before_any_work(tmp_path, monkeypatch, argv):
+    video = tmp_path / "clip.mp4"; video.touch()
+    monkeypatch.setattr(api, "transcribe_file", lambda **kw: pytest.fail("transcribed anyway"))
+    with pytest.raises(SystemExit, match="--burn-translated needs --burn and --translate-to"):
+        cli.main([str(video), *argv])
+
+
+def test_translating_reports_its_own_progress_in_the_json_events(tmp_path, monkeypatch, capsys):
+    from babelscribe import llm_translate
+    video = tmp_path / "clip.mp4"; video.touch()
+    monkeypatch.setattr(api, "transcribe_file", lambda src, formats, out, **kw: {"files": [str(tmp_path / "clip.json")]})
+    monkeypatch.setattr(llm_translate, "language", lambda t: ("th", "Thai"))
+    monkeypatch.setattr(llm_translate, "find_endpoint", lambda *a, **k: ("http://x/v1", []))
+
+    def fake_translate(saved, target, llm, model, formats, out=None, allow_remote=False, max_line_chars=None, progress=None, **kw):
+        for pct in (10, 60, 100):
+            progress(pct)
+        return {"files": [str(tmp_path / "clip.th.srt")]}
+    monkeypatch.setattr(llm_translate, "translate_file", fake_translate)
+    cli.main([str(video), "--translate-to", "th", "--progress-json"])
+    events = [json.loads(l) for l in capsys.readouterr().out.splitlines() if l.startswith("{")]
+    assert [e["percent"] for e in events if e.get("stage") == "translate"] == [10.0, 60.0, 100.0]

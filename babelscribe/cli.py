@@ -12,6 +12,7 @@ Vulkan, NVIDIA via CUDA, Apple via Metal) or the CPU.
   babelscribe burn clip.mp4 clip.ass           # draw an existing (edited) subtitle file onto the video
   babelscribe talk.mp4 --translate-to th       # also talk.th.srt, translated by a local LLM (Ollama, llama-server, ...)
   babelscribe translate talk.json --to ja      # translate a finished transcription (or an .srt), timing kept
+  babelscribe connect add claude-desktop       # put babelscribe into an AI app's settings (status | show | add | remove)
   babelscribe devices                          # list GPUs whisper.cpp can use
   babelscribe models                           # list models and fine-tunes"""
 from __future__ import annotations
@@ -92,6 +93,19 @@ def main(argv: list[str] | None = None) -> None:
     if argv[:1] == ["burn"]:
         from . import burn
         return burn.main(argv[1:])
+    if argv[:1] == ["llms"]:                         # which local models can translate (for the desktop app)
+        from . import llm_translate
+        found = llm_translate.scan()
+        if "--json" in argv[1:]:
+            print(json.dumps(found, ensure_ascii=True))
+        else:
+            for f in found:
+                print(f"  {f['kind']:14} {f['url']:32} " + (", ".join(f["models"][:3]) or "no model listed") if f["up"]
+                      else f"  {f['kind']:14} {f['url']:32} not running")
+        return
+    if argv[:1] == ["connect"]:                      # put babelscribe into an AI app's settings (and take it out again)
+        from . import connect
+        return connect.main(argv[1:])
     if argv[:1] == ["models"]:
         # --exit-when-stdin-closes (which the desktop app adds to everything it runs) has nothing to stop here
         rest = [x for x in argv[1:] if x != "--exit-when-stdin-closes"]
@@ -136,6 +150,9 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--style", default="plain", choices=("plain", "karaoke", "shorts"),
                     help="look of --burn: plain | karaoke (each word lights up) | shorts (big, 2-3 words at a time, "
                          "for vertical video)")
+    ap.add_argument("--burn-translated", action="store_true",
+                    help="with --burn and --translate-to: draw the translated subtitles (NAME.LANG.subbed.mp4) instead of "
+                         "the original ones")
     ap.add_argument("--font", help="font family for --burn (default: one that has the letters of the language)")
     ap.add_argument("-o", "--out", help="one file: output base path; several files or a folder: output folder "
                                         "(default: next to each input)")
@@ -237,6 +254,8 @@ def _run(a: argparse.Namespace, emit=None) -> None:
     elif sys.stderr.isatty() and not a.verbose and not a.no_progress:   # a bar only where a person is watching
         options["progress"] = progress_bar()
     formats = [f.strip() for f in a.formats.split(",") if f.strip()]
+    if a.burn_translated and not (a.burn and a.translate_to):
+        raise SystemExit("--burn-translated needs --burn and --translate-to (it draws the translated subtitles)")
     if a.burn:
         from . import burn
         if "json" not in formats:
@@ -253,13 +272,21 @@ def _run(a: argparse.Namespace, emit=None) -> None:
 
     def translate_one(files: list[str]) -> dict:
         saved = next(f for f in files if f.endswith(".json"))
+        written = [f for f in formats if f != "json"] or ["srt"]
+        if a.burn_translated and "srt" not in written:
+            written.append("srt")        # what is drawn is the translated .srt
         return llm_translate.translate_file(
-            saved, a.translate_to, a.llm, a.llm_model, [f for f in formats if f != "json"] or ["srt"],
-            allow_remote=a.allow_remote, max_line_chars=a.max_line_chars)
+            saved, a.translate_to, a.llm, a.llm_model, written,
+            allow_remote=a.allow_remote, max_line_chars=a.max_line_chars,
+            progress=stage_progress("translate") if emit else None)
 
-    def burn_one(src, files: list[str]) -> dict:
+    def burn_one(src, files: list[str], translated: list[str] | None = None) -> dict:
         saved = next(f for f in files if f.endswith(".json"))
-        return burn.burn_file(src, saved, a.style, saved[:-len(".json")] + ".subbed.mp4", a.font,
+        what, name = saved, ".subbed.mp4"
+        if a.burn_translated:            # the translated subtitles, in a video of their own: NAME.LANG.subbed.mp4
+            what = next(f for f in translated or [] if f.endswith(".srt"))
+            name = what[:-len(".srt")][len(saved) - len(".json"):] + ".subbed.mp4"
+        return burn.burn_file(src, what, a.style, saved[:-len(".json")] + name, a.font,
                               progress=stage_progress("burn") if emit else options.get("progress"))
 
     try:
@@ -269,7 +296,7 @@ def _run(a: argparse.Namespace, emit=None) -> None:
                 burn.video_size(src, burn.burn_ffmpeg())   # an audio file has no picture: say so before transcribing it
             r = api.transcribe_file(src=a.input[0], formats=formats, out=a.out, **options)
             translated = translate_one(r["files"]) if a.translate_to else None
-            burned = burn_one(src, r["files"]) if a.burn else None
+            burned = burn_one(src, r["files"], translated["files"] if translated else None) if a.burn else None
             if emit:
                 more = (translated["files"] if translated else []) + ([burned["file"]] if burned else [])
                 emit("done", **{**r, "files": r["files"] + more})
@@ -278,11 +305,13 @@ def _run(a: argparse.Namespace, emit=None) -> None:
             burn.burn_ffmpeg()
         done = api.transcribe_many(a.input, recursive=a.recursive, out_dir=a.out, skip_existing=a.skip_existing,
                                    formats=formats, **options)
+        translated_of: dict[str, list[str]] = {}
         if a.translate_to:
             for r in done["files"]:
                 if r["ok"] and not r.get("skipped"):
                     try:
-                        r["files"] += translate_one(r["files"])["files"]
+                        translated_of[r["path"]] = translate_one(r["files"])["files"]
+                        r["files"] += translated_of[r["path"]]
                     except (Exception, SystemExit) as e:
                         r.update(ok=False, error=f"subtitles written, but the translation failed: {e}")
                         done["succeeded"] -= 1
@@ -291,7 +320,7 @@ def _run(a: argparse.Namespace, emit=None) -> None:
             for r in done["files"]:
                 if r["ok"] and not r.get("skipped") and Path(r["path"]).suffix.lower() in burn.VIDEO:
                     try:
-                        burn_one(r["path"], r["files"])
+                        burn_one(r["path"], r["files"], translated_of.get(r["path"]))
                     except (Exception, SystemExit) as e:
                         r.update(ok=False, error=f"subtitles written, but burning them in failed: {e}")
                         done["succeeded"] -= 1

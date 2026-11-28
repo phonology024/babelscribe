@@ -1,10 +1,16 @@
 import { Check, LoaderCircle, X } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
-import { formatLeft, secondsLeft, STAGES, type Run, type Stage } from "../lib/engine";
-import { cn, splitPath } from "../lib/utils";
+import { formatLeft, secondsLeft, type Options, type Run, type Stage } from "../lib/engine";
+import { cn, languageName, splitPath } from "../lib/utils";
 
-const NAMES: Record<Stage, string> = { prepare: "Get ready", transcribe: "Transcribe", save: "Save the files" };
+const NAMES: Record<Stage, string> = {
+  prepare: "Get ready",
+  transcribe: "Transcribe",
+  translate: "Translate",
+  burn: "Burn subtitles",
+  save: "Save the files",
+};
 
 function Bar({ percent }: { percent: number }) {
   return (
@@ -18,6 +24,7 @@ export function Progress(props: {
   path: string;
   run: Run;
   formats: string[];
+  opts: Options;
   now: number;
   onCancel: () => void;
   onBack: () => void;
@@ -26,10 +33,12 @@ export function Progress(props: {
   const notes: Record<Stage, string> = {
     prepare: "Finds whisper-cli, the model and your GPU. The first run downloads them.",
     transcribe: "Speech to text, on this computer.",
+    translate: `Into ${languageName(props.opts.target)}, with a model on this computer.`,
+    burn: `${props.opts.style} captions on a copy of the video.`,
     save: props.formats.map((f) => `.${f}`).join(", ") + " next to the file.",
   };
   const finished = run.result !== null;
-  const at = STAGES.indexOf(run.stage);
+  const at = run.stages.indexOf(run.stage);
   const left = secondsLeft(run, props.now);
 
   if (run.error) {
@@ -79,7 +88,7 @@ export function Progress(props: {
 
       <Card>
         <ul className="m-0 list-none p-0">
-          {STAGES.map((s, i) => {
+          {run.stages.map((s, i) => {
             const state = finished || i < at ? "done" : i === at ? "run" : "wait";
             return (
               <li key={s} className="flex items-center gap-3 border-t border-border px-[18px] py-3 first:border-t-0">
@@ -97,14 +106,14 @@ export function Progress(props: {
                   <div className="truncate text-[11.5px] text-muted-foreground">
                     {state === "run" && run.activity ? run.activity : notes[s]}
                   </div>
-                  {state === "run" && s === "transcribe" && (
+                  {state === "run" && s !== "prepare" && s !== "save" && (
                     <div className="mt-1.5">
-                      <Bar percent={run.percent} />
+                      <Bar percent={run.stagePercent[s] ?? 0} />
                     </div>
                   )}
                 </div>
-                {state === "run" && s === "transcribe" ? (
-                  <span className="font-mono text-[12.5px] tabular-nums">{Math.floor(run.percent)}%</span>
+                {state === "run" && s !== "prepare" && s !== "save" ? (
+                  <span className="font-mono text-[12.5px] tabular-nums">{Math.floor(run.stagePercent[s] ?? 0)}%</span>
                 ) : (
                   <span className="text-[11.5px] text-muted-foreground">{state === "done" ? "done" : state === "wait" ? "waiting" : ""}</span>
                 )}

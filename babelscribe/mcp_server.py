@@ -325,8 +325,8 @@ def main() -> None:
     try:
         import anyio
         from mcp.server.stdio import stdio_server
-    except ImportError:
-        raise SystemExit('the MCP server needs Python 3.10+ (the mcp SDK)')
+    except ImportError as e:     # say which import failed: "needs Python 3.10+" is wrong when the SDK is there but cannot load
+        raise SystemExit(f'the MCP server needs Python 3.10+ and the mcp SDK ({type(e).__name__}: {e}; Python {sys.version.split()[0]})')
     proto = _guard_stdout()
     srv = build()
 

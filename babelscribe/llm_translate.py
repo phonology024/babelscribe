@@ -95,6 +95,27 @@ def find_endpoint(url: str | None = None, allow_remote: bool = False) -> tuple[s
         f"then run again, or point at yours with --llm http://127.0.0.1:PORT/v1")
 
 
+KINDS = {8080: "llama-server", 9931: "localllm", 11434: "Ollama", 1234: "LM Studio"}
+
+
+def scan(timeout: float = 2.0) -> list[dict]:
+    """Every usual local port, answering or not: [{"url", "kind", "up", "models"}]. For `babelscribe llms`, which the
+    desktop app uses to let a person pick the model that translates. Only this computer is looked at."""
+    found = []
+    for base in DEFAULT_ENDPOINTS:
+        port = urllib.parse.urlparse(base).port
+        names: list[str] = []
+        up = False
+        try:
+            listing = _get_json(base + "/models", timeout=timeout, key=os.environ.get("BABELSCRIBE_LLM_KEY"))
+            names = [m.get("id", "") for m in listing.get("data", []) if isinstance(m, dict) and m.get("id")]
+            up = True
+        except (OSError, ValueError):
+            pass
+        found.append({"url": base, "kind": KINDS.get(port, "local server"), "up": up, "models": names})
+    return found
+
+
 def chat_fn(base: str, model: str | None = None) -> Callable[[list[dict]], str]:
     """A function that sends chat messages to the endpoint and returns the reply text.
 
