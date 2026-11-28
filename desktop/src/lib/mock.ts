@@ -38,6 +38,24 @@ export const mock: Backend = {
     return { exists: true, isFile: true, size: 48 * 1024 * 1024 };
   },
   async run(args: string[], onLine: Line, onExit: Exit) {
+    if (args[0] === "models") {
+      // ?ram=1.5 pretends this computer has 1.5 GB free, for screenshots of the low-memory notes
+      const free = Number(params().get("ram") ?? 16) * 1024;
+      const need = (mb: number) => mb + 512;
+      const one = (name: string, kind: string, mb: number) => {
+        const fits = need(mb) <= free;
+        return { name, kind, ram_mb: need(mb), gpu_ram_mb: 1200, fits,
+          warning: fits ? null : `${name} needs about ${(need(mb) / 1024).toFixed(1)} GB of free memory and this computer has ${(free / 1024).toFixed(1)} GB free: it may run very slowly or stop.` };
+      };
+      const list = [one("tiny", "general", 309), one("small", "general", 887), one("large-v3-turbo", "general", 1939),
+        one("large-v3", "general", 4000), one("thai-pathumma", "finetune", 2600)];
+      const used = list.find((m) => m.name === "large-v3-turbo")?.fits ? "turbo" : "small";
+      const note = used === "small" ? `low memory: ${(free / 1024).toFixed(1)} GB free, turbo needs about ${(need(1939) / 1024).toFixed(1)} GB; using small instead (it is less accurate, most of all for Thai and other languages than English). -m turbo keeps it.` : null;
+      const report = { ram: { total_mb: 16384, available_mb: free }, margin_mb: 512, default: "turbo", default_used: used,
+        default_note: note, accurate: { th: "thai-pathumma", "*": "large-v3" }, models: list };
+      timers.push(window.setTimeout(() => { onLine("stdout", JSON.stringify(report)); onExit(0); }, 150));
+      return;
+    }
     const src = args[0];
     const formats = (args[args.indexOf("-f") + 1] || "srt").split(",");
     const base = src.replace(/\.[^.\\/]+$/, "");

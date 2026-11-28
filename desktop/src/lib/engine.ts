@@ -143,3 +143,46 @@ export function formatLeft(s: number): string {
   const m = Math.round(s / 60);
   return `about ${m} min left`;
 }
+
+// What fits this computer. The rule and its words live in the engine (babelscribe/ram.py); the app only asks
+// `babelscribe models --json` and shows what comes back.
+export interface FitModel {
+  name: string;
+  kind: "general" | "finetune";
+  ram_mb: number; // peak memory of a CPU run, with a margin
+  gpu_ram_mb: number;
+  fits: boolean | null; // null: the engine could not find out how much memory is free
+  warning: string | null;
+}
+
+export interface Fit {
+  ram: { total_mb: number; available_mb: number } | null;
+  default: string;
+  default_used: string; // what a run with no model chosen will use
+  default_note: string | null; // the engine's one line when that is not the default
+  accurate: Record<string, string>; // language code -> the model Accurate mode adds; "*" for every other language
+  models: FitModel[];
+}
+
+/** The engine's answer to `models --json` (its stdout lines joined), or null for anything else. */
+export function parseFit(text: string): Fit | null {
+  try {
+    const v = JSON.parse(text);
+    if (v && typeof v === "object" && Array.isArray(v.models) && typeof v.default_used === "string" && v.accurate) {
+      return v as Fit;
+    }
+  } catch {
+    /* not JSON */
+  }
+  return null;
+}
+
+/** The one thing to tell the person about memory for these options, in the engine's own words, or null. */
+export function memoryNote(fit: Fit | null, o: Pick<Options, "lang" | "accurate">): string | null {
+  if (!fit) return null;
+  if (o.accurate) {
+    const name = fit.accurate[o.lang] ?? fit.accurate["*"];
+    return fit.models.find((m) => m.name === name)?.warning ?? null;
+  }
+  return fit.default_note;
+}

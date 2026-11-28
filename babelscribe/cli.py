@@ -21,7 +21,7 @@ import json
 import sys
 import traceback
 
-from . import __version__, api, backend, doctor, models
+from . import __version__, api, backend, doctor, models, ram
 
 
 def progress_bar(stream=None, width: int = 30):
@@ -93,9 +93,19 @@ def main(argv: list[str] | None = None) -> None:
         from . import burn
         return burn.main(argv[1:])
     if argv[:1] == ["models"]:
-        print("general (99 languages):"); [print(f"  {k:16} {v}") for k, v in models.GENERAL.items()]
+        # --exit-when-stdin-closes (which the desktop app adds to everything it runs) has nothing to stop here
+        rest = [x for x in argv[1:] if x != "--exit-when-stdin-closes"]
+        info = ram.detect()
+        if rest == ["--json"]:                       # for programs: what fits this computer, and what to say if not
+            print(json.dumps(ram.report(info, lambda: ram.gpu_runs(download=False)), ensure_ascii=True))
+            return
+        print("general (99 languages), with the free memory a run needs:")
+        [print(f"  {k:16} {v:>7}  needs ~{ram.need_mb(k) / 1024:.1f} GB") for k, v in models.GENERAL.items()]
         print("fine-tunes (text quality for one language, use with --text-model):")
-        [print(f"  {k:16} [{v['lang']}] {v['note']}") for k, v in models.FINETUNES.items()]
+        [print(f"  {k:18} [{v['lang']}] {v['note']}") for k, v in models.FINETUNES.items()]
+        if info:
+            print(f"this computer: {info['available_mb'] / 1024:.1f} GB free of {info['total_mb'] / 1024:.1f} GB; "
+                  f"{ram.warning('turbo', info, None, lambda: ram.gpu_runs(download=False)) or 'the default model (turbo) fits'}")
         return
     ap = argparse.ArgumentParser(prog="babelscribe", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("input", nargs="+", help="audio/video files and/or folders, or 'devices'")
@@ -103,7 +113,8 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--skip-existing", action="store_true",
                     help="with several files or a folder: leave files whose outputs already exist")
     ap.add_argument("-l", "--lang", default="auto", help="language code (th, en, ja, ...) or auto")
-    ap.add_argument("-m", "--model", default="turbo", help="timing/general model (default turbo = large-v3-turbo)")
+    ap.add_argument("-m", "--model", help="timing/general model (default turbo = large-v3-turbo; with no -m on a computer "
+                                          "with too little free memory for it, the largest model that fits is used instead)")
     ap.add_argument("--text-model", help="language fine-tune for the text (hybrid mode), e.g. thai-thonburian")
     ap.add_argument("--accurate", action="store_true",
                     help="slower but fewest errors: large-v3 with beam search, or the language's best fine-tune (hybrid)")
@@ -203,13 +214,13 @@ def _run(a: argparse.Namespace, emit=None) -> None:
         return report
 
     if a.input == ["devices"]:
-        _, _, found = api.setup(a.model, a.bin, a.flavor)
+        _, _, found = api.setup(a.model or "turbo", a.bin, a.flavor)
         for d in found:
             print(f"  [{d['id']}] {d['backend']:6} {d['name']}  {d.get('detail', '')}")
         print(f"auto picks device {backend.pick_device(found)}"); return
     options = dict(
         lang=a.lang,
-        model=a.model,
+        model=a.model or api.UNCHOSEN,
         text_model=a.text_model,
         accurate=a.accurate,
         device=a.device,

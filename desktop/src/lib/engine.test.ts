@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { commandLine, DEFAULT_OPTIONS, engineArgs, exited, formatLeft, newRun, parseEvent, secondsLeft, step, type Run } from "./engine";
+import { commandLine, DEFAULT_OPTIONS, engineArgs, exited, formatLeft, memoryNote, newRun, parseEvent, parseFit, secondsLeft, step, type Run } from "./engine";
 
 const path = "C:\\Users\\you\\My Videos\\talk.mp4";
 
@@ -91,5 +91,34 @@ describe("a run", () => {
     expect(secondsLeft(r, 1000)).toBeNull(); // too early to say
     expect(formatLeft(30)).toBe("about 30 s left");
     expect(formatLeft(150)).toBe("about 3 min left");
+  });
+});
+
+describe("what fits this computer", () => {
+  const model = (name: string, warning: string | null) => ({ name, kind: "general" as const, ram_mb: 1, gpu_ram_mb: 1,
+    fits: warning === null, warning });
+  const fit = {
+    ram: { total_mb: 4096, available_mb: 1500 }, default: "turbo", default_used: "small",
+    default_note: "low memory: 1.5 GB free, turbo needs about 2.3 GB; using small instead.",
+    accurate: { th: "thai-pathumma", "*": "large-v3" },
+    models: [model("large-v3", "large-v3 needs about 4.4 GB"), model("thai-pathumma", "thai-pathumma needs about 3.0 GB"),
+      model("tiny", null)],
+  };
+  it("reads the engine's answer and nothing else", () => {
+    expect(parseFit(JSON.stringify(fit))).toEqual(fit);
+    for (const s of ["", "downloading ...", '{"event": "log"}', "[1]", '{"models": 3}']) expect(parseFit(s)).toBeNull();
+  });
+  it("shows the engine's own line for the default model when it was replaced", () => {
+    expect(memoryNote(fit, { lang: "en", accurate: false })).toBe(fit.default_note);
+  });
+  it("shows the warning of the model Accurate mode adds for the chosen language", () => {
+    expect(memoryNote(fit, { lang: "th", accurate: true })).toBe("thai-pathumma needs about 3.0 GB");
+    expect(memoryNote(fit, { lang: "auto", accurate: true })).toBe("large-v3 needs about 4.4 GB");
+    expect(memoryNote(fit, { lang: "de", accurate: true })).toBe("large-v3 needs about 4.4 GB");
+  });
+  it("says nothing when it fits, when the engine did not answer, or when the model is not listed", () => {
+    expect(memoryNote({ ...fit, default_note: null }, { lang: "en", accurate: false })).toBeNull();
+    expect(memoryNote(null, { lang: "en", accurate: true })).toBeNull();
+    expect(memoryNote({ ...fit, models: [] }, { lang: "th", accurate: true })).toBeNull();
   });
 });

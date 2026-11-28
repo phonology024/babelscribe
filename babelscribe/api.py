@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 from typing import Callable
 
-from . import __version__, backend, hybrid, models, transcribe, writers
+from . import __version__, backend, hybrid, models, ram, transcribe, writers
 
 
 MEDIA = {".mp4", ".mkv", ".mov", ".avi", ".webm", ".m4v", ".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg", ".opus", ".wma"}
@@ -146,7 +146,53 @@ def setup(model: str = "turbo", bin: str | None = None, flavor: str | None = Non
 
 # The model used when none is named. BABELSCRIBE_MODEL changes it for callers that cannot pass one: the MCP tools
 # have no model argument, so this is how a small machine (or CI) makes an AI app use "small" or "tiny".
-DEFAULT_MODEL = os.environ.get("BABELSCRIBE_MODEL") or "turbo"
+class _Unchosen(str):
+    """"turbo" because nobody named a model: the one case where a computer with little free memory is given a smaller one."""
+
+
+UNCHOSEN = _Unchosen("turbo")
+DEFAULT_MODEL = os.environ.get("BABELSCRIBE_MODEL") or UNCHOSEN
+
+_told: set[str] = set()      # memory lines already said in this process: a folder of 200 files says each once
+
+
+def _tell(log: Callable[[str], None], line: str | None) -> None:
+    if line and line not in _told:
+        _told.add(line)
+        log(line)
+
+
+def _once(fn: Callable[[], bool]) -> Callable[[], bool]:
+    box: list[bool] = []
+
+    def get() -> bool:
+        if not box:
+            box.append(bool(fn()))
+        return box[0]
+    return get
+
+
+def _memory(model: str, text_model: str | None, accurate: bool, translate: bool, log: Callable[[str], None],
+            src: str | Path | None = None, bin: str | None = None, flavor: str | None = None):
+    """Look at the free memory before anything is downloaded. Returns (model to use, memory info or None).
+
+    No model named, nothing else that needs one: a model that does not fit is replaced by the largest that does, with
+    one line saying so. A model somebody named (-m, a text model, --accurate, --translate) is never changed, only warned
+    about. When the memory cannot be found out, nothing happens at all."""
+    info = ram.detect()
+    if info is None:
+        return str(model), None
+    minutes = ram.media_minutes(src) if src else None
+    # Asked only when the CPU numbers say no: does a discrete graphics card hold the weights (then RAM is what the "gpu" column says)?
+    probe = _once(lambda: ram.gpu_runs(bin, flavor))
+    if isinstance(model, _Unchosen) and not (text_model or accurate or translate):
+        pick, say = ram.choose_default(str(model), info, minutes, probe)
+        _tell(log, say)
+        return pick, (info, probe)
+    for name in (model, text_model):
+        if name:
+            _tell(log, ram.warning(name, info, minutes, probe))
+    return str(model), (info, probe)
 
 
 def transcribe_file(
@@ -184,6 +230,7 @@ def transcribe_file(
         if models.ALIASES.get(model, model) == "large-v3-turbo":   # turbo was not trained for translation
             model = "large-v3"
             log("translate: using large-v3 (turbo does not translate)")
+    model, mem = _memory(model, text_model, accurate, translate, log, src, bin, flavor)
     binary, timing, found = setup(model, bin, flavor)
     dev = backend.pick_device(found) if device in ("auto", None) else _device_id(device, found)
     gpu = next((d for d in found if d["id"] == dev), found[0])
@@ -194,8 +241,10 @@ def transcribe_file(
     if accurate and not text_model and not translate:
         if lang in models.ACCURATE:
             text_model = models.ACCURATE[lang]          # fine-tune text + turbo timing
+            _tell(log, mem and ram.warning(text_model, mem[0], ram.media_minutes(src), mem[1]))
         elif model == "turbo":
             model, beam = "large-v3", 5
+            _tell(log, mem and ram.warning(model, mem[0], ram.media_minutes(src), mem[1]))
             timing = models.ensure(model, _quantizer(binary))
     t0 = time.time()
     log(f"transcribing with {model} on {gpu['backend']} {gpu['name']} ...")

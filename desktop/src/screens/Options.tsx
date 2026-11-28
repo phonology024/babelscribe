@@ -1,8 +1,8 @@
-import { ChevronLeft, Clock, Music, Play, Video } from "lucide-react";
+import { ChevronLeft, Clock, Info, Music, Play, Video } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Switch } from "../components/ui/switch";
-import { commandLine, FORMATS, type Options as Opts } from "../lib/engine";
+import { commandLine, FORMATS, memoryNote, type Fit, type Options as Opts } from "../lib/engine";
 import { formatSize, isAudio, splitPath } from "../lib/utils";
 
 export const LANGUAGES: [string, string][] = [
@@ -26,6 +26,7 @@ function accurateNote(lang: string): string {
 export function Options(props: {
   path: string;
   size: number | null;
+  fit: Fit | null;
   opts: Opts;
   setOpts: (o: Opts) => void;
   onChangeFile: () => void;
@@ -34,6 +35,7 @@ export function Options(props: {
   const { opts, setOpts } = props;
   const { name, folder } = splitPath(props.path);
   const Icon = isAudio(props.path) ? Music : Video;
+  const memory = memoryNote(props.fit, opts);
   return (
     <div className="flex flex-col gap-4">
       <Card>
@@ -53,6 +55,13 @@ export function Options(props: {
           </Button>
         </div>
       </Card>
+
+      {memory && (
+        <div role="status" className="flex items-start gap-2 rounded-md border border-border bg-muted/50 px-3 py-2.5 text-[12.5px] text-muted-foreground">
+          <Info className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <span>{memory}</span>
+        </div>
+      )}
 
       <Card className="divide-y divide-border">
         <div className="flex items-center justify-between gap-4 px-[22px] py-5">
