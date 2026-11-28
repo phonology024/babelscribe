@@ -118,3 +118,22 @@ def test_a_flavour_asked_for_is_never_answered_with_another_cached_one(monkeypat
     with pytest.raises(FileNotFoundError):
         backend.find_binary(flavor="cpu", download=False)
     assert backend.find_binary(flavor="vulkan") == vulkan and backend.find_binary() == vulkan
+
+
+@pytest.mark.parametrize("system,cached,chosen", [
+    ("Windows", ["windows-x64-cpu", "windows-x64-vulkan"], "windows-x64-vulkan"),      # after one --flavor cpu run
+    ("Windows", ["windows-x64-cpu"], "windows-x64-cpu"),
+    ("Darwin", ["macos-arm64-cpu", "macos-arm64-metal"], "macos-arm64-metal"),
+    ("Linux", ["linux-x64-cpu", "linux-x64-cuda"], "linux-x64-cuda"),
+    ("Linux", ["linux-x64-cpu", "linux-x64-cuda", "linux-x64-vulkan"], "linux-x64-vulkan"),
+], ids=["windows", "windows-cpu-only", "mac", "linux-cuda", "linux-all"])
+def test_without_a_flavour_a_cached_gpu_build_comes_before_a_cpu_one(monkeypatch, tmp_path, system, cached, chosen):
+    monkeypatch.setattr(backend, "CACHE", tmp_path)
+    monkeypatch.setattr(backend.platform, "system", lambda: system)
+    monkeypatch.setattr(backend, "vulkan_loader_missing", lambda: False)
+    monkeypatch.delenv("BABELSCRIBE_WHISPER_BIN", raising=False)
+    for name in cached:
+        folder = tmp_path / "bin" / f"whisper-cli-{name}"
+        folder.mkdir(parents=True)
+        (folder / backend.EXE).write_bytes(b"x")
+    assert backend.find_binary(download=False).parent.name == f"whisper-cli-{chosen}"
