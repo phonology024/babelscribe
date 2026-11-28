@@ -66,7 +66,7 @@ MCP tools now write a `.json` by default.
 
 **Translate into any language, with your own LLM.** `--translate` is whisper's own translator and only writes
 English. For any other direction (English to Thai, Japanese to Spanish, ...) babelscribe can hand the finished
-subtitles to an LLM running on your computer: Ollama, LM Studio, llama-server, or anything else with an
+subtitles to an LLM running on your computer: Ollama, LM Studio, llama-server, colibri, or anything else with an
 OpenAI-compatible API. babelscribe downloads no model for this; it uses the one you already run.
 ```bash
 babelscribe talk.mp4 --translate-to th                      # talk.srt as usual, plus talk.th.srt
@@ -75,8 +75,8 @@ babelscribe talk.mp4 --translate-to es --llm http://127.0.0.1:11434/v1 --llm-mod
 ```
 Only the text is translated: every sentence keeps its own start and end time, and the lines are wrapped again by
 the rules of the target language (shorter lines for Thai, Japanese and Chinese). The original files are not
-changed. Without `--llm`, the usual local ports are tried (llama-server 8080, Ollama 11434, LM Studio 1234), or
-set `BABELSCRIBE_LLM`. If nothing answers, babelscribe says so before it starts transcribing. The endpoint must
+changed. Without `--llm`, the usual local ports are tried (llama-server 8080, localllm 9931, Ollama 11434, LM Studio
+1234, colibri 8000; on 8000, a port many programs use, only one that lists a model counts), or set `BABELSCRIBE_LLM`. If nothing answers, babelscribe says so before it starts transcribing. The endpoint must
 be on this computer; `--allow-remote` is the explicit switch for sending the text to another machine.
 
 Measured: a 3 min 18 s English recording into Thai with Gemma (26B, Q4) in llama-server on a Radeon RX 9070 XT:
@@ -117,6 +117,10 @@ from babelscribe.api import transcribe_many
 done = transcribe_many(["a.mp4", "./recordings"], recursive=True, formats=["srt"])   # other options as above
 print(done["succeeded"], done["failed"])
 ```
+A download that is interrupted (a dropped connection, Ctrl+C, *Cancel*) continues where it stopped, the next time you
+run babelscribe if it has to give up. The finished file is checked against its sha256 before it is used
+([troubleshooting.md](troubleshooting.md)).
+
 Models download on first use to `~/.babelscribe/models` (`BABELSCRIBE_MODELS` to change). Hybrid fine-tunes are converted on your
 machine from their original Hugging Face repo — install `pip install "babelscribe[finetune]"` once; converted weights are never
 redistributed, so each fine-tune keeps its own licence. Thai word boundaries: `pip install "babelscribe[thai]"`.
@@ -124,8 +128,8 @@ A computer with little free memory gets a smaller model than `turbo` when you do
 that will not fit; what each model needs is in [memory.md](memory.md).
 
 ## Connect to an AI app from a terminal
-`babelscribe connect status` lists Claude Desktop, Claude Code, Codex CLI, Cursor and Gemini CLI and whether babelscribe
-is in each; `babelscribe connect show cursor` prints exactly what would be added; `babelscribe connect add cursor` does it
+`babelscribe connect status` lists Claude Desktop, Claude Code, Codex CLI, Cursor, Gemini CLI and OpenCode (version 2)
+and whether babelscribe is in each; `babelscribe connect show cursor` prints exactly what would be added; `babelscribe connect add cursor` does it
 (`--no-backup` skips the `.bak` copy) and `babelscribe connect remove cursor` undoes it (`remove --all` takes it out of every app that has it set up with this program). Other servers and settings in the
 app's file are kept, and a file with a syntax error is refused and left as it is. `babelscribe llms` lists the local models
 that can translate. `--burn-translated` (with `--burn` and `--translate-to`) draws the translated subtitles

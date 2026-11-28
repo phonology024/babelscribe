@@ -18,6 +18,7 @@ pip install babelscribe          # Python 3.9+
 ```
 On first use babelscribe downloads a prebuilt `whisper-cli` for your system (Vulkan, CUDA, Metal or CPU), so there is
 nothing to compile. Which build your hardware gets: [How it works](https://github.com/phonology024/babelscribe/blob/main/docs/usage.md#how-it-works).
+Setting it up with an AI coding assistant? Point it to [docs/AI_SETUP.md](https://github.com/phonology024/babelscribe/blob/main/docs/AI_SETUP.md).
 Docker: [docs/usage.md#docker](https://github.com/phonology024/babelscribe/blob/main/docs/usage.md#docker).
 
 ## Quick start
@@ -30,6 +31,18 @@ babelscribe clip.mp4 --burn --style shorts   # also clip.subbed.mp4: the video w
 ```
 All options, Python, translation, burn-in and re-export:
 [docs/usage.md](https://github.com/phonology024/babelscribe/blob/main/docs/usage.md).
+
+## If something goes wrong
+| What you see | What to do |
+|---|---|
+| `the download of ... stopped` | Check the connection and run it again: it continues where it stopped. |
+| `checksum mismatch` | Run it again. If it repeats, a proxy or a Wi-Fi sign-in page is changing the download. |
+| `needs about N GB of free memory` | Close other programs, or use the smaller model the message names (`-m small`). |
+| `whisper-cli failed` | Update the graphics driver; `--flavor cpu` shows whether the GPU is the cause. |
+| `no local LLM answered` | To translate, start Ollama, LM Studio, llama-server or colibri first. |
+| The AI app does not show babelscribe | Quit the app completely, reopen it, check `babelscribe connect status`. |
+
+`babelscribe doctor` shows what babelscribe found. Every message and more: [docs/troubleshooting.md](https://github.com/phonology024/babelscribe/blob/main/docs/troubleshooting.md).
 
 ## Use it from an AI app (MCP) — no terminal needed
 
@@ -56,6 +69,7 @@ and double-click it (or *Settings → Extensions → Install extension*).
 | OpenAI Codex CLI | `codex mcp add babelscribe -- uvx babelscribe mcp`, then in `~/.codex/config.toml` under `[mcp_servers.babelscribe]` set `tool_timeout_sec = 3600` and `startup_timeout_sec = 120` (defaults are 60 s / 10 s — too short for a long video or the first model download) |
 | Google Antigravity | agent panel → ⋯ → *MCP Servers* → *Manage MCP Servers* → *View raw config*, add the JSON below |
 | Gemini CLI | add the JSON below to `~/.gemini/settings.json` |
+| OpenCode (2 or newer) | `opencode mcp add babelscribe --global -- uvx babelscribe mcp` |
 | Cursor | add the JSON below to `~/.cursor/mcp.json` |
 | VS Code (Copilot) | `.vscode/mcp.json`: same entry under `"servers"` with `"type": "stdio"` |
 
@@ -94,6 +108,7 @@ community fine-tune. The full list and how to add a fine-tune:
 หรือเลือก Thonburian Whisper เอง: `--text-model thai-thonburian`
 
 ## More docs
+- [Troubleshooting](https://github.com/phonology024/babelscribe/blob/main/docs/troubleshooting.md) · [Setup steps for AI assistants](https://github.com/phonology024/babelscribe/blob/main/docs/AI_SETUP.md)
 - [Usage](https://github.com/phonology024/babelscribe/blob/main/docs/usage.md): features, every command, Python, MCP tools, Docker, prebuilt binaries
 - [Benchmarks](https://github.com/phonology024/babelscribe/blob/main/docs/benchmarks.md): TED talks and 16 languages on FLEURS
 - [FAQ](https://github.com/phonology024/babelscribe/blob/main/docs/faq.md): common questions, limitations, how it compares
