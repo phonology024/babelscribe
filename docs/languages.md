@@ -10,7 +10,9 @@ weaker for low-resource ones. That is what hybrid mode is for — a community fi
 with one line in `babelscribe/models.py` (Thai and Hindi so far). PRs adding fine-tunes for other
 languages are the most valuable contribution.
 
+The Thai and Hindi fine-tunes are converted on your computer once, which needs `pip install "babelscribe[finetune]"`. Without it (the desktop app and the Claude Desktop bundle cannot convert) and with no model converted earlier, `--accurate` uses large-v3, which is less accurate for those two, and says so. A model converted once is used by every babelscribe that shares the models folder.
+
 ## Add a language fine-tune
 Add one entry to `FINETUNES` in `babelscribe/models.py` (Hugging Face repo, the full commit id of the version you tested as
-`revision`, language code, whether it needs beam search) and open a PR. Only that commit is downloaded: some weights are
+`revision`, the one `weights` file to download, language code, whether it needs beam search) and open a PR. Only that commit is downloaded: some weights are
 pickle files, which can run code when they are loaded.

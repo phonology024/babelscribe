@@ -176,7 +176,8 @@ def test_every_fine_tune_is_judged_like_a_large_model():
         assert ram.warning(name, machine(0.5, 4)) and ram.warning(name, machine(32)) is None
 
 
-def test_report_for_programs_lists_every_model_with_the_engines_own_words():
+def test_report_for_programs_lists_every_model_with_the_engines_own_words(monkeypatch):
+    monkeypatch.setattr(models, "can_convert", lambda load=False: True)
     r = ram.report(free_for("small"))
     by = {m["name"]: m for m in r["models"]}
     assert set(by) == set(models.GENERAL) | set(models.FINETUNES)

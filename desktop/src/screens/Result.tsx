@@ -34,6 +34,8 @@ export function Result(props: {
         <div className="min-w-0 flex-1">
           <h2>Done</h2>
           <p className="text-[12.5px] text-muted-foreground">{summary}</p>
+          {/* with auto-detect nobody knew the language before the run, so this may be the first time it is said */}
+          {result.accurate_note && <p role="note" className="mt-1 text-[12.5px] [overflow-wrap:anywhere]">{result.accurate_note}</p>}
         </div>
         <Button variant="outline" size="sm" onClick={props.onNew}>
           <Plus aria-hidden />

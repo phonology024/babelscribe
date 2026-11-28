@@ -4,7 +4,7 @@ import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Switch } from "../components/ui/switch";
 import { BURN_COLOURS, llmChoices, type Llm } from "../lib/ai";
-import { burning, commandLine, FORMATS, memoryNote, STYLES, type Fit, type Options as Opts, type Style } from "../lib/engine";
+import { accurateNote, burning, commandLine, FORMATS, memoryNote, STYLES, type Fit, type Options as Opts, type Style } from "../lib/engine";
 import { cn, formatSize, isAudio, splitPath } from "../lib/utils";
 
 export const LANGUAGES: [string, string][] = [
@@ -31,12 +31,6 @@ export const TARGETS: [string, string][] = [
   ["id", "Indonesian (id)"],
   ["fr", "French (fr)"],
 ];
-
-function accurateNote(lang: string): string {
-  if (lang === "th") return "Thai model for the text. Slower.";
-  if (lang === "hi") return "Hindi model for the text. Slower.";
-  return "About 2x slower.";
-}
 
 const OUTLINE = `0 0 2px ${BURN_COLOURS.outline}, 0 0 2px ${BURN_COLOURS.outline}, 0 1px 3px ${BURN_COLOURS.outline}`;
 
@@ -159,10 +153,10 @@ export function Options(props: {
 
         <Row
           title="Accurate mode"
-          note="Slower, fewer errors. Best for Thai and Hindi."
+          note="Slower, fewer errors."
           control={<Switch aria-label="Accurate mode" checked={opts.accurate} onCheckedChange={(v) => setOpts({ ...opts, accurate: v })} />}
         >
-          {opts.accurate && <Callout icon={<Clock aria-hidden />}>{accurateNote(opts.lang)}</Callout>}
+          {opts.accurate && <Callout icon={<Clock aria-hidden />}>{accurateNote(props.fit, opts.lang)}</Callout>}
         </Row>
 
         <Row

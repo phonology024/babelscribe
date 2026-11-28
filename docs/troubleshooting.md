@@ -44,6 +44,13 @@ Close other programs, or pick the smaller model the message names (`-m small`). 
 The lines after it are whisper-cli's own. Update the graphics driver first. To find out whether the GPU is the cause,
 run the file once on the CPU: `babelscribe FILE --flavor cpu` (slower; not on Apple Silicon).
 
+**"the Thai (or Hindi) fine-tune needs a one-time conversion that this install can't do; using large-v3 ..."**
+Your subtitles are made, with large-v3 instead of the fine-tune. To get the fine-tune, install the converter with pip and
+run one file with `--accurate` (it downloads about 3 GB for Thai, 6 GB for Hindi, and needs about 10 GB of free memory
+while converting Thai):
+`pip install "babelscribe[finetune]"`, then `babelscribe FILE -l th --accurate`. The desktop app and AI apps on the same
+computer use the converted model from then on.
+
 **It is much slower than expected**
 `babelscribe doctor` (or `babelscribe devices`) shows which GPU is used. With none listed, update the graphics driver;
 with several, `--device N` chooses.

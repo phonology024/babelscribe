@@ -86,7 +86,7 @@ export type EngineEvent =
   | { event: "log"; message: string }
   | { event: "progress"; stage: string; percent: number }
   | { event: "done"; files: string[]; lang?: string; segments?: number; seconds?: number; text?: string;
-      model?: string; device?: string }
+      model?: string; device?: string; accurate_note?: string }
   | { event: "error"; message: string };
 
 /** One line of the engine's stdout -> an event, or null for anything that is not one. */
@@ -217,7 +217,8 @@ export interface Fit {
   default: string;
   default_used: string; // what a run with no model chosen will use
   default_note: string | null; // the engine's one line when that is not the default
-  accurate: Record<string, string>; // language code -> the model Accurate mode adds; "*" for every other language
+  accurate: Record<string, string>; // language code -> the model Accurate mode uses here; "*" for every other language
+  accurate_note?: Record<string, string>; // language code -> the engine's line when its fine-tune cannot be had here
   models: FitModel[];
 }
 
@@ -232,6 +233,17 @@ export function parseFit(text: string): Fit | null {
     /* not JSON */
   }
   return null;
+}
+
+/** What Accurate mode will do for this language: the engine's own line when the fine-tune cannot be had here. A
+ * fine-tune is only promised when the engine said it will use one. */
+export function accurateNote(fit: Fit | null, lang: string): string {
+  const cannot = fit?.accurate_note?.[lang];
+  if (cannot) return cannot;
+  const own = fit?.accurate[lang];
+  if (own && own !== fit?.accurate["*"] && lang === "th") return "Thai model for the text. Slower.";
+  if (own && own !== fit?.accurate["*"] && lang === "hi") return "Hindi model for the text. Slower.";
+  return "About 2x slower.";
 }
 
 /** The one thing to tell the person about memory for these options, in the engine's own words, or null. */

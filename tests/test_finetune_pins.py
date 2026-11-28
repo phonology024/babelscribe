@@ -152,4 +152,4 @@ def test_the_pinned_fine_tune_commit_exists_and_has_what_the_converter_reads(nam
     ft = models.FINETUNES[name]
     info = json.loads(fetched(f"https://huggingface.co/api/models/{ft['repo']}/revision/{ft['revision']}"))
     files = {s["rfilename"] for s in info["siblings"]}
-    assert info["sha"] == ft["revision"] and {"vocab.json", "added_tokens.json", "config.json"} <= files
+    assert info["sha"] == ft["revision"] and {*models.CONVERTER_READS, ft["weights"]} <= files

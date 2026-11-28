@@ -58,6 +58,16 @@ describe("Options", () => {
     const html = options({ translate: true, target: "ja", burn: true, style: "plain" });
     expect(html).toContain("--translate-to ja --burn --style plain");
   });
+  it("says what Accurate mode will really do for Thai, in the engine's words when the fine-tune cannot be had", () => {
+    const line = "the Thai fine-tune needs a one-time conversion";
+    const fit = { ram: null, default: "turbo", default_used: "turbo", default_note: null, models: [],
+      accurate: { th: "large-v3", "*": "large-v3" }, accurate_note: { th: line } };
+    expect(options({ accurate: true, lang: "th" }, video, { fit })).toContain(line);
+    expect(options({ accurate: false, lang: "th" }, video, { fit })).not.toContain(line);
+    const html = options({ accurate: true, lang: "th" });
+    expect(html).not.toContain("Thai model for the text");
+    expect(html).not.toContain("Best for Thai");
+  });
   it("shows the engine's memory note when there is one", () => {
     const fit = { ram: null, default: "turbo", default_used: "small", default_note: "low memory: 1.2 GB free", accurate: {}, models: [] };
     expect(options({}, video, { fit })).toContain("low memory: 1.2 GB free");
@@ -110,6 +120,13 @@ describe("Result", () => {
     expect(html).toContain('role="tab"');
     expect(html).toContain(">Thai<");
     expect(html).toContain("hello");
+  });
+  it("repeats on the result what Accurate mode could not do (auto-detect only finds out during the run)", () => {
+    const line = "the Thai fine-tune needs a one-time conversion";
+    expect(render(null)).not.toContain('role="note"');
+    const html = renderToStaticMarkup(<Result result={{ ...result, accurate_note: line }} detected cues={[]} translated={null}
+      targetName="Thai" onNew={noop} onOpen={noop} onShow={noop} />);
+    expect(html).toContain(line);
   });
   it("lists every file written, the translated one and the video included", () => {
     const html = render([cue("x")]);
