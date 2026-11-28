@@ -55,8 +55,10 @@ computer use the converted model from then on.
 `babelscribe doctor` (or `babelscribe devices`) shows which GPU is used. With none listed, update the graphics driver;
 with several, `--device N` chooses.
 
-**"this computer has no Vulkan library (libvulkan1) ... the CPU build is used"** (Linux)
-`sudo apt install libvulkan1`, or your distribution's Vulkan loader package, then run babelscribe again.
+**"this computer has no Vulkan library (libvulkan1 / vulkan-1.dll) ... the CPU build is used"** (Linux, Windows)
+babelscribe works, on the CPU. For the GPU: on Linux `sudo apt install libvulkan1` (or your distribution's Vulkan loader
+package); on Windows install or update the graphics card's driver (a virtual machine or a basic display driver has no
+Vulkan). Then run babelscribe again: it downloads the GPU build once the library is there.
 
 **"no font for ... text was found on this computer"** (burning subtitles into a video)
 Install one of the fonts the message names, or give one you have with `--font "Name"`.

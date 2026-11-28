@@ -14,7 +14,7 @@ Vulkan SDK yourself. babelscribe downloads a prebuilt `whisper-cli` for your sys
 | NVIDIA on Linux (alternative) | CUDA | `linux-x64-cuda` (`--flavor cuda`) |
 | AMD / NVIDIA / Intel GPU on Linux | Vulkan | `linux-x64-vulkan` |
 | Apple Silicon | Metal | `macos-arm64-metal` |
-| No usable GPU | CPU | `*-cpu` (`--flavor cpu`) |
+| No usable GPU | CPU | `*-cpu` (`--flavor cpu`; chosen by itself where the Vulkan library is missing) |
 
 ## Features
 - **Any input** — mp4, mkv, mov, mp3, wav, m4a… (ffmpeg is bundled through `imageio-ffmpeg`).

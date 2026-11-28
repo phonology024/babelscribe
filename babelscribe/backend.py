@@ -63,32 +63,43 @@ ASSETS = {
 }
 
 
+VULKAN_LOADER = {"Linux": "libvulkan.so.1", "Windows": "vulkan-1.dll"}
+
+
 def vulkan_loader_missing() -> bool:
-    """Linux: is the Vulkan loader (libvulkan.so.1, package libvulkan1) not installed? The Vulkan build of whisper-cli
-    cannot even start without it, GPU or no GPU. Windows ships the loader with every graphics driver, macOS uses Metal."""
-    if platform.system() != "Linux":
+    """Is the Vulkan loader not there? The Vulkan build of whisper-cli cannot even start without it, GPU or no GPU.
+    Linux: package libvulkan1. Windows: it comes with graphics drivers, so a virtual machine, the basic display driver
+    and some server installs have none. macOS uses Metal."""
+    library = VULKAN_LOADER.get(platform.system())
+    if not library:
         return False
     import ctypes
     try:
-        ctypes.CDLL("libvulkan.so.1")
+        ctypes.CDLL(library)                      # loading it starts no driver: a few milliseconds
     except OSError:
         return True
     return False
 
 
-NO_VULKAN = ("babelscribe: this computer has no Vulkan library (libvulkan1), which the GPU build of whisper-cli needs, "
-             "so the CPU build is used (slower). For the GPU: install libvulkan1 (sudo apt install libvulkan1) and "
-             "run babelscribe again.")
+_NO_VULKAN = ("babelscribe: this computer has no Vulkan library ({}), which the GPU build of whisper-cli needs, "
+              "so the CPU build is used (slower). For the GPU: {}, then run babelscribe again.")
+_GET_VULKAN = {"Linux": "install libvulkan1 (sudo apt install libvulkan1)", "Windows": "install or update the graphics driver"}
+
+
+def no_vulkan_notice() -> str:
+    system = platform.system()
+    name = "libvulkan1" if system == "Linux" else VULKAN_LOADER.get(system, "Vulkan")
+    return _NO_VULKAN.format(name, _GET_VULKAN.get(system, "install Vulkan"))
 
 
 def asset_name(flavor: str | None = None) -> str:
     system = {"Windows": "windows", "Linux": "linux", "Darwin": "macos"}[platform.system()]
     arch = "arm64" if platform.machine().lower() in ("arm64", "aarch64") else "x64"
     # Apple Silicon: Metal. Intel Macs: CPU only (Accelerate), the only build for them. Windows and Linux: Vulkan,
-    # except on a Linux without the Vulkan library, where only the CPU build can run. A flavour asked for is kept.
-    if flavor is None and system == "linux" and vulkan_loader_missing():
+    # except without the Vulkan library, where only the CPU build can run. A flavour asked for is kept.
+    if flavor is None and system in ("linux", "windows") and vulkan_loader_missing():
         flavor = "cpu"
-        print(NO_VULKAN, file=sys.stderr)
+        print(no_vulkan_notice(), file=sys.stderr)
     flavor = flavor or (("metal" if arch == "arm64" else "cpu") if system == "macos" else "vulkan")
     # A self-hosted mirror (BABELSCRIBE_RELEASES) may carry builds this project does not publish, so only the
     # default URL is checked against the table; a mirror is asked for the composed name as before.
@@ -107,11 +118,11 @@ def _cached_order(flavor: str | None) -> list[Path]:
     """The whisper-cli builds in the cache, best first. With a flavour asked for, only builds of that flavour (another
     one is no answer to it: "--flavor cpu" must not run the cached Vulkan build). Else a GPU build before a CPU build:
     one run with --flavor cpu, or a CPU build kept from a time the GPU one could not start, must not make the CPU the
-    choice from then on. Only a Linux that cannot start the Vulkan build keeps the order of the names (CPU first)."""
+    choice from then on. Only where the Vulkan build cannot start (no Vulkan library) do the names decide: CPU first."""
     found = sorted((CACHE / "bin").rglob(EXE)) if (CACHE / "bin").exists() else []
     if flavor:
         return [p for p in found if p.relative_to(CACHE / "bin").parts[0].endswith("-" + flavor)]
-    if platform.system() == "Linux" and vulkan_loader_missing():
+    if len(found) > 1 and vulkan_loader_missing():                 # one build: nothing to choose, nothing to look up
         return found
     rank = {"vulkan": 0, "metal": 0, "cuda": 1, "cpu": 3}           # a folder of another name: after the GPU builds
     return sorted(found, key=lambda p: rank.get(p.relative_to(CACHE / "bin").parts[0].rsplit("-", 1)[-1], 2))   # stable
@@ -123,6 +134,12 @@ def find_binary(explicit: str | None = None, flavor: str | None = None, download
             return Path(cand)
     cached = next(iter(_cached_order(flavor)), None)
     if cached:
+        if flavor is None and download and _stands_in_for_the_gpu_build(cached):
+            try:
+                return fetch_binary()                     # the Vulkan build, which can run here (now)
+            except (SystemExit, OSError) as e:
+                print(f"babelscribe: the GPU build of whisper-cli could not be installed, so the CPU build is used this "
+                      f"time ({e}). --flavor cpu uses it without trying.", file=sys.stderr)
         return cached
     on_path = shutil.which("whisper-cli")
     if on_path:
@@ -130,6 +147,23 @@ def find_binary(explicit: str | None = None, flavor: str | None = None, download
     if not download:
         raise FileNotFoundError("whisper-cli not found; pass --bin or allow download")
     return fetch_binary(flavor)
+
+
+def _stands_in_for_the_gpu_build(binary: Path) -> bool:
+    """Is this a CPU build that was only fetched for the moment (asked for with --flavor cpu, or because the Vulkan
+    library was missing), on a computer whose own build is the Vulkan one and can start now? Without this, a computer
+    that only ever got the CPU build would keep it after its driver was installed. A build of an older babelscribe does
+    not say, and stays."""
+    if platform.system() not in VULKAN_LOADER:
+        return False
+    root = CACHE / "bin"
+    if root not in binary.parents:
+        return False
+    try:
+        receipt = json.loads((root / binary.relative_to(root).parts[0] / RECEIPT).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return bool(receipt.get("stand_in")) and not vulkan_loader_missing()
 
 
 def _skip_verify() -> bool:
@@ -210,7 +244,9 @@ def fetch_binary(flavor: str | None = None) -> Path:
                    "\nA mirror with its own builds needs BABELSCRIBE_SKIP_VERIFY=1.")) from None
         return _unpack(part, dest, {"asset": name, "source": base,
                                     "tag": tag if RELEASES == DEFAULT_RELEASES else None,
-                                    "sha256": got, "verified": bool(want)})
+                                    "sha256": got, "verified": bool(want),
+                                    # a CPU build where Vulkan is this system's own: see _stands_in_for_the_gpu_build
+                                    "stand_in": name.endswith("-cpu.zip") and platform.system() in VULKAN_LOADER})
 
 
 def _unpack(part: Path, dest: Path, receipt: dict) -> Path:
@@ -275,14 +311,21 @@ def probe_or_refetch(binary: Path, model: Path, flavor: str | None = None) -> tu
         return binary, probe_devices(binary, model)
     except MissingLibrary as e:
         in_cache = (CACHE / "bin").resolve() in binary.resolve().parents
-        vulkan = str(e).startswith("libvulkan")
+        vulkan = str(e).startswith(("libvulkan", "vulkan-1"))
         if not (vulkan and in_cache and flavor is None):          # your own build, or a flavour you asked for
+            if str(e) == UNNAMED_DLL:
+                raise SystemExit(f"{binary} cannot start: Windows could not find a DLL it needs (an antivirus may have "
+                                 f"removed a file). Delete {binary.parent} to download it again, or use --flavor cpu.")
+            how = _GET_VULKAN.get(platform.system(), "install Vulkan")
             raise SystemExit(f"{binary} cannot start: {e} is not installed on this computer"
-                             + (" (Linux: sudo apt install libvulkan1, or use --flavor cpu)." if vulkan else "."))
-        shutil.rmtree(binary.parent)                              # the Vulkan build we cannot run
-        print(NO_VULKAN, file=sys.stderr)
-        binary = fetch_binary("cpu")
-        return binary, probe_devices(binary, model)
+                             + (f" ({how}, or use --flavor cpu)." if vulkan else "."))
+        print(no_vulkan_notice(), file=sys.stderr)
+        cpu = fetch_binary("cpu")                                 # first: if it fails, nothing has been removed
+        _rmtree(binary.parent)                                    # the Vulkan build we cannot run
+        try:
+            return cpu, probe_devices(cpu, model)
+        except MissingLibrary as again:
+            raise SystemExit(f"{cpu} cannot start either: {again} is missing on this computer.") from None
     except IllegalInstruction:
         cache = (CACHE / "bin").resolve()
         if cache not in binary.resolve().parents:
@@ -296,9 +339,32 @@ def probe_or_refetch(binary: Path, model: Path, flavor: str | None = None) -> tu
             raise SystemExit("the prebuilt whisper-cli does not run on this CPU; build whisper.cpp yourself and pass --bin.")
 
 
+# Windows' exit code for a program one of whose DLLs is not there (STATUS_DLL_NOT_FOUND); it prints nothing.
+DLL_NOT_FOUND = (0xC0000135, 0xC0000135 - (1 << 32))
+UNNAMED_DLL = "a DLL it needs"
+
+
+@contextlib.contextmanager
+def _no_error_boxes():
+    """Windows: a program that cannot load a DLL may stop at a message box, which nobody sees behind the app or an AI
+    app's server. With this it just ends with its exit code (a started program inherits the setting)."""
+    if os.name != "nt":
+        yield
+        return
+    import ctypes
+    kernel32 = ctypes.windll.kernel32
+    before = kernel32.SetErrorMode(0x0001)                 # SEM_FAILCRITICALERRORS
+    kernel32.SetErrorMode(before | 0x0001)
+    try:
+        yield
+    finally:
+        kernel32.SetErrorMode(before)
+
+
 def devices(binary: Path) -> list[dict]:
     """Ask whisper.cpp which GPUs it can see (it prints them while loading a model)."""
-    out = subprocess.run([str(binary), "--help"], capture_output=True, text=True, errors="replace")
+    with _no_error_boxes():
+        out = subprocess.run([str(binary), "--help"], capture_output=True, text=True, errors="replace")
     text = out.stdout + out.stderr
     found = []
     for m in re.finditer(r"ggml_(vulkan|cuda|metal): *(\d+) = ([^|\n]+)\|?([^\n]*)", text):
@@ -323,7 +389,11 @@ def probe_devices(binary: Path, model: Path) -> list[dict]:
         with wave.open(str(wav), "wb") as w:
             w.setnchannels(1); w.setsampwidth(2); w.setframerate(16000); w.writeframes(b"\0\0" * 16000)
         # no -np: static builds route the GPU list through the same logger -np silences
-        out = subprocess.run([str(binary), "-m", str(model), "-f", str(wav)], capture_output=True, text=True, errors="replace")
+        with _no_error_boxes():
+            out = subprocess.run([str(binary), "-m", str(model), "-f", str(wav)], capture_output=True, text=True,
+                                 errors="replace")
+    if platform.system() == "Windows" and out.returncode in DLL_NOT_FOUND:
+        raise MissingLibrary(VULKAN_LOADER["Windows"] if vulkan_loader_missing() else UNNAMED_DLL)
     if out.returncode in (0xC000001D, -4, 132):   # Windows STATUS_ILLEGAL_INSTRUCTION / SIGILL
         raise IllegalInstruction(str(binary))
     text = out.stdout + out.stderr
