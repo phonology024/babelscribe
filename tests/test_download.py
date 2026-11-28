@@ -386,6 +386,17 @@ def test_a_model_cut_short_in_one_run_is_finished_in_the_next(server, tmp_path, 
     assert not list(models.MODELS.glob("*.part"))
 
 
+def test_only_this_models_old_parts_are_cleared_away(server, tmp_path, monkeypatch):
+    model_server(server, monkeypatch, tmp_path)
+    models.MODELS.mkdir()
+    old = [models.MODELS / n for n in ("ggml-tiny.part", "ggml-tiny.0123456789ab.part")]
+    others = [models.MODELS / n for n in ("ggml-tiny-turbo.0123456789ab.part", "ggml-base.part")]
+    for f in old + others:
+        f.write_bytes(b"x")
+    models.ensure("tiny")
+    assert not any(f.exists() for f in old) and all(f.exists() for f in others) and ranges(server) == [None]
+
+
 def test_a_model_that_is_not_the_expected_file_is_refused(server, tmp_path, monkeypatch):
     model_server(server, monkeypatch, tmp_path)
     monkeypatch.setitem(models.SHA256, "tiny", "0" * 64)

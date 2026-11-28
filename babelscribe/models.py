@@ -89,6 +89,9 @@ def ensure(name: str, quantizer: Path | None = None) -> Path:
 def _download_model(name: str, p: Path) -> Path:
     print(f"downloading model {name} ({GENERAL[name]}) ...")
     part = p.with_name(f"{p.stem}.{SHA256[name][:12]}.part")      # never continued with another version's bytes
+    for old in (p.with_name(f"{p.stem}.part"), *p.parent.glob(f"{p.stem}.{'?' * 12}.part")):    # left by an older one
+        if old != part:
+            old.unlink(missing_ok=True)
     for revision in (GGML_REVISION, "main"):      # "main" only if the repository's history was rewritten: same checksum
         try:
             download.fetch(GGML.format(revision=revision, name=name), part, SHA256[name], f"model {name}")

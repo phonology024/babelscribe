@@ -766,6 +766,26 @@ def _opencode_add(env: Env, make_backup: bool) -> dict:
             "message": f"OpenCode is connected. {APPS['opencode'].after}"}
 
 
+def _write_all(changes: list[tuple[Loaded, str]]) -> None:
+    """Write every file or none: when one cannot be written, those already written get their old text back."""
+    written: list[Loaded] = []
+    try:
+        for f, text in changes:
+            write_atomic(f.path, text, f.bom)
+            written.append(f)
+    except ConnectError as e:
+        stuck = []
+        for f in written:
+            try:
+                write_atomic(f.path, f.text, f.bom)
+            except ConnectError:
+                stuck.append(str(f.path))
+        if not stuck:
+            raise
+        raise ConnectError(f"{str(e).replace(' Nothing was changed.', '')} babelscribe's entry is already out of "
+                           f"{', '.join(stuck)}.") from None
+
+
 def _opencode_remove(env: Env, make_backup: bool, only_ours: bool = False) -> dict:
     """OpenCode has no command that removes a server, so the entry is cut out of its settings (jsonc.remove: every other
     character stays, and the result is checked before it replaces the file). Entries that start this program go; one
@@ -792,8 +812,7 @@ def _opencode_remove(env: Env, make_backup: bool, only_ours: bool = False) -> di
         return {"ok": True, "changed": False, "path": str(_opencode_target(env)), "backup": None,
                 "message": "babelscribe was not in OpenCode's settings."}
     backups = [backup(f.path) for f, _ in changes] if make_backup else []
-    for f, text in changes:
-        write_atomic(f.path, text, f.bom)
+    _write_all(changes)
     if unsure:
         raise ConnectError(f"babelscribe was taken out of {', '.join(str(f.path) for f, _ in changes)}, but another "
                            f"settings file could not be checked: {unsure[0]}")

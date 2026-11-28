@@ -353,6 +353,29 @@ def test_a_failed_write_leaves_the_file_as_it_was(tmp_path, monkeypatch):
     assert path.read_text(encoding="utf-8") == text and [p.name for p in path.parent.iterdir()] == ["opencode.json"]
 
 
+@pytest.mark.parametrize("restore_works", [True, False], ids=["restored", "stuck"])
+def test_when_the_second_file_cannot_be_written_the_first_is_put_back_or_named(tmp_path, monkeypatch, restore_works):
+    env = make(tmp_path)
+    text = f'{{"mcp": {{"servers": {{"babelscribe": {E}}}}}}}'
+    first, second = put(settings(env), text), put(settings(env, "opencode.jsonc"), text)
+    real, calls = connect.os.replace, []
+
+    def replace(a, b):
+        calls.append(Path(b).name)
+        if Path(b).name == "opencode.jsonc" or (not restore_works and len(calls) > 2):
+            raise PermissionError(13, "Access is denied")
+        real(a, b)
+    monkeypatch.setattr(connect.os, "replace", replace)
+    with pytest.raises(ConnectError) as e:
+        connect.remove("opencode", env, make_backup=False)
+    assert second.read_text(encoding="utf-8") == text
+    if restore_works:
+        assert first.read_text(encoding="utf-8") == text and "Nothing was changed" in str(e.value)
+    else:
+        assert "already out of" in str(e.value) and str(first) in str(e.value) and "Nothing was changed" not in str(e.value)
+    assert sorted(p.name for p in first.parent.iterdir()) == ["opencode.json", "opencode.jsonc"]
+
+
 @pytest.mark.parametrize("wrong", [
     lambda text, obj, i: [(obj.members[i].start, obj.members[i].end + 1)],                  # takes a brace too
     lambda text, obj, i: [(obj.members[0].start, obj.members[i].end)],                      # takes the neighbour too
