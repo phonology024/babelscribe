@@ -1,5 +1,5 @@
 """Translate finished subtitles into any language through a local LLM (Ollama, LM Studio, llama-server, localllm:
-anything that speaks the OpenAI chat API). Optional: babelscribe downloads no model for this and adds no dependency.
+colibri: anything that speaks the OpenAI chat API). Optional: babelscribe downloads no model for this and adds no dependency.
 
   babelscribe talk.mp4 --translate-to th                 # transcribe, then also write talk.th.srt
   babelscribe translate talk.json --to ja                # from a finished transcription (or an .srt / .vtt)
@@ -9,6 +9,7 @@ sync, and the lines are wrapped again by the rules of the target language. The o
 The endpoint must be on this computer unless --allow-remote is given: transcripts do not leave it by accident."""
 from __future__ import annotations
 
+import http.client
 import ipaddress
 import json
 import os
@@ -21,9 +22,12 @@ from typing import Callable
 
 from . import align, convert, writers
 
-# Where local servers listen by default: llama-server / localllm, Ollama, LM Studio.
+# Where local servers listen by default: llama-server / localllm, Ollama, LM Studio, colibri. Tried in this order.
 DEFAULT_ENDPOINTS = ("http://127.0.0.1:8080/v1", "http://127.0.0.1:9931/v1", "http://127.0.0.1:11434/v1",
-                     "http://127.0.0.1:1234/v1")
+                     "http://127.0.0.1:1234/v1", "http://127.0.0.1:8000/v1")
+# colibri's port is also the usual one of many other programs (web development servers, vLLM): found by itself, it only
+# counts when it really lists a model, and it is only called colibri when its model list says so.
+SHARED_PORT = 8000
 BATCH = 20          # subtitle lines per request
 CONTEXT = 3         # lines before the batch that are shown again, already translated, so the wording carries on
 TIMEOUT = 600       # seconds for one request; a big model on a CPU is slow
@@ -72,6 +76,18 @@ def _get_json(url: str, payload: dict | None = None, timeout: float = TIMEOUT, k
         return json.loads(r.read().decode("utf-8"))
 
 
+def _models(base: str, timeout: float) -> list[dict] | None:
+    """The models a server lists at /models; None when nothing there answers like one."""
+    try:
+        listing = _get_json(base + "/models", timeout=timeout, key=os.environ.get("BABELSCRIBE_LLM_KEY"))
+    except (OSError, ValueError, http.client.HTTPException):     # nobody there, or not HTTP, or not JSON
+        return None
+    if not isinstance(listing, dict):
+        return None
+    data = listing.get("data") or []                              # Ollama with no model says "data": null
+    return [m for m in data if isinstance(m, dict) and m.get("id")] if isinstance(data, list) else None
+
+
 def find_endpoint(url: str | None = None, allow_remote: bool = False) -> tuple[str, list[str]]:
     """(base URL, model names it offers). url: --llm, else BABELSCRIBE_LLM, else the usual local ports are tried."""
     url = url or os.environ.get("BABELSCRIBE_LLM") or None
@@ -82,12 +98,10 @@ def find_endpoint(url: str | None = None, allow_remote: bool = False) -> tuple[s
         if not is_local(base) and not allow_remote:
             raise SystemExit(f"{base} is not on this computer. babelscribe keeps your transcripts local, so it only "
                              f"sends them to another machine when you say so: add --allow-remote.")
-        try:
-            listing = _get_json(base + "/models", timeout=5, key=os.environ.get("BABELSCRIBE_LLM_KEY"))
-        except (OSError, ValueError):
+        listed = _models(base, timeout=5)
+        if listed is None or (not url and not listed and urllib.parse.urlparse(base).port == SHARED_PORT):
             continue
-        names = [m.get("id", "") for m in listing.get("data", []) if isinstance(m, dict)]
-        return base, [n for n in names if n]
+        return base, [m["id"] for m in listed]
     tried = ", ".join(candidates)
     raise SystemExit(
         f"no local LLM answered ({tried}). Translation needs one running on this computer, for example:\n"
@@ -95,7 +109,7 @@ def find_endpoint(url: str | None = None, allow_remote: bool = False) -> tuple[s
         f"then run again, or point at yours with --llm http://127.0.0.1:PORT/v1")
 
 
-KINDS = {8080: "llama-server", 9931: "localllm", 11434: "Ollama", 1234: "LM Studio"}
+KINDS = {8080: "llama-server", 9931: "localllm", 11434: "Ollama", 1234: "LM Studio", SHARED_PORT: "colibri"}
 
 
 def scan(timeout: float = 2.0) -> list[dict]:
@@ -104,15 +118,13 @@ def scan(timeout: float = 2.0) -> list[dict]:
     found = []
     for base in DEFAULT_ENDPOINTS:
         port = urllib.parse.urlparse(base).port
-        names: list[str] = []
-        up = False
-        try:
-            listing = _get_json(base + "/models", timeout=timeout, key=os.environ.get("BABELSCRIBE_LLM_KEY"))
-            names = [m.get("id", "") for m in listing.get("data", []) if isinstance(m, dict) and m.get("id")]
-            up = True
-        except (OSError, ValueError):
-            pass
-        found.append({"url": base, "kind": KINDS.get(port, "local server"), "up": up, "models": names})
+        listed = _models(base, timeout)
+        kind, up = KINDS.get(port, "local server"), listed is not None
+        if port == SHARED_PORT and up:
+            up = bool(listed)
+            if up and not any(m.get("owned_by") == "colibri" for m in listed):
+                kind = "local server"
+        found.append({"url": base, "kind": kind, "up": up, "models": [m["id"] for m in listed or []]})
     return found
 
 
@@ -338,7 +350,7 @@ def main(argv: list[str]) -> None:
 
 def add_llm_flags(ap) -> None:
     ap.add_argument("--llm", metavar="URL", help="OpenAI-compatible endpoint, e.g. http://127.0.0.1:8080/v1 "
-                    "(default: BABELSCRIBE_LLM, else llama-server, Ollama and LM Studio on their usual ports)")
+                    "(default: BABELSCRIBE_LLM, else llama-server, Ollama, LM Studio and colibri on their usual ports)")
     ap.add_argument("--llm-model", metavar="NAME", help="model to ask for (default: the first one the endpoint lists)")
     ap.add_argument("--allow-remote", action="store_true",
                     help="let --llm point at another computer (the transcript text is sent there)")
