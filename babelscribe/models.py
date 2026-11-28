@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 from . import download
-from .backend import CACHE, _move_into_place, _rmtree
+from .backend import CACHE
 
 # The files of one fixed revision, so that a download can be checked and a half-done one safely continued.
 GGML_REVISION = "5359861c739e955e79d9a303bcbc70fb988958b1"
@@ -31,15 +31,25 @@ GENERAL = {   # name -> size (approx) ; 'turbo' is the best speed/quality defaul
 }
 ALIASES = {"turbo": "large-v3-turbo", "large": "large-v3"}
 # Community fine-tunes: add a line to support a new language better. 'beam' = needs beam search (greedy loops).
+# 'revision' is the one commit of the repository that is downloaded: some weights are pickle files, which can run code
+# when loaded, so a later change to a repository must not reach anyone by itself.
 FINETUNES = {
-    "thai-thonburian": {"repo": "biodatlab/whisper-th-large-v3-combined", "lang": "th", "beam": 5, "timestamps": False,
-                        "note": "Thonburian Whisper (Thai) — strong Thai spelling; pair with turbo for timing"},
-    "thai-pathumma": {"repo": "nectec/Pathumma-whisper-th-large-v3", "lang": "th", "beam": 5, "timestamps": False,
-                      "note": "Pathumma Whisper by NECTEC (Thai) — lowest Thai CER on FLEURS"},
-    "hindi-vasista": {"repo": "vasista22/whisper-hindi-large-v2", "lang": "hi", "beam": 5, "timestamps": False,
-                      "note": "Hindi fine-tune of large-v2 (Speech Lab, IIT Madras) — halves Hindi WER on FLEURS"},
-    "vietnamese-toantam": {"repo": "toantam1290/whisper-large-v3-vietnamese", "lang": "vi", "beam": 5, "timestamps": False,
-                           "note": "Vietnamese fine-tune of large-v3 by toantam1290 (Apache-2.0)"},
+    "thai-thonburian": {
+        "repo": "biodatlab/whisper-th-large-v3-combined", "revision": "ba7197f618400e41b4826c18b2f48e0bc45ed3ca",
+        "lang": "th", "beam": 5, "timestamps": False,
+        "note": "Thonburian Whisper (Thai) — strong Thai spelling; pair with turbo for timing"},
+    "thai-pathumma": {
+        "repo": "nectec/Pathumma-whisper-th-large-v3", "revision": "6d5e4f2fc7fc2c05447b3626dd346b1793682eb9",
+        "lang": "th", "beam": 5, "timestamps": False,
+        "note": "Pathumma Whisper by NECTEC (Thai) — lowest Thai CER on FLEURS"},
+    "hindi-vasista": {
+        "repo": "vasista22/whisper-hindi-large-v2", "revision": "f98540cee2b8cba5b3f7d1b123608dda0a5f5a95",
+        "lang": "hi", "beam": 5, "timestamps": False,
+        "note": "Hindi fine-tune of large-v2 (Speech Lab, IIT Madras) — halves Hindi WER on FLEURS"},
+    "vietnamese-toantam": {
+        "repo": "toantam1290/whisper-large-v3-vietnamese", "revision": "3d446d9dc7c7292a98262a825b6f25065a015e0c",
+        "lang": "vi", "beam": 5, "timestamps": False,
+        "note": "Vietnamese fine-tune of large-v3 by toantam1290 (Apache-2.0)"},
 }
 # --accurate: per language, the model that scored best on FLEURS (bench/fleurs.py). Languages not listed use large-v3
 # with beam search, which beat every public fine-tune we tried for vi / ar.
@@ -55,7 +65,15 @@ RAM_MB = {
 }
 
 
-CONVERTER = "https://raw.githubusercontent.com/ggml-org/whisper.cpp/master/models/convert-h5-to-ggml.py"
+# The converter is a script that is run, so it is one fixed file: whisper.cpp v1.9.4 (what whisper-cli is built from).
+CONVERTER = ("https://raw.githubusercontent.com/ggml-org/whisper.cpp/927cfce34f31707e17f2bff35c349632fb9e2c3a/"
+             "models/convert-h5-to-ggml.py")
+CONVERTER_SHA256 = "9cc282dfcd9a24da03ffa1b4123b5508ee935e19e369c33520b1a73f89440094"
+# The one file it reads from openai/whisper (tag v20250625).
+MEL_FILTERS = ("https://raw.githubusercontent.com/openai/whisper/31243bad24cc746f07d4c8bfdd2d974872cb1803/"
+               "whisper/assets/mel_filters.npz")
+MEL_FILTERS_SHA256 = "7450ae70723a5ef9d341e3cee628c7cb0177f36ce42c44b7ed2bf3325f0f6d4c"
+LOADS = "WhisperForConditionalGeneration.from_pretrained(dir_model)\n"      # the converter's line that is patched
 
 
 def resolve(name: str) -> tuple[str, dict | None]:
@@ -107,6 +125,23 @@ def _download_model(name: str, p: Path) -> Path:
     raise SystemExit(f"model {name} was not found on huggingface.co (HTTP 404). Update babelscribe and run it again.")
 
 
+def _pinned(url: str, dest: Path, sha256: str, what: str) -> None:
+    """`dest` holds exactly the file with this sha256 afterwards; whatever else was there is replaced."""
+    if dest.is_file() and download.sha256_of(dest) == sha256:
+        return
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    part = dest.with_name(f"{dest.name}.{sha256[:12]}.part")
+    try:
+        download.fetch(url, part, sha256, what)
+    except download.NotFound:
+        raise SystemExit(f"{what} was not found at {url} (HTTP 404). Update babelscribe and run it again.") from None
+    except download.ChecksumMismatch as e:
+        raise SystemExit(f"{what}: checksum mismatch, nothing was run.\n  expected sha256 {sha256}\n"
+                         f"  downloaded      {e.got}\nRun it again; if it keeps happening, something between this "
+                         f"computer and github.com is changing the file.") from None
+    part.replace(dest)
+
+
 def convert_finetune(name: str, ft: dict, out: Path, quantizer: Path | None) -> Path:
     """HF transformers checkpoint -> ggml (whisper.cpp convert-h5-to-ggml.py) -> q8_0. Needs: pip install babelscribe[finetune]."""
     try:
@@ -116,25 +151,14 @@ def convert_finetune(name: str, ft: dict, out: Path, quantizer: Path | None) -> 
         raise SystemExit("fine-tune conversion needs extras: pip install \"babelscribe[finetune]\"")
     work = MODELS / f"_{name}"
     work.mkdir(parents=True, exist_ok=True)
-    hf = snapshot_download(ft["repo"], local_dir=work / "hf")
+    hf = snapshot_download(ft["repo"], revision=ft["revision"], local_dir=work / "hf")
     oa = work / "openai-whisper"
-    if not (oa / "whisper" / "assets" / "mel_filters.npz").is_file():    # missing, or a clone that was stopped half way
-        fresh = work / "openai-whisper.new"
-        _rmtree(fresh)
-        subprocess.run(["git", "clone", "-q", "--depth", "1", "https://github.com/openai/whisper.git", str(fresh)], check=True, stdout=sys.stderr)
-        _rmtree(oa)
-        _move_into_place(fresh, oa)
-    script = work / "convert-h5-to-ggml.py"
-    part = work / "convert-h5-to-ggml.py.part"
-    try:
-        download.fetch(CONVERTER, part, None, "the model converter")      # fetched each time; kept only when whole
-    except download.NotFound:
-        raise SystemExit(f"the model converter was not found at {CONVERTER} (HTTP 404).") from None
-    part.replace(script)
+    _pinned(MEL_FILTERS, oa / "whisper" / "assets" / "mel_filters.npz", MEL_FILTERS_SHA256, "the converter's filter table")
+    original = work / "convert-h5-to-ggml.orig.py"
+    _pinned(CONVERTER, original, CONVERTER_SHA256, "the model converter")
     # some fine-tunes ship bf16 weights, which the converter cannot export -> load them as float32
-    src = script.read_text(encoding="utf-8").replace("WhisperForConditionalGeneration.from_pretrained(dir_model)\n",
-                                                     "WhisperForConditionalGeneration.from_pretrained(dir_model).float()\n")
-    script.write_text(src, encoding="utf-8")
+    script = work / "convert-h5-to-ggml.py"           # written again every time, from the checked file only
+    script.write_bytes(original.read_bytes().replace(LOADS.encode(), LOADS.replace("\n", ".float()\n").encode()))
     subprocess.run([sys.executable, str(script), hf, str(oa), str(work)], check=True, stdout=sys.stderr)
     f32 = work / "ggml-model.bin"
     if quantizer and quantizer.exists():

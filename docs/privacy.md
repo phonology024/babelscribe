@@ -12,7 +12,8 @@ babelscribe runs entirely on your own computer. Last updated 2026-11-10.
   switch it on). Audio and video are never sent.
 - **Network access (downloads only):** on first use it downloads the `whisper-cli` program from this project's GitHub
   releases, speech models from Hugging Face (`huggingface.co/ggerganov/whisper.cpp`, and for `--accurate` Thai/Hindi the
-  fine-tune's own repository), and Python packages from PyPI when installed with pip/uv. These are plain downloads;
+  fine-tune's own repository, with the converter script from `ggml-org/whisper.cpp` and one data file from
+  `openai/whisper` on GitHub), and Python packages from PyPI when installed with pip/uv. These are plain downloads;
   no personal data is sent. GitHub, Hugging Face and PyPI see a normal download request (IP address, user agent) under
   their own privacy policies.
 - **Storage and retention:** downloaded programs and models are cached in `~/.babelscribe` (or `BABELSCRIBE_HOME` /
