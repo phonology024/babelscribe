@@ -4,18 +4,20 @@ Search order: --bin / BABELSCRIBE_WHISPER_BIN -> cached download -> `whisper-cli
 release asset for this OS (Vulkan on Windows/Linux = AMD + NVIDIA + Intel, Metal on macOS, CPU fallback)."""
 from __future__ import annotations
 
-import hashlib
+import contextlib
 import json
 import os
 import platform
 import re
 import shutil
+import stat
 import subprocess
 import sys
-import urllib.error
-import urllib.request
+import time
 import zipfile
 from pathlib import Path
+
+from . import download
 
 CACHE = Path(os.environ.get("BABELSCRIBE_HOME", Path.home() / ".babelscribe"))
 # Prebuilt binaries are produced by .github/workflows/build-binaries.yml and attached to a GitHub release.
@@ -102,16 +104,15 @@ def asset_name(flavor: str | None = None) -> str:
 
 
 def _cached_order(flavor: str | None) -> list[Path]:
-    """The whisper-cli builds in the cache, best first: the flavour asked for; else, on a Linux that can run Vulkan, the
-    Vulkan build (a CPU build kept from a time it could not must not stay the choice for good); else by name."""
+    """The whisper-cli builds in the cache, best first. With a flavour asked for, only builds of that flavour (another
+    one is no answer to it: "--flavor cpu" must not run the cached Vulkan build). Else, on a Linux that can run Vulkan,
+    the Vulkan build first (a CPU build kept from a time it could not must not stay the choice for good); else by name."""
     found = sorted((CACHE / "bin").rglob(EXE)) if (CACHE / "bin").exists() else []
     if flavor:
-        want = flavor
-    elif platform.system() == "Linux" and not vulkan_loader_missing():
-        want = "vulkan"
-    else:
+        return [p for p in found if p.relative_to(CACHE / "bin").parts[0].endswith("-" + flavor)]
+    if platform.system() != "Linux" or vulkan_loader_missing():
         return found
-    return sorted(found, key=lambda path: not path.parent.name.endswith("-" + want))   # stable: ties keep name order
+    return sorted(found, key=lambda path: not path.parent.name.endswith("-vulkan"))   # stable: ties keep name order
 
 
 def find_binary(explicit: str | None = None, flavor: str | None = None, download: bool = True) -> Path:
@@ -133,18 +134,43 @@ def _skip_verify() -> bool:
     return os.environ.get("BABELSCRIBE_SKIP_VERIFY", "").strip().lower() in ("1", "true", "yes")
 
 
-def _sha256(path: Path) -> str:
-    h = hashlib.sha256()
-    with open(path, "rb") as f:
-        for block in iter(lambda: f.read(1 << 20), b""):
-            h.update(block)
-    return h.hexdigest()
+def _rmtree(path: Path) -> None:
+    """Delete a folder, read-only files in it included (git marks its own so, and Windows then refuses)."""
+    def writable(fn, name, _):
+        os.chmod(name, os.stat(name).st_mode | stat.S_IWRITE)
+        fn(name)
+    if path.exists():
+        shutil.rmtree(path, **{"onexc" if sys.version_info >= (3, 12) else "onerror": writable})
+
+
+def _move_into_place(src: Path, dest: Path) -> None:
+    """Rename a finished folder to its real name. Windows refuses while a virus scanner still reads a new file in it,
+    which passes in a moment."""
+    for attempt in range(20):
+        try:
+            os.replace(src, dest)
+            return
+        except PermissionError:
+            if attempt == 19:
+                raise
+            time.sleep(0.5)
+
+
+def _installed_by(dest: Path, want: str | None) -> Path | None:
+    """The whisper-cli in `dest` when it is a complete install of the zip with sha256 `want`."""
+    try:
+        receipt = json.loads((dest / RECEIPT).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return next(dest.rglob(EXE), None) if want and receipt.get("sha256") == want else None
 
 
 def fetch_binary(flavor: str | None = None) -> Path:
     """Download the prebuilt whisper-cli for this machine, check its sha256, then unpack it into the cache.
 
-    Nothing is unpacked, and nothing stays in the cache, unless the zip is the one this version was tested with.
+    A dropped download continues where it stopped (download.py). Nothing is unpacked unless the zip is the one this
+    version was tested with, and the cache only ever gets a complete install: it is unpacked next to the cache and
+    renamed into it in one step, so a run that is killed half way leaves nothing that looks installed.
     A mirror (BABELSCRIBE_RELEASES) is held to the same digests; BABELSCRIBE_SKIP_VERIFY=1 turns the check off
     for a mirror that carries its own builds."""
     name = asset_name(flavor)
@@ -156,45 +182,67 @@ def fetch_binary(flavor: str | None = None) -> Path:
         raise SystemExit(
             f"{name} is not one of the builds babelscribe publishes, so there is no checksum to verify it against.\n"
             f"If {RELEASES} is your own mirror with your own builds, set BABELSCRIBE_SKIP_VERIFY=1.")
-    print(f"downloading {name} ...")
-    try:
-        resp = urllib.request.urlopen(f"{base}/{name}")
-    except urllib.error.HTTPError as e:
-        if e.code != 404:
-            raise
-        raise SystemExit(f"{base}/{name} was not found (HTTP 404). Publish that file on the mirror, or build "
-                         f"whisper.cpp for this machine and pass --bin PATH/whisper-cli.")
-    (CACHE / "bin").mkdir(parents=True, exist_ok=True)
-    part = CACHE / "bin" / (name + ".part")
-    digest = hashlib.sha256()
-    try:
-        with resp, open(part, "wb") as f:      # to disk, not memory: the CUDA build is 800 MB
-            for block in iter(lambda: resp.read(1 << 20), b""):
-                digest.update(block)
-                f.write(block)
-        got = digest.hexdigest()
-        if want and got != want:
+    with download.lock(CACHE / "locks" / (name + ".lock"), name) as waited:
+        ready = _installed_by(dest, want) if waited else None
+        if ready:                                                  # the one we waited for installed it
+            return ready
+        # the digest is part of the name, so a part file is only ever continued with the very same build
+        part = CACHE / "bin" / (f"{name}.{want[:12]}.part" if want else f"{name}.part")
+        for old in (CACHE / "bin").glob(name + "*.part"):    # of another version: never continued, only in the way
+            if old != part:
+                with contextlib.suppress(OSError):
+                    old.unlink()
+        print(f"downloading {name} ...")
+        try:
+            got = download.fetch(f"{base}/{name}", part, want, name)
+        except download.NotFound:
+            raise SystemExit(f"{base}/{name} was not found (HTTP 404). Publish that file on the mirror, or build "
+                             f"whisper.cpp for this machine and pass --bin PATH/whisper-cli.") from None
+        except download.ChecksumMismatch as e:
             raise SystemExit(
                 f"{name}: checksum mismatch, nothing was installed.\n"
-                f"  expected sha256 {want}\n  downloaded      {got}\n"
-                f"The download from {base} was cut short or is not the {tag} build. Try again; "
+                f"  expected sha256 {want}\n  downloaded      {e.got}\n"
+                f"The download from {base} is damaged or is not the {tag} build. Try again; "
                 f"if it keeps happening, build whisper.cpp yourself and pass --bin PATH/whisper-cli."
                 + ("" if RELEASES == DEFAULT_RELEASES else
-                   "\nA mirror with its own builds needs BABELSCRIBE_SKIP_VERIFY=1."))
-        if dest.exists():
-            shutil.rmtree(dest)
+                   "\nA mirror with its own builds needs BABELSCRIBE_SKIP_VERIFY=1.")) from None
+        return _unpack(part, dest, {"asset": name, "source": base,
+                                    "tag": tag if RELEASES == DEFAULT_RELEASES else None,
+                                    "sha256": got, "verified": bool(want)})
+
+
+def _unpack(part: Path, dest: Path, receipt: dict) -> Path:
+    staging = CACHE / "unpacking" / dest.name             # not under bin/: nothing in here may be found and run
+    try:
+        _rmtree(staging)
         with zipfile.ZipFile(part) as z:
-            z.extractall(dest)
-    finally:
-        part.unlink(missing_ok=True)
-    exe = next(dest.rglob(EXE))
-    if os.name != "nt":
-        exe.chmod(0o755)
-    files = {f.relative_to(dest).as_posix(): _sha256(f) for f in sorted(dest.rglob("*")) if f.is_file()}
-    (dest / RECEIPT).write_text(json.dumps({
-        "asset": name, "source": base, "tag": tag if RELEASES == DEFAULT_RELEASES else None,
-        "sha256": got, "verified": bool(want), "files": files}, indent=1), encoding="utf-8")
-    return exe
+            z.extractall(staging)
+        exe = next(staging.rglob(EXE), None)
+        if exe is None:
+            part.unlink()
+            raise SystemExit(f"{receipt['asset']} from {receipt['source']} holds no {EXE}; nothing was installed.")
+        if os.name != "nt":             # unzipping does not keep "executable": both programs of the build need it
+            for program in (exe, exe.with_name("whisper-quantize")):
+                if program.is_file():
+                    program.chmod(0o755)
+        files = {f.relative_to(staging).as_posix(): download.sha256_of(f)
+                 for f in sorted(staging.rglob("*")) if f.is_file()}
+        (staging / RECEIPT).write_text(json.dumps({**receipt, "files": files}, indent=1), encoding="utf-8")
+        _rmtree(dest)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        _move_into_place(staging, dest)
+    except zipfile.BadZipFile as e:
+        part.unlink()
+        raise SystemExit(f"{receipt['asset']} from {receipt['source']} is not a zip file ({e}); nothing was installed.") \
+            from None
+    except OSError as e:                                  # the checked zip is kept: the next run only unpacks it
+        with contextlib.suppress(OSError):
+            _rmtree(staging)
+        raise SystemExit(f"could not install {receipt['asset']} into {dest} ({e.strerror or e}). The download is kept: "
+                         f"free some disk space, or close a running babelscribe, and run it again.") from None
+    with contextlib.suppress(OSError):                    # installed: a zip that cannot be deleted yet is no failure
+        part.unlink()
+    return next(dest.rglob(EXE))
 
 
 def binary_origin(binary: Path) -> str:
@@ -210,7 +258,7 @@ def binary_origin(binary: Path) -> str:
         return (f"downloaded by an older babelscribe, release unknown; delete {root} to get the {BINARY_TAG} "
                 f"build with a checksum")
     changed = [n for n, h in receipt.get("files", {}).items()
-               if not (root / n).is_file() or _sha256(root / n) != h]
+               if not (root / n).is_file() or download.sha256_of(root / n) != h]
     where = receipt.get("tag") or f"mirror {receipt.get('source')}"
     if changed:
         return (f"{receipt.get('asset')} from {where}: CHANGED since download ({', '.join(changed)}); "

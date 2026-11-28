@@ -1,4 +1,4 @@
-"""Connect babelscribe to AI apps (Claude Desktop, Claude Code, Codex CLI, Cursor, Gemini CLI) as an MCP server.
+"""Connect babelscribe to AI apps (Claude Desktop, Claude Code, Codex CLI, Cursor, Gemini CLI, OpenCode) as an MCP server.
 
 The desktop app shows this to a person who is not at a terminal, so the rules are strict:
 
@@ -10,6 +10,8 @@ The desktop app shows this to a person who is not at a terminal, so the rules ar
 - The new content is checked after it is built and before it replaces anything; the write goes to a temporary file in the
   same folder and is moved over the old one in one step.
 - `remove` takes out only the "babelscribe" entry.
+- OpenCode is added with its own command (version 2: `opencode mcp add --global`). It has no command to remove a server,
+  so babelscribe cuts its own entry out of OpenCode's settings, and every other character, comments included, stays.
 
 The server that is registered is the one this program ships: `babelscribe-mcp` next to the engine in the installed app, else
 the `babelscribe` command of a pip install."""
@@ -24,6 +26,8 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
+
+from . import jsonc
 
 NAME = "babelscribe"
 TOOL_TIMEOUT_MS = 3_600_000        # a long video: the apps' default (60 s) is far too short
@@ -59,10 +63,21 @@ RUN_TIMEOUT = 90       # seconds for an app's own command (remove --all uses les
 
 def _run(cmd: list[str]) -> tuple[int, str]:
     try:
-        p = subprocess.run(cmd, capture_output=True, text=True, errors="replace", timeout=RUN_TIMEOUT, check=False)
+        # no input: a program that stops to ask a question must fail, not wait (the desktop app holds our own input open)
+        p = subprocess.run(cmd, capture_output=True, text=True, errors="replace", timeout=RUN_TIMEOUT, check=False,
+                           stdin=subprocess.DEVNULL)
     except (OSError, subprocess.SubprocessError) as e:
         return 1, str(e)
-    return p.returncode, ((p.stdout or "") + (p.stderr or "")).strip()
+    return p.returncode, re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", (p.stdout or "") + (p.stderr or "")).strip()
+
+
+def _safe_for_batch(env: "Env", exe: str, args: list[str]) -> None:
+    """npm installs a command as a .cmd file, which cmd.exe reads: it would take a %, or an unquoted & | < > ^, in the
+    path of babelscribe as part of its own language."""
+    if env.platform == "win32" and exe.lower().endswith((".cmd", ".bat")):
+        if any("%" in a or '"' in a or (re.search(r"[&|<>^]", a) and not re.search(r"[ \t]", a)) for a in args):
+            raise ConnectError(f"The folder babelscribe is installed in has a character that {Path(exe).name} cannot pass on "
+                               f"safely. Use Copy and add babelscribe yourself. Nothing was changed.")
 
 
 @dataclass
@@ -113,6 +128,9 @@ APPS = {a.key: a for a in (
     App("gemini", "Gemini CLI", "json",
         "Other servers and settings already in the file are kept.",
         "Start Gemini CLI again; /mcp lists babelscribe."),
+    App("opencode", "OpenCode", "command",
+        "Needs OpenCode 2 or newer. `--global` makes babelscribe available in every project.",
+        "Start OpenCode again; `opencode mcp list` shows babelscribe."),
 )}
 
 
@@ -159,6 +177,22 @@ def claude_desktop_windows(env: Env) -> Path:
     return layouts[2][0][1]
 
 
+def opencode_dir(env: Env) -> Path:
+    """OpenCode's global settings folder, found the way OpenCode 2 finds it: OPENCODE_CONFIG_DIR, else
+    XDG_CONFIG_HOME/opencode, else ~/.config/opencode (on every system, Windows included)."""
+    return Path(env.environ.get("OPENCODE_CONFIG_DIR")
+                or Path(env.environ.get("XDG_CONFIG_HOME") or env.home / ".config") / "opencode")
+
+
+OPENCODE_FILES = ("opencode.json", "opencode.jsonc", ".opencode/opencode.json", ".opencode/opencode.jsonc")
+
+
+def _opencode_target(env: Env) -> Path:
+    """The file `opencode mcp add --global` writes: the first of these that exists, else the first."""
+    folder = opencode_dir(env)
+    return next((folder / n for n in OPENCODE_FILES if (folder / n).is_file()), folder / OPENCODE_FILES[0])
+
+
 def config_path(app: str, env: Env) -> Path | None:
     """The settings file an app reads (None for Claude Code, which keeps its own)."""
     h = env.home
@@ -174,6 +208,8 @@ def config_path(app: str, env: Env) -> Path | None:
         return h / ".gemini" / "settings.json"
     if app == "codex":
         return Path(env.environ.get("CODEX_HOME") or h / ".codex") / "config.toml"
+    if app == "opencode":
+        return _opencode_target(env)
     return None
 
 
@@ -182,6 +218,8 @@ def installed(app: str, env: Env) -> bool:
     ex = env.exists
     if app == "claude-code":
         return bool(env.which("claude")) or ex(env.home / ".claude" / "local" / "claude")
+    if app == "opencode":
+        return bool(_opencode_programs(env)) or ex(opencode_dir(env))
     if app == "codex":
         return bool(env.which("codex")) or ex(config_path(app, env).parent)           # type: ignore[union-attr]
     if app == "gemini":
@@ -390,6 +428,101 @@ def _toml_check(path: Path, text: str, want_present: bool, env: Env) -> None:
                            f"inline table), so the file was not changed. Remove the [mcp_servers.{NAME}] part by hand.")
 
 
+# ---------------------------------------------------------------------------------------------------- OpenCode
+
+def _opencode_programs(env: Env) -> list[str]:
+    """The OpenCode programs on this computer, by full path: `opencode`, `opencode2` (version 2's other name), and the
+    place its install script uses, which an app started from the desktop may not have on its PATH."""
+    found = [p for p in (env.which("opencode"), env.which("opencode2")) if p]
+    own = env.home / ".opencode" / "bin" / ("opencode.exe" if env.platform == "win32" else "opencode")
+    if env.exists(own) and str(own) not in found:
+        found.append(str(own))
+    return found
+
+
+def _opencode_program(env: Env) -> tuple[str, str, str]:
+    """(kind, program, what it said). kind: "v2" can add globally; "v1" has the command but not --global (version 1 refuses
+    the flag, and version 2 without it writes into the current folder's project); "old" cannot add without asking
+    questions; "broken" did not run; "missing"."""
+    programs = _opencode_programs(env)
+    best = ("missing", "", "")
+    rank = ("missing", "broken", "old", "v1", "v2")
+    for exe in programs:
+        code, out = env.run([exe, "mcp", "add", "--help"])
+        kind = "broken" if code != 0 else "v2" if "--global" in out else "v1" if "--url" in out else "old"
+        if rank.index(kind) > rank.index(best[0]):
+            best = (kind, exe, out)
+        if kind == "v2":
+            break
+    return best
+
+
+def _opencode_problem(kind: str, exe: str, said: str, env: Env) -> str | None:
+    if kind == "v2":
+        return None
+    if kind == "missing":
+        return ("OpenCode was not found on this computer (the `opencode` command). Install it, or use Copy and run the "
+                "command yourself.")
+    if kind == "broken":
+        return f"{exe} did not run: {said[:300] or 'no message'}"
+    how = "run the command yourself" if kind == "v1" else f"add the text to {_opencode_target(env)} yourself"
+    return f"This OpenCode is older than version 2. Update OpenCode to version 2, or use Copy and {how}."
+
+
+def opencode_command(env: Env, exe: str = "opencode", everywhere: bool = True) -> list[str]:
+    cmd, args = env.server()
+    return [exe, "mcp", "add", NAME, *(["--global"] if everywhere else []), "--", cmd, *args]
+
+
+def _opencode_ours(value: object, env: Env) -> bool:
+    cmd, args = env.server()
+    return isinstance(value, dict) and value.get("command") == [cmd, *args]
+
+
+def _opencode_entries(data: object) -> list[object]:
+    """babelscribe's entries: version 2 keeps servers under mcp.servers, version 1 directly under mcp."""
+    mcp = data.get("mcp") if isinstance(data, dict) else None
+    if not isinstance(mcp, dict):
+        return []
+    servers = mcp.get("servers")
+    return [d[NAME] for d in (servers, mcp) if isinstance(d, dict) and NAME in d]
+
+
+def _opencode_load(env: Env) -> tuple[list[tuple[Loaded, list[object]]], list[tuple[Path, str, str]]]:
+    """Every settings file OpenCode reads in its global folder: ([(file, babelscribe's entries)], [(path that cannot be
+    read, why, its text)])."""
+    good, bad = [], []
+    for name in ("config.json", *OPENCODE_FILES):
+        path = opencode_dir(env) / name
+        if not path.is_file():
+            continue
+        text = ""
+        try:
+            text, bom = _read_text(path)
+            data = jsonc.parse(text).value
+            if not isinstance(data, dict):
+                raise ConnectError(f"{path} does not hold a JSON object ({{ ... }}), so babelscribe left it as it is.")
+        except ConnectError as e:
+            bad.append((path, str(e), text))
+        except jsonc.JsoncError as e:
+            bad.append((path, f"{path} has a mistake in it ({e}), so babelscribe left it exactly as it is. Fix that line, "
+                              f"or use Copy and add babelscribe yourself.", text))
+        else:
+            good.append((Loaded(path, True, text, bom, data=data), _opencode_entries(data)))
+    return good, bad
+
+
+def _state_opencode(env: Env) -> tuple[str, str | None]:
+    good, bad = _opencode_load(env)
+    entries = [v for _, found in good for v in found]
+    why = bad[0][1] if bad else None
+    if any(_opencode_ours(v, env) for v in entries):
+        return "connected", why
+    if why:
+        return "unknown", why
+    return ("other" if entries else "not-connected"), None
+
+
 # ---------------------------------------------------------------------------------------------------- state
 
 def _same(found: dict | None, env: Env) -> bool:
@@ -433,7 +566,11 @@ def _state_code(env: Env) -> tuple[str, str | None]:
 
 
 def state(app: str, env: Env) -> tuple[str, str | None]:
-    return _state_code(env) if app == "claude-code" else _state_toml(env) if app == "codex" else _state_json(app, env)
+    if app == "claude-code":
+        return _state_code(env)
+    if app == "opencode":
+        return _state_opencode(env)
+    return _state_toml(env) if app == "codex" else _state_json(app, env)
 
 
 def status(env: Env | None = None) -> list[dict]:
@@ -455,19 +592,34 @@ def plan(app: str, env: Env | None = None) -> dict:
         raise ConnectError(f"unknown app '{app}'; choose one of: {', '.join(APPS)}")
     st, why = state(app, env)
     path = config_path(app, env)
+    kind = a.kind
     shown = (_shown(command_line(env)) if a.kind == "command" else toml_block(env) if a.kind == "toml"
              else json.dumps({"mcpServers": {NAME: entry(env, app)}}, indent=2, ensure_ascii=False))
     problem = why
-    if a.kind == "command" and not env.which("claude"):
-        problem = problem or ("Claude Code was not found on this computer (the `claude` command). Install it, or use Copy "
-                              "and run the command yourself.")
+    present = st in ("connected", "other")
+    can_remove = present
+    if app == "claude-code":
+        can_remove = present and bool(env.which("claude"))          # only its own command takes it out
+        if not env.which("claude"):
+            problem = problem or ("Claude Code was not found on this computer (the `claude` command). Install it, or use "
+                                  "Copy and run the command yourself.")
+    if app == "opencode":
+        found, exe, said = _opencode_program(env)
+        problem = problem or _opencode_problem(found, exe, said, env)
+        name = Path(exe).stem if exe and Path(exe).stem == "opencode2" else "opencode"
+        shown = _shown(opencode_command(env, name, everywhere=found != "v1"))
+        if found == "old":                                          # no command that works: the text for its file
+            kind = "json"
+            cmd, args = env.server()
+            shown = json.dumps({"mcp": {NAME: {"type": "local", "command": [cmd, *args], "enabled": True}}}, indent=2,
+                               ensure_ascii=False)
     if a.kind == "toml" and tomllib is None:
         problem = problem or f"{path} can only be checked safely with Python 3.11 or newer. Use Copy and add it yourself."
     bak = None
     if path is not None and path.exists():
         bak = str(path.with_name(path.name + ".bak"))
-    return {"app": app, "name": a.name, "kind": a.kind, "installed": installed(app, env), "state": st,
-            "path": str(path) if path else None, "text": shown, "backup": bak, "problem": problem,
+    return {"app": app, "name": a.name, "kind": kind, "installed": installed(app, env), "state": st,
+            "path": str(path) if path else None, "text": shown, "backup": bak, "problem": problem, "can_remove": can_remove,
             "extra": a.extra, "after": a.after, "server": " ".join([env.server()[0], *env.server()[1]])}
 
 
@@ -478,8 +630,10 @@ def add(app: str, env: Env | None = None, make_backup: bool = True) -> dict:
     a = APPS.get(app)
     if a is None:
         raise ConnectError(f"unknown app '{app}'; choose one of: {', '.join(APPS)}")
-    if a.kind == "command":
+    if app == "claude-code":
         return _code_add(env)
+    if app == "opencode":
+        return _opencode_add(env, make_backup)
     path = config_path(app, env)
     if a.kind == "toml":
         _need_tomllib(path)                                                              # type: ignore[arg-type]
@@ -523,8 +677,10 @@ def remove(app: str, env: Env | None = None, make_backup: bool = True) -> dict:
     a = APPS.get(app)
     if a is None:
         raise ConnectError(f"unknown app '{app}'; choose one of: {', '.join(APPS)}")
-    if a.kind == "command":
+    if app == "claude-code":
         return _code_remove(env)
+    if app == "opencode":
+        return _opencode_remove(env, make_backup)
     path = config_path(app, env)
     if a.kind == "toml":
         _need_tomllib(path)                                                              # type: ignore[arg-type]
@@ -559,6 +715,7 @@ def _code_add(env: Env) -> dict:
     st, _ = _state_code(env)
     if st == "connected":
         return {"ok": True, "changed": False, "path": None, "backup": None, "message": "Claude Code was already connected."}
+    _safe_for_batch(env, exe, command_line(env, exe)[1:])
     if st == "other":                                        # an older babelscribe entry: replace it, nothing else
         code, out = env.run([exe, "mcp", "remove", "--scope", "user", NAME])
         if code != 0:
@@ -583,6 +740,87 @@ def _code_remove(env: Env) -> dict:
     return {"ok": True, "changed": True, "path": None, "backup": None, "message": "babelscribe was taken out of Claude Code's settings."}
 
 
+def _opencode_add(env: Env, make_backup: bool) -> dict:
+    kind, exe, said = _opencode_program(env)
+    problem = _opencode_problem(kind, exe, said, env)
+    if problem:
+        raise ConnectError(f"{problem} Nothing was changed.")
+    _, bad = _opencode_load(env)
+    if bad:                                      # OpenCode's command would write into a file it cannot read
+        raise ConnectError(bad[0][1])
+    if _state_opencode(env)[0] == "connected":
+        return {"ok": True, "changed": False, "path": str(_opencode_target(env)), "backup": None,
+                "message": "OpenCode was already connected."}
+    command = opencode_command(env, exe)
+    _safe_for_batch(env, exe, command[1:])
+    target = _opencode_target(env)
+    bak = backup(target) if make_backup else None
+    code, out = env.run(command)
+    if code != 0:
+        raise ConnectError(f"OpenCode did not accept the command: {out or 'no message'}")
+    good, _ = _opencode_load(env)
+    if not any(f.path == target and any(_opencode_ours(v, env) for v in found) for f, found in good):
+        raise ConnectError(f"OpenCode ran the command, but babelscribe is not in {target} as expected. Check it with "
+                           f"`opencode mcp list`. {out[:300]}".rstrip())
+    return {"ok": True, "changed": True, "path": str(target), "backup": str(bak) if bak else None,
+            "message": f"OpenCode is connected. {APPS['opencode'].after}"}
+
+
+def _write_all(changes: list[tuple[Loaded, str]]) -> None:
+    """Write every file or none: when one cannot be written, those already written get their old text back."""
+    written: list[Loaded] = []
+    try:
+        for f, text in changes:
+            write_atomic(f.path, text, f.bom)
+            written.append(f)
+    except ConnectError as e:
+        stuck = []
+        for f in written:
+            try:
+                write_atomic(f.path, f.text, f.bom)
+            except ConnectError:
+                stuck.append(str(f.path))
+        if not stuck:
+            raise
+        raise ConnectError(f"{str(e).replace(' Nothing was changed.', '')} babelscribe's entry is already out of "
+                           f"{', '.join(stuck)}.") from None
+
+
+def _opencode_remove(env: Env, make_backup: bool, only_ours: bool = False) -> dict:
+    """OpenCode has no command that removes a server, so the entry is cut out of its settings (jsonc.remove: every other
+    character stays, and the result is checked before it replaces the file). Entries that start this program go; one
+    that starts something else stays, unless it is all there is and the person asked for it to be removed."""
+    good, bad = _opencode_load(env)
+    unsure = [why for _, why, text in bad if NAME in text or not text]
+    mine = any(_opencode_ours(v, env) for _, found in good for v in found)
+    wanted = (lambda v: _opencode_ours(v, env)) if mine or only_ours else (lambda v: True)
+    changes: list[tuple[Loaded, str]] = []
+    for f, found in good:
+        if not any(wanted(v) for v in found):
+            continue
+        try:
+            text = f.text
+            for place in (("mcp", "servers"), ("mcp",)):
+                text = jsonc.remove(text, place, NAME, wanted)
+        except ValueError as e:
+            raise ConnectError(f"babelscribe could not edit {f.path} safely ({e}); nothing was changed. Take the "
+                               f"\"{NAME}\" entry out by hand.") from None
+        changes.append((f, text))
+    if not changes:
+        if unsure:
+            raise ConnectError(unsure[0])
+        return {"ok": True, "changed": False, "path": str(_opencode_target(env)), "backup": None,
+                "message": "babelscribe was not in OpenCode's settings."}
+    backups = [backup(f.path) for f, _ in changes] if make_backup else []
+    _write_all(changes)
+    if unsure:
+        raise ConnectError(f"babelscribe was taken out of {', '.join(str(f.path) for f, _ in changes)}, but another "
+                           f"settings file could not be checked: {unsure[0]}")
+    return {"ok": True, "changed": True, "path": ", ".join(str(f.path) for f, _ in changes),
+            "backup": ", ".join(str(b) for b in backups if b) or None,
+            "message": "babelscribe was taken out of OpenCode's settings."}
+
+
 def remove_all(env: Env | None = None, make_backup: bool = True) -> dict:
     """Take babelscribe out of every app that has it set up with THIS program (state "connected"), for the uninstaller: the
     settings must not keep pointing at a program that is about to be deleted. An entry that points somewhere else (the person's
@@ -597,7 +835,7 @@ def remove_all(env: Env | None = None, make_backup: bool = True) -> dict:
             try:
                 if state(key, env)[0] != "connected":
                     continue
-                r = remove(key, env, make_backup)
+                r = _opencode_remove(env, make_backup, only_ours=True) if key == "opencode" else remove(key, env, make_backup)
                 results.append({"app": key, "name": a.name, "changed": r["changed"], "message": r["message"]})
             except ConnectError as e:
                 results.append({"app": key, "name": a.name, "changed": False, "error": str(e)})

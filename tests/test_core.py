@@ -623,15 +623,17 @@ def test_asset_name_leaves_a_self_hosted_mirror_alone(monkeypatch):
 
 
 def test_fetch_binary_explains_a_404_from_a_mirror(monkeypatch, tmp_path):
+    import io
     import urllib.error
     import pytest
     monkeypatch.setattr(backend, "RELEASES", "https://example.invalid/mirror")
     monkeypatch.setattr(backend, "CACHE", tmp_path)
     monkeypatch.setattr(backend, "asset_name", lambda flavor=None: "whisper-cli-linux-x64-cpu.zip")
 
-    def gone(url):
-        raise urllib.error.HTTPError(url, 404, "Not Found", None, None)
-    monkeypatch.setattr(backend.urllib.request, "urlopen", gone)
+    def gone(req, timeout=None):
+        raise urllib.error.HTTPError(req.full_url, 404, "Not Found", None, io.BytesIO())
+    from babelscribe import download
+    monkeypatch.setattr(download.urllib.request, "urlopen", gone)
     with pytest.raises(SystemExit) as e:
         backend.fetch_binary("cpu")
     assert "404" in str(e.value) and "--bin" in str(e.value)

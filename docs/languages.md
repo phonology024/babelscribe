@@ -11,4 +11,6 @@ with one line in `babelscribe/models.py` (Thai and Hindi so far). PRs adding fin
 languages are the most valuable contribution.
 
 ## Add a language fine-tune
-Add one entry to `FINETUNES` in `babelscribe/models.py` (Hugging Face repo, language code, whether it needs beam search) and open a PR.
+Add one entry to `FINETUNES` in `babelscribe/models.py` (Hugging Face repo, the full commit id of the version you tested as
+`revision`, language code, whether it needs beam search) and open a PR. Only that commit is downloaded: some weights are
+pickle files, which can run code when they are loaded.

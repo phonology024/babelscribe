@@ -12,6 +12,8 @@ list_languages_and_models); Claude Desktop one-click: babelscribe.mcpb from the 
 ## Docs
 - [README](https://github.com/phonology024/babelscribe/blob/main/README.md): install, quick start, MCP setup for Claude Desktop / Claude Code / Codex / Antigravity / Gemini CLI / Cursor / VS Code
 - [Usage](https://github.com/phonology024/babelscribe/blob/main/docs/usage.md): every command, Python, Docker, MCP tools
+- [Setup steps for AI assistants](https://github.com/phonology024/babelscribe/blob/main/docs/AI_SETUP.md): install, check and connect babelscribe for someone
+- [Troubleshooting](https://github.com/phonology024/babelscribe/blob/main/docs/troubleshooting.md): messages and what to do
 - [FAQ](https://github.com/phonology024/babelscribe/blob/main/docs/faq.md): common questions and limitations
 - [Benchmarks](https://github.com/phonology024/babelscribe/blob/main/docs/benchmarks.md#benchmark-16-languages-on-fleurs): Google FLEURS error rates for 16 languages, TED talk speed and accuracy
 - [Roadmap](https://github.com/phonology024/babelscribe/blob/main/ROADMAP.md): planned features and open issues

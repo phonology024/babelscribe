@@ -8,7 +8,7 @@ macOS asks you to confirm the first start (see below).
 
 1. **Choose a file**: drop a video or audio file on the window, or pick one. Recent files are listed.
 2. **Options**: spoken language (or auto detect), accurate mode, **translate the subtitles** into another language with a
-   model on this computer (Ollama, LM Studio or llama-server, found on their usual ports; *Check again* looks once
+   model on this computer (Ollama, LM Studio, llama-server or colibri, found on their usual ports; *Check again* looks once
    more), **burn the subtitles into the video** in the *Plain*, *Karaoke* or *Shorts* look (the small pictures use the
    colours the engine really draws; an audio file has no picture, so the switch is off for it), which files to write
    (`.srt`, `.vtt`, `.txt`), and under *Advanced* names and terms to spell correctly, plus the same run as a command line.
@@ -19,7 +19,7 @@ macOS asks you to confirm the first start (see below).
 4. **Result**: the subtitle lines (with a tab for the translation), the files written next to the input (the translated
    `.srt` and the video with captions included), *Open* and *Show in folder*.
 5. **Connect to an AI app** (button at the top and in the sidebar): puts babelscribe into Claude Desktop, Claude Code,
-   Codex CLI, Cursor or Gemini CLI, so that you can ask them for subtitles in plain words. See below.
+   Codex CLI, Cursor, Gemini CLI or OpenCode, so that you can ask them for subtitles in plain words. See below.
 
 Light and dark follow the system; the button at the top right switches. Everything runs on the computer; the network is
 only used, as with the command line, to download whisper-cli and the model on first use.
@@ -30,7 +30,7 @@ The window starts `babelscribe-mcp`, the MCP server that ships inside the app (n
 in the install folder on Windows, `engine/babelscribe-mcp` in the app on macOS and Linux), so nothing else has to be
 installed (no `uv`, no `uvx`, no Python). The work is done by the engine's own command, which you can also run in a
 terminal: `babelscribe connect status | show APP | add APP | remove APP` (`--json`, `--no-backup`). `APP` is
-`claude-desktop`, `claude-code`, `codex`, `cursor` or `gemini`. The rules:
+`claude-desktop`, `claude-code`, `codex`, `cursor`, `gemini` or `opencode`. The rules:
 
 - Before anything is changed the window shows **exactly what will be added** and to which file (or which command will run).
 - A settings file is **merged, never replaced**: the other servers and settings stay, and so do the indentation and the
@@ -50,6 +50,13 @@ terminal: `babelscribe connect status | show APP | add APP | remove APP` (`--jso
   babelscribe -- PROGRAM` (and `claude mcp remove`), run by the full path of the `claude` that was found (a `claude.cmd`
   from npm cannot be started by its bare name on Windows), so its own settings file is never edited by babelscribe.
   Claude Desktop and Cursor get only `command` and `args`.
+- **OpenCode** (version 2 or newer) is added with its own command, `opencode mcp add babelscribe --global -- PROGRAM`.
+  Its global settings are in `~/.config/opencode` on every system (`$XDG_CONFIG_HOME/opencode`, or
+  `$OPENCODE_CONFIG_DIR`). An older OpenCode has no `--global`, so nothing is changed: update it, or use *Copy*.
+  OpenCode has **no command that removes a server**, so *Remove* (and the uninstaller) cuts babelscribe's own entry out
+  of those files: a `.bak` copy first, every other character and comment stays, and the result is read and compared
+  before it replaces the file. A file that cannot be read that way is left as it is. An entry named `babelscribe` that
+  starts some other program stays when yours is removed; the uninstaller never touches it.
 - The command written into a config is the full path of `babelscribe-mcp` in the installed app. **Uninstalling on
   Windows takes babelscribe out of the apps it was connected to** (the uninstaller runs `babelscribe connect remove --all`
   first: only entries that point at this installation go, each changed file is kept as `.bak`, a failure never stops the
