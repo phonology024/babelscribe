@@ -420,6 +420,7 @@ def release_zip():
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as z:
         z.writestr(backend.EXE, b"binary" * 50_000)
+        z.writestr(backend.EXE.replace("cli", "quantize"), b"quantize")
         z.writestr("ggml.dll", os.urandom(100_000))
     return buf.getvalue()
 
@@ -444,6 +445,14 @@ def test_whisper_cli_cut_off_midway_is_continued(server, tmp_path, monkeypatch):
     exe = backend.fetch_binary("cpu")
     assert exe.read_bytes() == b"binary" * 50_000 and ranges(server) == [None, "bytes=40000-"]
     assert not list((tmp_path / "home" / "bin").glob("*.part"))
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Windows has no executable bit")
+def test_both_programs_of_a_downloaded_build_can_be_run(server, tmp_path, monkeypatch):
+    """Unzipping drops the executable bit; whisper-quantize used to stay without it, so no fine-tune could be converted."""
+    binary_server(server, monkeypatch, tmp_path)
+    exe = backend.fetch_binary("cpu")
+    assert os.access(exe, os.X_OK) and os.access(exe.with_name("whisper-quantize"), os.X_OK)
 
 
 def test_an_install_killed_while_unpacking_leaves_nothing_that_looks_installed(server, tmp_path, monkeypatch):

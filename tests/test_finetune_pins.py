@@ -5,6 +5,7 @@ torch, transformers and huggingface_hub are stand-ins and nothing downloaded is 
 would have been run."""
 import hashlib
 import json
+import os
 import re
 import sys
 import types
@@ -50,6 +51,7 @@ def conversion(monkeypatch, tmp_path):
             open(f"{out}/ggml-model.bin", "wb").write(b"f32 model")
         else:
             assert cmd[0] != "git", "nothing is cloned any more"
+            assert os.name == "nt" or os.access(cmd[0], os.X_OK), "the quantizer cannot be started"
             open(cmd[2], "wb").write(b"half a quantized")
             raise KeyboardInterrupt
     monkeypatch.setattr(models.subprocess, "run", run)
@@ -112,6 +114,7 @@ def test_checked_files_are_not_fetched_twice_and_a_cut_one_is_continued(conversi
 def test_a_stopped_quantizer_leaves_no_model(conversion, tmp_path):
     quantizer = tmp_path / "whisper-quantize"
     quantizer.write_bytes(b"x")
+    quantizer.chmod(0o644)                       # as an older babelscribe unpacked it
     with pytest.raises(KeyboardInterrupt):
         models.ensure("thai-pathumma", quantizer)
     assert not models.path_for("thai-pathumma").exists()

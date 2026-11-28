@@ -221,8 +221,10 @@ def _unpack(part: Path, dest: Path, receipt: dict) -> Path:
         if exe is None:
             part.unlink()
             raise SystemExit(f"{receipt['asset']} from {receipt['source']} holds no {EXE}; nothing was installed.")
-        if os.name != "nt":
-            exe.chmod(0o755)
+        if os.name != "nt":             # unzipping does not keep "executable": both programs of the build need it
+            for program in (exe, exe.with_name("whisper-quantize")):
+                if program.is_file():
+                    program.chmod(0o755)
         files = {f.relative_to(staging).as_posix(): download.sha256_of(f)
                  for f in sorted(staging.rglob("*")) if f.is_file()}
         (staging / RECEIPT).write_text(json.dumps({**receipt, "files": files}, indent=1), encoding="utf-8")

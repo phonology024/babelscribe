@@ -6,6 +6,7 @@ keeps its own licence). Fine-tunes often lose timestamp prediction, so they are 
 gives the TIMING (see align.py)."""
 from __future__ import annotations
 
+import contextlib
 import os
 import subprocess
 import sys
@@ -162,6 +163,9 @@ def convert_finetune(name: str, ft: dict, out: Path, quantizer: Path | None) -> 
     subprocess.run([sys.executable, str(script), hf, str(oa), str(work)], check=True, stdout=sys.stderr)
     f32 = work / "ggml-model.bin"
     if quantizer and quantizer.exists():
+        if os.name != "nt":      # a cache unpacked by an older babelscribe has it without the executable bit
+            with contextlib.suppress(OSError):
+                quantizer.chmod(quantizer.stat().st_mode | 0o111)
         # not straight into `out`: a model that exists under that name is taken to be complete
         unfinished = out.with_name(out.name + ".part")
         subprocess.run([str(quantizer), str(f32), str(unfinished), "q8_0"], check=True, stdout=sys.stderr)
