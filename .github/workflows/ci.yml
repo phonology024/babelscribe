@@ -1,5 +1,9 @@
 name: ci
-on: [push, pull_request]
+on:
+  push:
+    branches-ignore: ["finetune-check/**"]     # that push only starts the heavy finetune-conversion workflow
+    tags: ["**"]
+  pull_request:
 jobs:
   test:
     strategy:
