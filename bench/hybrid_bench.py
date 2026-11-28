@@ -81,7 +81,9 @@ def score(a) -> None:
                 said[label] = " ".join(s["text"] for s in segs)
                 counted = errors(row["ref"], said[label], cer, lang)
                 total[label] = [x + y for x, y in zip(total[label], counted)]
-            if said["before"] != said["after"]:
+            if said["before"] != said["after"] and name.endswith("_ted"):
+                changed.append(f"**{name} {row['key']}**: the text changed (a talk's transcript is not printed)")
+            elif said["before"] != said["after"]:
                 b, c = errors(row["ref"], said["before"], cer, lang), errors(row["ref"], said["after"], cer, lang)
                 changed.append(f"**{name} {row['key']}**: errors {b[0]} -> {c[0]}\n- reference: {row['ref']}\n"
                                f"- before: {said['before']}\n- after: {said['after']}")
