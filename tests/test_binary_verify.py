@@ -1,7 +1,7 @@
 """The one thing babelscribe downloads and executes is checked: pinned release, sha256 before unpacking (#53)."""
 from pathlib import Path
 
-from babelscribe import backend
+from babelscribe import backend, download
 
 
 def _fake_release(monkeypatch, tmp_path, name="whisper-cli-linux-x64-cpu.zip", payload=b"binary", releases=None):
@@ -17,7 +17,7 @@ def _fake_release(monkeypatch, tmp_path, name="whisper-cli-linux-x64-cpu.zip", p
     monkeypatch.setattr(backend, "CACHE", tmp_path / "home")
     monkeypatch.setattr(backend, "RELEASES", releases or backend.DEFAULT_RELEASES)
     monkeypatch.setattr(backend, "asset_name", lambda flavor=None: name)
-    monkeypatch.setattr(backend.urllib.request, "urlopen", lambda url: io.BytesIO(data))
+    monkeypatch.setattr(download.urllib.request, "urlopen", lambda req, timeout=None: io.BytesIO(data))
     monkeypatch.delenv("BABELSCRIBE_SKIP_VERIFY", raising=False)
     return hashlib.sha256(data).hexdigest()
 
@@ -41,7 +41,8 @@ def test_fetch_binary_refuses_a_wrong_digest_and_leaves_nothing(monkeypatch, tmp
     with pytest.raises(SystemExit) as e:
         backend.fetch_binary("cpu")
     assert "checksum mismatch" in str(e.value) and "nothing was installed" in str(e.value)
-    assert not [f for f in (tmp_path / "home").rglob("*") if f.is_file()], "nothing may stay in the cache"
+    assert not [f for f in (tmp_path / "home").rglob("*") if f.is_file() and f.suffix != ".lock"], \
+        "nothing may stay in the cache"
 
 
 def test_fetch_binary_holds_a_mirror_to_the_same_digests_unless_told_not_to(monkeypatch, tmp_path):
@@ -82,8 +83,9 @@ def test_a_later_build_is_fetched_from_its_own_release_and_checked_against_its_o
     name = "whisper-cli-macos-x64-cpu.zip"
     digest = _fake_release(monkeypatch, tmp_path, name=name)
     asked = []
-    real = backend.urllib.request.urlopen
-    monkeypatch.setattr(backend.urllib.request, "urlopen", lambda url: (asked.append(url), real(url))[1])
+    real = download.urllib.request.urlopen
+    monkeypatch.setattr(download.urllib.request, "urlopen",
+                        lambda req, timeout=None: (asked.append(req.full_url), real(req))[1])
     monkeypatch.setitem(backend.LATER, name, ("v9.9.9", digest))
     exe = backend.fetch_binary("cpu")
     assert asked == [f"{backend.release_url('v9.9.9')}/{name}"]
@@ -127,18 +129,3 @@ def test_later_builds_match_the_release_they_are_pinned_to():
             pytest.skip(f"cannot reach the GitHub API: {e}")
         published = {a["name"]: (a.get("digest") or "").removeprefix("sha256:") for a in assets}
         assert published.get(name) == digest, name
-
-
-def test_a_model_download_cut_short_is_not_kept(monkeypatch, tmp_path):
-    import urllib.error
-    import pytest
-    from babelscribe import models
-    monkeypatch.setattr(models, "MODELS", tmp_path)
-
-    def cut_short(url, dst):
-        Path(dst).write_bytes(b"half")
-        raise urllib.error.ContentTooShortError("retrieval incomplete", None)
-    monkeypatch.setattr(models.urllib.request, "urlretrieve", cut_short)
-    with pytest.raises(SystemExit) as e:
-        models.ensure("tiny")
-    assert "cut short" in str(e.value) and not list(tmp_path.iterdir())

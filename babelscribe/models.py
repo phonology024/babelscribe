@@ -9,13 +9,22 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
-import urllib.error
-import urllib.request
 from pathlib import Path
 
-from .backend import CACHE
+from . import download
+from .backend import CACHE, _move_into_place, _rmtree
 
-GGML = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-{name}.bin"
+# The files of one fixed revision, so that a download can be checked and a half-done one safely continued.
+GGML_REVISION = "5359861c739e955e79d9a303bcbc70fb988958b1"
+GGML = "https://huggingface.co/ggerganov/whisper.cpp/resolve/{revision}/ggml-{name}.bin"
+SHA256 = {    # of each file at GGML_REVISION; tests/test_download.py compares them with Hugging Face when there is a network
+    "tiny": "be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21",
+    "base": "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe",
+    "small": "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b",
+    "medium": "6c14d5adee5f86394037b4e4e8b59f1673b6cee10e3cf0b11bbdbee79c156208",
+    "large-v3": "64d182b440b98d5203c4f9bd541544d84c605196c4f7b845dfa11fb23594d1e2",
+    "large-v3-turbo": "1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69",
+}
 GENERAL = {   # name -> size (approx) ; 'turbo' is the best speed/quality default
     "tiny": "75 MB", "base": "142 MB", "small": "466 MB", "medium": "1.5 GB",
     "large-v3": "3.1 GB", "large-v3-turbo": "1.6 GB",
@@ -46,6 +55,9 @@ RAM_MB = {
 }
 
 
+CONVERTER = "https://raw.githubusercontent.com/ggml-org/whisper.cpp/master/models/convert-h5-to-ggml.py"
+
+
 def resolve(name: str) -> tuple[str, dict | None]:
     name = ALIASES.get(name, name)
     if name in GENERAL:
@@ -66,19 +78,30 @@ def ensure(name: str, quantizer: Path | None = None) -> Path:
     if p.exists():
         return p
     MODELS.mkdir(parents=True, exist_ok=True)
-    if not ft:
-        print(f"downloading model {name} ({GENERAL[name]}) ...")
-        tmp = p.with_suffix(".part")
+    with download.lock(MODELS / (p.name + ".lock"), f"model {name}"):
+        if p.exists():                       # another babelscribe finished it while we waited
+            return p
+        if not ft:
+            return _download_model(name, p)
+        return convert_finetune(name, ft, p, quantizer)
+
+
+def _download_model(name: str, p: Path) -> Path:
+    print(f"downloading model {name} ({GENERAL[name]}) ...")
+    part = p.with_name(f"{p.stem}.{SHA256[name][:12]}.part")      # never continued with another version's bytes
+    for revision in (GGML_REVISION, "main"):      # "main" only if the repository's history was rewritten: same checksum
         try:
-            urllib.request.urlretrieve(GGML.format(name=name), tmp)   # raises when shorter than Content-Length
-        except BaseException as e:   # also Ctrl+C: never leave half a model behind under any name
-            tmp.unlink(missing_ok=True)
-            if isinstance(e, urllib.error.ContentTooShortError):
-                raise SystemExit(f"the download of model {name} was cut short; nothing was kept. Run it again.")
-            raise
-        tmp.replace(p)
+            download.fetch(GGML.format(revision=revision, name=name), part, SHA256[name], f"model {name}")
+        except download.NotFound:
+            continue
+        except download.ChecksumMismatch as e:
+            raise SystemExit(f"model {name}: checksum mismatch, nothing was installed.\n"
+                             f"  expected sha256 {SHA256[name]}\n  downloaded      {e.got}\n"
+                             f"Run it again; if it keeps happening, something between this computer and "
+                             f"huggingface.co is changing the file (a proxy or a sign-in page).") from None
+        part.replace(p)
         return p
-    return convert_finetune(name, ft, p, quantizer)
+    raise SystemExit(f"model {name} was not found on huggingface.co (HTTP 404). Update babelscribe and run it again.")
 
 
 def convert_finetune(name: str, ft: dict, out: Path, quantizer: Path | None) -> Path:
@@ -92,11 +115,19 @@ def convert_finetune(name: str, ft: dict, out: Path, quantizer: Path | None) -> 
     work.mkdir(parents=True, exist_ok=True)
     hf = snapshot_download(ft["repo"], local_dir=work / "hf")
     oa = work / "openai-whisper"
-    if not oa.exists():
-        subprocess.run(["git", "clone", "-q", "--depth", "1", "https://github.com/openai/whisper.git", str(oa)], check=True, stdout=sys.stderr)
+    if not (oa / "whisper" / "assets" / "mel_filters.npz").is_file():    # missing, or a clone that was stopped half way
+        fresh = work / "openai-whisper.new"
+        _rmtree(fresh)
+        subprocess.run(["git", "clone", "-q", "--depth", "1", "https://github.com/openai/whisper.git", str(fresh)], check=True, stdout=sys.stderr)
+        _rmtree(oa)
+        _move_into_place(fresh, oa)
     script = work / "convert-h5-to-ggml.py"
-    if not script.exists():
-        urllib.request.urlretrieve("https://raw.githubusercontent.com/ggml-org/whisper.cpp/master/models/convert-h5-to-ggml.py", script)
+    part = work / "convert-h5-to-ggml.py.part"
+    try:
+        download.fetch(CONVERTER, part, None, "the model converter")      # fetched each time; kept only when whole
+    except download.NotFound:
+        raise SystemExit(f"the model converter was not found at {CONVERTER} (HTTP 404).") from None
+    part.replace(script)
     # some fine-tunes ship bf16 weights, which the converter cannot export -> load them as float32
     src = script.read_text(encoding="utf-8").replace("WhisperForConditionalGeneration.from_pretrained(dir_model)\n",
                                                      "WhisperForConditionalGeneration.from_pretrained(dir_model).float()\n")
@@ -104,7 +135,10 @@ def convert_finetune(name: str, ft: dict, out: Path, quantizer: Path | None) -> 
     subprocess.run([sys.executable, str(script), hf, str(oa), str(work)], check=True, stdout=sys.stderr)
     f32 = work / "ggml-model.bin"
     if quantizer and quantizer.exists():
-        subprocess.run([str(quantizer), str(f32), str(out), "q8_0"], check=True, stdout=sys.stderr)
+        # not straight into `out`: a model that exists under that name is taken to be complete
+        unfinished = out.with_name(out.name + ".part")
+        subprocess.run([str(quantizer), str(f32), str(unfinished), "q8_0"], check=True, stdout=sys.stderr)
+        unfinished.replace(out)
         f32.unlink()
     else:
         f32.replace(out)
