@@ -27,7 +27,8 @@ def check(ok: bool, what: str) -> None:
 
 
 def fake_env(home: Path) -> dict:
-    env = {k: v for k, v in os.environ.items() if k.upper() not in ("CLAUDE_CONFIG_DIR", "CODEX_HOME", "XDG_CONFIG_HOME")}
+    env = {k: v for k, v in os.environ.items()
+           if k.upper() not in ("CLAUDE_CONFIG_DIR", "CODEX_HOME", "XDG_CONFIG_HOME", "OPENCODE_CONFIG_DIR")}
     env.update(HOME=str(home), USERPROFILE=str(home), APPDATA=str(home / "AppData" / "Roaming"),
                LOCALAPPDATA=str(home / "AppData" / "Local"), XDG_CONFIG_HOME=str(home / ".config"))
     env["PATH"] = os.pathsep.join(p for p in env.get("PATH", "").split(os.pathsep) if "claude" not in p.lower())
@@ -87,8 +88,8 @@ def main() -> None:
         env = fake_env(home)
 
         code, rows = connect(engine, env, "status")
-        check(code == 0 and [r["app"] for r in rows] == ["claude-desktop", "claude-code", "codex", "cursor", "gemini"],
-              "status lists the five apps")
+        check(code == 0 and [r["app"] for r in rows] == ["claude-desktop", "claude-code", "codex", "cursor", "gemini", "opencode"],
+              "status lists the six apps")
         check(all(r["state"] == "not-connected" for r in rows if r["app"] != "claude-code"), "none is connected in a fresh home")
 
         code, plan = connect(engine, env, "show", "cursor")

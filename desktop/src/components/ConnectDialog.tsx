@@ -1,5 +1,5 @@
-// "Connect to an AI app": put babelscribe into Claude Desktop, Claude Code, Codex CLI, Cursor or Gemini CLI, show exactly what
-// was added, and take it out again. Every file and command is handled by the engine (`babelscribe connect`); this is the
+// "Connect to an AI app": put babelscribe into Claude Desktop, Claude Code, Codex CLI, Cursor, Gemini CLI or OpenCode, show
+// exactly what was added, and take it out again. Every file and command is handled by the engine (`babelscribe connect`); this is the
 // window for it.
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Check, Copy, Info, LoaderCircle, Plug, TriangleAlert, X } from "lucide-react";
@@ -102,6 +102,8 @@ export function ConnectDialog(props: {
   const connected = current?.state === "connected";
   const present = connected || current?.state === "other";            // there is a babelscribe entry to take out
   const blocked = busy || working || !plan || !!plan.problem;
+  // taking babelscribe out can work when connecting cannot (an old OpenCode, or one that is not installed any more)
+  const cannotRemove = busy || working || !plan || !plan.can_remove;
 
   return (
     <DialogPrimitive.Root open={open} onOpenChange={props.onOpenChange}>
@@ -142,7 +144,8 @@ export function ConnectDialog(props: {
                   {done.outcome.changed && (
                     <div className="w-full text-left">
                       <p className="mb-1 text-[12.5px]">
-                        What was added{done.outcome.path ? <> to <span className="font-mono [overflow-wrap:anywhere]">{done.outcome.path}</span></> : ""}:
+                        {done.plan.kind === "command" ? "The command that was run" : "What was added"}
+                        {done.outcome.path ? <>{done.plan.kind === "command" ? ", which changed " : " to "}<span className="font-mono [overflow-wrap:anywhere]">{done.outcome.path}</span></> : ""}:
                       </p>
                       <pre className="m-0 whitespace-pre-wrap break-words rounded-md border border-border bg-muted px-3 py-2.5 font-mono text-[12px] leading-normal [overflow-wrap:anywhere]">{done.plan.text}</pre>
                       {done.outcome.backup && (
@@ -206,7 +209,7 @@ export function ConnectDialog(props: {
                 <div className="flex flex-col gap-1.5">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="text-[12.5px]">
-                      {plan.kind === "command" ? "Runs this command for you:" : "Adds babelscribe to this file:"}{" "}
+                      {plan.kind !== "command" ? "Adds babelscribe to this file:" : plan.path ? "Runs a command for you that changes this file:" : "Runs this command for you:"}{" "}
                       {plan.path && <span className="font-mono [overflow-wrap:anywhere]">{plan.path}</span>}
                     </span>
                     <span className="inline-flex items-center gap-1 rounded-full border border-border bg-secondary px-2 py-px text-[11.5px] font-medium whitespace-nowrap">
@@ -250,7 +253,7 @@ export function ConnectDialog(props: {
                 </Button>
                 <div className="flex items-center gap-2">
                   {present && (
-                    <Button variant="outline" size="sm" disabled={blocked} onClick={() => void act("remove")}>
+                    <Button variant="outline" size="sm" disabled={cannotRemove} onClick={() => void act("remove")}>
                       Remove
                     </Button>
                   )}

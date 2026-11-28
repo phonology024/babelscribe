@@ -44,6 +44,7 @@ const APPS_MOCK: Record<string, { name: string; installed: boolean; path: string
   codex: { name: "Codex CLI", installed: false, path: "C:\\Users\\you\\.codex\\config.toml", kind: "toml" },
   cursor: { name: "Cursor", installed: true, path: "C:\\Users\\you\\.cursor\\mcp.json", kind: "json" },
   gemini: { name: "Gemini CLI", installed: false, path: "C:\\Users\\you\\.gemini\\settings.json", kind: "json" },
+  opencode: { name: "OpenCode", installed: true, path: "C:\\Users\\you\\.config\\opencode\\opencode.json", kind: "command" },
 };
 const SERVER = "C:\\Users\\you\\AppData\\Local\\babelscribe\\babelscribe-mcp.exe";
 const connected = new Set<string>();
@@ -56,13 +57,15 @@ function connectAnswer(args: string[]): unknown {
   }
   const a = APPS_MOCK[app];
   if (action === "show") {
-    const text = a.kind === "command" ? `claude mcp add --scope user babelscribe -- ${SERVER}`
+    const text = app === "opencode" ? `opencode mcp add babelscribe --global -- ${SERVER}`
+      : a.kind === "command" ? `claude mcp add --scope user babelscribe -- ${SERVER}`
       : a.kind === "toml" ? `[mcp_servers.babelscribe]\ncommand = ${JSON.stringify(SERVER)}\nargs = []\ntool_timeout_sec = 3600\nstartup_timeout_sec = 120\n`
       : JSON.stringify({ mcpServers: { babelscribe: { command: SERVER, args: [], timeout: 3600000 } } }, null, 2);
     return { app, name: a.name, kind: a.kind, installed: a.installed, state: connected.has(app) ? "connected" : "not-connected",
-      path: a.path, text, backup: a.path ? `${a.path}.bak` : null, problem: params().get("broken") === app
+      path: a.path, text, backup: a.path ? `${a.path}.bak` : null, can_remove: connected.has(app), problem: params().get("broken") === app
         ? `${a.path} has a mistake in it (Expecting ',' delimiter, line 3, column 5), so babelscribe left it exactly as it is. Fix that line, or use Copy and add babelscribe yourself.` : null,
-      extra: a.kind === "command" ? "Claude Code keeps this in its own user settings (`--scope user`), so it works in every project." : "Other servers already in the file are kept.",
+      extra: app === "opencode" ? "Needs OpenCode 2 or newer. `--global` makes babelscribe available in every project."
+        : a.kind === "command" ? "Claude Code keeps this in its own user settings (`--scope user`), so it works in every project." : "Other servers already in the file are kept.",
       after: `Start ${a.name} again and look for babelscribe.`, server: SERVER };
   }
   if (action === "add") connected.add(app);

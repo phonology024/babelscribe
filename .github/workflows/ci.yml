@@ -21,6 +21,29 @@ jobs:
       - run: pip install -e . pytest
       - run: pytest -q -rs tests
 
+  # "Connect to OpenCode" against the real program: version 2 (connect adds with its own command) and version 1 (connect
+  # changes nothing and says to update). The unit tests use a stand-in; this notices if the real one differs from it.
+  opencode:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: actions/setup-node@v4
+        with: { node-version: "22" }
+      - run: pip install -e .
+      - name: Install OpenCode 2 and OpenCode 1, each in its own folder
+        shell: bash
+        run: |
+          npm install --no-audit --no-fund --prefix "$RUNNER_TEMP/opencode2" @opencode/cli@2.4.2
+          npm install --no-audit --no-fund --prefix "$RUNNER_TEMP/opencode1" opencode-ai@1.19.6
+      - shell: bash
+        run: python desktop/scripts/check_opencode.py "$RUNNER_TEMP/opencode2" "$RUNNER_TEMP/opencode1"
+
   # One real transcription per OS: the prebuilt whisper-cli, the tiny model, every output format, then the MCP
   # server through a real stdio client. The unit tests above mock subprocess and ffmpeg, so only this job
   # notices a broken whisper-cli argument list, a writer that writes nothing, or a server that cannot answer.

@@ -69,10 +69,11 @@ def test_other_apps_files(tmp_path):
 
 def test_apps_are_found_by_their_program_or_their_folder(tmp_path):
     env = make_env(tmp_path, found=("claude",))
-    assert [connect.installed(k, env) for k in APPS] == [False, True, False, False, False]
+    assert [connect.installed(k, env) for k in APPS] == [False, True, False, False, False, False]
     (env.home / ".cursor").mkdir()
     (env.home / ".gemini").mkdir()
     (env.home / ".codex").mkdir()
+    (env.home / ".config" / "opencode").mkdir(parents=True)
     (tmp_path / "AppData" / "Roaming" / "Claude").mkdir(parents=True)
     assert all(connect.installed(k, env) for k in APPS)
 

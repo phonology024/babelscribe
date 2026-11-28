@@ -101,6 +101,7 @@ export interface Plan extends AppRow {
   backup: string | null; // where the old file would be copied to, when there is one
   extra: string;
   after: string;
+  can_remove: boolean; // there is a babelscribe entry and it can be taken out (even when `problem` stops connecting)
 }
 
 export type Outcome =
