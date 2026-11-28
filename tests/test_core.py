@@ -1,4 +1,8 @@
+import json
+import unicodedata
 from pathlib import Path
+
+import pytest
 
 from babelscribe import align, backend, writers
 
@@ -65,6 +69,43 @@ def test_hybrid_keeps_accurate_text_and_timing():
     assert " ".join(s["text"] for s in out) == "hello world how are you"
     assert out[0]["start"] < 0.2 and out[-1]["end"] == 4.0
     assert [s["text"] for s in out] == ["hello world", "how are you"]   # cut on the timing model segment boundary
+
+
+def _gap_case(clip):
+    data = json.loads((Path(__file__).parent / "data" / "hybrid_gaps.json").read_text(encoding="utf-8"))
+    case = next(c for c in data["cases"] if c["clip"] == clip)
+    from babelscribe import hybrid
+    return " ".join(s["text"] for s in hybrid.merge(case["parts"], case["texts"])), case
+
+
+def test_hybrid_does_not_say_a_name_twice_when_the_two_models_spell_it_differently():
+    """Seen in a real run: "Daniel Lentonผู้ชิ้ แดเนียล เลนเทิล ..." (turbo's Latin letters, then the fine-tune's Thai)."""
+    said, case = _gap_case("th_th 0000")
+    assert "Daniel" not in said and "Lenton" not in said and said.startswith("แดเนียล เลนเทิล")
+    assert "".join(said.split()) == "".join("".join(case["texts"]).split()), "exactly the fine-tune's words"
+
+
+def test_hybrid_still_keeps_speech_the_fine_tune_left_out():
+    said, case = _gap_case("hi_in 0008")
+    written = unicodedata.normalize("NFC", " ".join(case["texts"]))          # hybrid writes its text in NFC
+    missed = case["parts"][0][2][0]["text"].split()[:3]                 # how the clip begins, as the timing model heard it
+    assert all(w not in written for w in missed[1:]) and said.startswith(" ".join(missed))      # [0] recurs later
+    assert all(w in said for w in written.split())
+
+
+@pytest.mark.parametrize("text,timing,filled", [
+    ("the quick brown fox jumps", "Well hello there everyone the quick brown fox jumps", True),   # left out
+    ("Qq the quick brown fox jumps", "Well hello there everyone the quick brown fox jumps", True),  # all but a stray bit
+    ("แดเนียล แลนเทจ the quick brown fox jumps", "Daniel Lantagne the quick brown fox jumps", False),   # other script
+    ("the quick brown fox jumps", "the quick brown fox jumps and then it sleeps all day", True),
+    ("the quick brown fox jumps แดเนียล แลนเทจ", "the quick brown fox jumps Daniel Lantagne", False),
+], ids=["head-left-out", "head-nearly", "head-respelled", "tail-left-out", "tail-respelled"])
+def test_hybrid_fills_a_gap_only_where_the_text_model_wrote_next_to_nothing(text, timing, filled):
+    words = [[(" " if i else "") + w, float(i), i + 0.9] for i, w in enumerate(timing.split())]
+    segs = [{"start": 0.0, "end": float(len(words)), "text": timing, "words": words}]
+    out = " ".join(s["text"] for s in align.hybrid([{"start": 0, "end": len(words), "text": text, "words": []}], segs))
+    extra = len(out.split()) - len(text.split())
+    assert (extra > 0) is filled, out
 
 
 def test_hybrid_thai_no_spaces():

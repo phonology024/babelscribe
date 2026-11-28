@@ -80,7 +80,8 @@ def build():
         "to fix names or change the line width afterwards, edit the text in that .json and call convert_subtitles "
         "instead of transcribing again. burn_subtitles draws the subtitles onto a copy of a video (for TikTok, Reels, "
         "Shorts). Use accurate=true when the user wants "
-        "the fewest mistakes (slower); it is much better for Thai and Hindi. The first run downloads the model "
+        "the fewest mistakes (slower). For Thai and Hindi it uses a fine-tune where this install has or can make one; "
+        "otherwise it uses large-v3 and the result says so in accurate_note: tell the user. The first run downloads the model "
         "(~1.6 GB), so it can take a few minutes. After transcribing you can proofread names, translate, or "
         "summarise from the returned text."))
 
@@ -129,7 +130,8 @@ def build():
 
         file_path: absolute path to the media file (mp4, mkv, mov, mp3, wav, m4a, ...).
         language: ISO code such as en, th, ja, es, hi — or "auto" to detect.
-        accurate: slower, fewest errors (large-v3 with beam search, or the best fine-tune for Thai / Hindi).
+        accurate: slower, fewest errors (large-v3 with beam search, or the best fine-tune for Thai / Hindi). When this
+            install cannot make that fine-tune, large-v3 is used and accurate_note in the result says so.
         formats: comma list from srt, vtt, txt, json, ass (ass = karaoke word highlight). Keep json: it is what
             convert_subtitles reads to re-wrap or re-export later without transcribing again.
         output_dir: folder for the output files; empty = next to the media file.
@@ -182,7 +184,8 @@ def build():
 
         folder: absolute path to the folder holding the media files.
         language: ISO code such as en, th, ja, es, hi — or "auto" to detect each file separately.
-        accurate: slower, fewest errors (large-v3 with beam search, or the best fine-tune for Thai / Hindi).
+        accurate: slower, fewest errors (large-v3 with beam search, or the best fine-tune for Thai / Hindi). When this
+            install cannot make that fine-tune, large-v3 is used and the file's accurate_note says so.
         formats: comma list from srt, vtt, txt, json, ass (ass = karaoke word highlight).
         output_dir: folder for the output files (sub-folders are kept); empty = next to each media file.
         vocabulary: names and terms to spell correctly, e.g. "Pitakpong, babelscribe"; empty = none.
@@ -212,7 +215,8 @@ def build():
                     results.append({"path": str(src), "ok": False, "error": f"{type(r).__name__}: {r}"})
                     continue
                 results.append({"path": str(src), "ok": True, "files": r["files"], "language": r["lang"],
-                                "segments": r["segments"], "seconds": r["seconds"]})
+                                "segments": r["segments"], "seconds": r["seconds"],
+                                **({"accurate_note": r["accurate_note"]} if "accurate_note" in r else {})})
         await _report_progress(ctx, len(media), len(media), f"{len(media)} file(s) done")
 
         ok = [r for r in results if r["ok"]]
@@ -314,9 +318,12 @@ def build():
 
     @srv.tool(title="List languages and models", annotations=ToolAnnotations(read_only_hint=True, open_world_hint=False))
     def list_languages_and_models() -> dict:
-        """Models available, and which model --accurate uses per language."""
+        """Models available, and which model accurate mode uses per language on this computer."""
+        ready = {lang: models.usable(name) for lang, name in models.ACCURATE.items()}
         return {"general": models.GENERAL, "fine_tunes": {k: v["note"] for k, v in models.FINETUNES.items()},
-                "accurate_per_language": {**models.ACCURATE, "*": "large-v3 beam 5"}}
+                "accurate_per_language": {**{lang: name if ready[lang] else "large-v3 beam 5"
+                                             for lang, name in models.ACCURATE.items()}, "*": "large-v3 beam 5"},
+                "accurate_notes": {lang: models.accurate_fallback(lang) for lang, ok in ready.items() if not ok}}
 
     return srv
 

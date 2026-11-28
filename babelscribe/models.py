@@ -7,6 +7,7 @@ gives the TIMING (see align.py)."""
 from __future__ import annotations
 
 import contextlib
+import importlib.util
 import os
 import subprocess
 import sys
@@ -33,28 +34,37 @@ GENERAL = {   # name -> size (approx) ; 'turbo' is the best speed/quality defaul
 ALIASES = {"turbo": "large-v3-turbo", "large": "large-v3"}
 # Community fine-tunes: add a line to support a new language better. 'beam' = needs beam search (greedy loops).
 # 'revision' is the one commit of the repository that is downloaded: some weights are pickle files, which can run code
-# when loaded, so a later change to a repository must not reach anyone by itself.
+# when loaded, so a later change to a repository must not reach anyone by itself. 'weights' is the one weights file that
+# is fetched (some repositories also hold the same weights for other libraries, or twice).
 FINETUNES = {
     "thai-thonburian": {
         "repo": "biodatlab/whisper-th-large-v3-combined", "revision": "ba7197f618400e41b4826c18b2f48e0bc45ed3ca",
+        "weights": "model.safetensors",
         "lang": "th", "beam": 5, "timestamps": False,
         "note": "Thonburian Whisper (Thai) — strong Thai spelling; pair with turbo for timing"},
     "thai-pathumma": {
         "repo": "nectec/Pathumma-whisper-th-large-v3", "revision": "6d5e4f2fc7fc2c05447b3626dd346b1793682eb9",
+        "weights": "model.safetensors",
         "lang": "th", "beam": 5, "timestamps": False,
         "note": "Pathumma Whisper by NECTEC (Thai) — lowest Thai CER on FLEURS"},
     "hindi-vasista": {
         "repo": "vasista22/whisper-hindi-large-v2", "revision": "f98540cee2b8cba5b3f7d1b123608dda0a5f5a95",
+        "weights": "pytorch_model.bin",
         "lang": "hi", "beam": 5, "timestamps": False,
         "note": "Hindi fine-tune of large-v2 (Speech Lab, IIT Madras) — halves Hindi WER on FLEURS"},
     "vietnamese-toantam": {
         "repo": "toantam1290/whisper-large-v3-vietnamese", "revision": "3d446d9dc7c7292a98262a825b6f25065a015e0c",
+        "weights": "model.safetensors",
         "lang": "vi", "beam": 5, "timestamps": False,
         "note": "Vietnamese fine-tune of large-v3 by toantam1290 (Apache-2.0)"},
 }
 # --accurate: per language, the model that scored best on FLEURS (bench/fleurs.py). Languages not listed use large-v3
 # with beam search, which beat every public fine-tune we tried for vi / ar.
 ACCURATE = {"th": "thai-pathumma", "hi": "hindi-vasista"}
+LANGUAGE_NAMES = {"th": "Thai", "hi": "Hindi"}          # of the languages in ACCURATE, for what is said about them
+# what the converter and the weights loader read, besides the weights
+CONVERTER_READS = ("config.json", "generation_config.json", "vocab.json", "added_tokens.json")
+_CONVERTER_NEEDS = ("torch", "transformers", "huggingface_hub", "numpy")
 MODELS = Path(os.environ.get("BABELSCRIBE_MODELS", CACHE / "models"))
 # Peak RAM in MB of one whisper-cli run on a 2 minute recording, measured (docs/memory.md says how): "cpu" = the CPU
 # build, "gpu" = the Vulkan build, whose weights live in the card's own memory. A fine-tune is a large-v3-sized model
@@ -89,6 +99,35 @@ def resolve(name: str) -> tuple[str, dict | None]:
 def path_for(name: str) -> Path:
     name, ft = resolve(name)
     return MODELS / (f"ggml-{name}-q8_0.bin" if ft else f"ggml-{name}.bin")
+
+
+def can_convert(load: bool = False) -> bool:
+    """Can this install convert a fine-tune? It needs the [finetune] extra; the desktop app's engine leaves it out.
+    load=True really imports the packages (a broken one counts as missing); without it they are only looked for, which
+    is instant and enough to answer a question."""
+    try:
+        if load:
+            for module in _CONVERTER_NEEDS:
+                importlib.import_module(module)
+            return True
+        return all(importlib.util.find_spec(module) for module in _CONVERTER_NEEDS)
+    except (ImportError, OSError, ValueError):      # OSError: a library of torch that cannot be loaded
+        return False
+
+
+def usable(name: str, load: bool = False) -> bool:
+    """Is the fine-tune ready (converted earlier, by any install that shares the models folder) or can it be made?"""
+    return path_for(name).exists() or can_convert(load)
+
+
+def accurate_fallback(lang: str, using: str = "large-v3") -> str:
+    """The one line for accurate mode when the language's fine-tune cannot be had."""
+    language = LANGUAGE_NAMES[lang]
+    line = (f"the {language} fine-tune needs a one-time conversion that this install can't do; using {using}, which is "
+            f"less accurate for {language}")
+    if not getattr(sys, "frozen", False):          # a pip install can add the converter; the packaged programs cannot
+        line += ' (pip install "babelscribe[finetune]" adds it)'
+    return line
 
 
 def ensure(name: str, quantizer: Path | None = None) -> Path:
@@ -152,7 +191,8 @@ def convert_finetune(name: str, ft: dict, out: Path, quantizer: Path | None) -> 
         raise SystemExit("fine-tune conversion needs extras: pip install \"babelscribe[finetune]\"")
     work = MODELS / f"_{name}"
     work.mkdir(parents=True, exist_ok=True)
-    hf = snapshot_download(ft["repo"], revision=ft["revision"], local_dir=work / "hf")
+    hf = snapshot_download(ft["repo"], revision=ft["revision"], local_dir=work / "hf",
+                           allow_patterns=[*CONVERTER_READS, ft["weights"]])
     oa = work / "openai-whisper"
     _pinned(MEL_FILTERS, oa / "whisper" / "assets" / "mel_filters.npz", MEL_FILTERS_SHA256, "the converter's filter table")
     original = work / "convert-h5-to-ggml.orig.py"

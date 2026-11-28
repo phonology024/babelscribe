@@ -7,7 +7,9 @@ macOS asks you to confirm the first start (see below).
 ## What it does
 
 1. **Choose a file**: drop a video or audio file on the window, or pick one. Recent files are listed.
-2. **Options**: spoken language (or auto detect), accurate mode, **translate the subtitles** into another language with a
+2. **Options**: spoken language (or auto detect), accurate mode (for Thai and Hindi the app uses large-v3 and says so,
+   because it cannot convert the fine-tunes; if you converted one with the command line, `pip install
+   "babelscribe[finetune]"` and one `--accurate` run, the app uses it), **translate the subtitles** into another language with a
    model on this computer (Ollama, LM Studio, llama-server or colibri, found on their usual ports; *Check again* looks once
    more), **burn the subtitles into the video** in the *Plain*, *Karaoke* or *Shorts* look (the small pictures use the
    colours the engine really draws; an audio file has no picture, so the switch is off for it), which files to write

@@ -234,5 +234,10 @@ def report(ram: dict | None, probe: Callable[[], bool] | None = None) -> dict:
         rows.append({"name": name, "kind": "general" if name in models.GENERAL else "finetune",
                      "ram_mb": need_mb(name, gpu=gpu), "gpu_ram_mb": models.RAM_MB[name]["gpu"] + MARGIN_MB,
                      "fits": None if not ram else fits(name, ram, None, gpu), "warning": warning(name, ram, None, probe)})
+    ready = {lang: models.usable(name) for lang, name in models.ACCURATE.items()}
     return {"ram": ram, "gpu": gpu, "margin_mb": MARGIN_MB, "default": default, "default_used": pick, "default_note": say,
-            "accurate": {**models.ACCURATE, "*": "large-v3"}, "models": rows}
+            # what accurate mode will really use here, and what it says where that is not the language's fine-tune
+            "accurate": {**{lang: name if ready[lang] else "large-v3" for lang, name in models.ACCURATE.items()},
+                         "*": "large-v3"},
+            "accurate_note": {lang: models.accurate_fallback(lang) for lang, ok in ready.items() if not ok},
+            "models": rows}

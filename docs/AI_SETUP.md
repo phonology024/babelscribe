@@ -69,6 +69,10 @@ It works when `jfk.txt` holds the sentence with "ask not what your country can d
 `jfk.txt` afterwards. Without `-m`, babelscribe uses `turbo` (1.6 GB, downloaded the first time), or a smaller model
 when free memory is short. An interrupted download continues when the command is run again.
 
+For the fewest errors in **Thai or Hindi**, `--accurate` needs a fine-tune that is converted once. Ask first: it means
+`pip install "babelscribe[finetune]"` (torch, several hundred MB or more), a download of about 3 GB (Thai) or 6 GB
+(Hindi) and a lot of memory while converting (about 10 GB for Thai). Without it babelscribe uses large-v3 and says so.
+
 ## 5. Connect it to their AI app (MCP)
 ```bash
 babelscribe connect status                # which apps are on this computer, and whether babelscribe is in each

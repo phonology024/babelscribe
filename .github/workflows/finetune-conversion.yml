@@ -1,28 +1,45 @@
 # One real fine-tune conversion with the pinned files (converter, filter table, repository commit), then the converted
-# model transcribes Thai clips from Google FLEURS (CC BY 4.0, downloaded for the test, not redistributed).
+# model transcribes clips of its language from Google FLEURS (CC BY 4.0, downloaded for the test, not redistributed).
 # Too heavy for every pull request (several GB, CPU torch). Run it by hand from the Actions tab, or, for a branch whose
-# workflow file is not on main yet, push that branch to finetune-check/<anything>.
+# workflow file is not on main yet, push that branch to finetune-check/<fine-tune name>.
 name: finetune-conversion
 on:
   workflow_dispatch:
     inputs:
-      model:                                   # the Thai ones: the test clips are Thai
-        { description: "fine-tune to convert", type: choice, options: [thai-pathumma, thai-thonburian], default: thai-pathumma }
+      model:
+        description: "fine-tune to convert"
+        type: choice
+        options: [thai-pathumma, thai-thonburian, hindi-vasista, vietnamese-toantam]
+        default: thai-pathumma
   push:
     branches: ["finetune-check/**"]
 
 jobs:
   convert:
+    name: convert ${{ github.event.inputs.model || github.ref_name }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
       BABELSCRIBE_HOME: ${{ github.workspace }}/.babelscribe-convert
-      MODEL: ${{ github.event.inputs.model || 'thai-pathumma' }}
       PYTHONUTF8: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
+      - name: Which fine-tune, and clips in which language
+        env:
+          PICKED: ${{ github.event.inputs.model }}
+        run: |
+          model="$PICKED"
+          if [ -z "$model" ]; then model="${GITHUB_REF_NAME#finetune-check/}"; model="${model%%/*}"; fi
+          case "$model" in
+            thai-pathumma|thai-thonburian) clips=th_th ;;
+            hindi-vasista) clips=hi_in ;;
+            vietnamese-toantam) clips=vi_vn ;;
+            *) echo "no such fine-tune: $model"; exit 1 ;;
+          esac
+          echo "MODEL=$model" >> "$GITHUB_ENV"
+          echo "CLIPS=$clips" >> "$GITHUB_ENV"
       - name: Free disk space (this runner is thrown away)
         run: |
           df -h /
@@ -35,10 +52,10 @@ jobs:
           pip install torch --index-url https://download.pytorch.org/whl/cpu
           pip install -e ".[finetune]"
           pip list 2>/dev/null | grep -i -E "^(torch|transformers|huggingface.hub|numpy) "
-      - name: Three Thai test clips with their reference text
-        run: python bench/fleurs.py fetch clips --n 3 --langs th_th
+      - name: Three test clips with their reference text
+        run: python bench/fleurs.py fetch clips --n 3 --langs "$CLIPS"
       - name: Convert the pinned fine-tune and transcribe with it
-        run: python tests/smoke/finetune_conversion.py clips/th_th "$MODEL"
+        run: python tests/smoke/finetune_conversion.py "clips/$CLIPS" "$MODEL"
       - name: Disk and memory afterwards
         if: always()
         run: |

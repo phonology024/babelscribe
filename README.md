@@ -93,12 +93,14 @@ GPU: AMD Radeon RX 9070 XT via Vulkan. *default* = `large-v3-turbo`; *accurate* 
 | Hindi, Google FLEURS, WER | 28.4% | 12.6% |
 | English, Google FLEURS, WER | 6.1% | 5.7% |
 
+The Thai and Hindi fine-tunes are converted on your computer once, which needs `pip install "babelscribe[finetune]"`. Without it (the desktop app and the Claude Desktop bundle cannot convert) and with no model converted earlier, `--accurate` uses large-v3, which is less accurate for those two, and says so. A model converted once is used by every babelscribe that shares the models folder.
+
 FLEURS: 50 utterances per language. All 16 languages, four TED / TEDx talks, method and the models that were tried and
 not used: [docs/benchmarks.md](https://github.com/phonology024/babelscribe/blob/main/docs/benchmarks.md).
 
 ## Languages
 All 99 languages Whisper was trained on, auto-detected or forced with `-l`. For Thai and Hindi, `--accurate` uses a
-community fine-tune. The full list and how to add a fine-tune:
+community fine-tune (it needs the one-time conversion described under [Results](#results)). The full list and how to add a fine-tune:
 [docs/languages.md](https://github.com/phonology024/babelscribe/blob/main/docs/languages.md).
 
 ## ภาษาไทย
@@ -106,6 +108,7 @@ community fine-tune. The full list and how to add a fine-tune:
 ถอดเสียงจากไฟล์เสียงหรือวิดีโอได้ทุกภาษา บนการ์ดจอทุกยี่ห้อ (AMD / NVIDIA / Intel ผ่าน Vulkan, Apple ผ่าน Metal) หรือ CPU
 ภาษาไทยแนะนำ `babelscribe ไฟล์.mp4 -l th --accurate` — ข้อความจาก Pathumma Whisper (NECTEC) ที่ผิดน้อยที่สุดใน FLEURS (CER 8.9% เทียบ turbo 15.9%) + เวลาจาก large-v3-turbo
 หรือเลือก Thonburian Whisper เอง: `--text-model thai-thonburian`
+โมเดลภาษาไทยต้องแปลงในเครื่องหนึ่งครั้ง โดยติดตั้ง `pip install "babelscribe[finetune]"` ถ้าไม่ได้ติดตั้งส่วนนี้ (แอปเดสก์ท็อปและไฟล์ .mcpb ของ Claude Desktop แปลงเองไม่ได้) และยังไม่เคยแปลงมาก่อน babelscribe จะใช้ large-v3 แทน ซึ่งแม่นน้อยกว่าสำหรับภาษาไทย และจะแจ้งให้ทราบ แปลงครั้งเดียวแล้ว babelscribe ทุกตัวในเครื่องที่ใช้โฟลเดอร์โมเดลเดียวกันจะใช้ได้
 
 ## More docs
 - [Troubleshooting](https://github.com/phonology024/babelscribe/blob/main/docs/troubleshooting.md) · [Setup steps for AI assistants](https://github.com/phonology024/babelscribe/blob/main/docs/AI_SETUP.md)

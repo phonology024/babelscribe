@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { burning, commandLine, DEFAULT_OPTIONS, engineArgs, exited, formatLeft, memoryNote, newRun, overall, parseEvent, parseFit, secondsLeft, stagesFor, step, type Run } from "./engine";
+import { accurateNote, burning, commandLine, DEFAULT_OPTIONS, engineArgs, exited, formatLeft, memoryNote, newRun, overall, parseEvent, parseFit, secondsLeft, stagesFor, step, type Run } from "./engine";
 
 const path = "C:\\Users\\you\\My Videos\\talk.mp4";
 
@@ -123,6 +123,26 @@ describe("what fits this computer", () => {
   });
 });
 
+
+describe("what Accurate mode will do", () => {
+  const can = { ram: null, default: "turbo", default_used: "turbo", default_note: null, models: [],
+    accurate: { th: "thai-pathumma", hi: "hindi-vasista", "*": "large-v3" }, accurate_note: {} };
+  const cannot = { ...can, accurate: { th: "large-v3", hi: "large-v3", "*": "large-v3" },
+    accurate_note: { th: "the Thai fine-tune needs a one-time conversion that this install can't do; using large-v3" } };
+  it("promises a Thai or Hindi model only when the engine will use one", () => {
+    expect(accurateNote(can, "th")).toBe("Thai model for the text. Slower.");
+    expect(accurateNote(can, "hi")).toBe("Hindi model for the text. Slower.");
+    expect(accurateNote(can, "de")).toBe("About 2x slower.");
+    expect(accurateNote(can, "auto")).toBe("About 2x slower.");
+  });
+  it("shows the engine's own line when the fine-tune cannot be had", () => {
+    expect(accurateNote(cannot, "th")).toBe(cannot.accurate_note.th);
+    expect(accurateNote(cannot, "hi")).toBe("About 2x slower.");
+  });
+  it("promises nothing when the engine did not answer", () => {
+    for (const lang of ["th", "hi", "en", "auto"]) expect(accurateNote(null, lang)).toBe("About 2x slower.");
+  });
+});
 
 describe("translate and burn", () => {
   const video = "C:\\Videos\\talk.mp4";

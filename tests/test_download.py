@@ -487,6 +487,20 @@ def test_a_full_disk_while_unpacking_keeps_the_zip_and_installs_nothing(server, 
     assert len(list((tmp_path / "home" / "bin").glob("*.part"))) == 1
 
 
+@pytest.mark.parametrize("system,flavor,mark", [("Windows", "cpu", True), ("Linux", "cpu", True), ("Darwin", "cpu", False),
+                                                ("Windows", "vulkan", False)])
+def test_a_downloaded_cpu_build_says_when_it_only_stands_in(server, tmp_path, monkeypatch, system, flavor, mark):
+    import json
+    old = binary_server(server, monkeypatch, tmp_path)
+    name = old.replace("-cpu.zip", f"-{flavor}.zip")
+    server.files[name] = server.files[old]
+    monkeypatch.setitem(backend.SHA256, name, backend.SHA256[old])
+    monkeypatch.setattr(backend, "asset_name", lambda f=None: name)
+    monkeypatch.setattr(backend.platform, "system", lambda: system)
+    exe = backend.fetch_binary(flavor)
+    assert json.loads((exe.parent / backend.RECEIPT).read_text(encoding="utf-8"))["stand_in"] is mark
+
+
 def test_a_new_pinned_build_never_continues_the_old_ones_part(server, tmp_path, monkeypatch):
     name = binary_server(server, monkeypatch, tmp_path)
     folder = tmp_path / "home" / "bin"

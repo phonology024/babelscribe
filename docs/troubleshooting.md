@@ -44,12 +44,21 @@ Close other programs, or pick the smaller model the message names (`-m small`). 
 The lines after it are whisper-cli's own. Update the graphics driver first. To find out whether the GPU is the cause,
 run the file once on the CPU: `babelscribe FILE --flavor cpu` (slower; not on Apple Silicon).
 
+**"the Thai (or Hindi) fine-tune needs a one-time conversion that this install can't do; using large-v3 ..."**
+Your subtitles are made, with large-v3 instead of the fine-tune. To get the fine-tune, install the converter with pip and
+run one file with `--accurate` (it downloads about 3 GB for Thai, 6 GB for Hindi, and needs about 10 GB of free memory
+while converting Thai):
+`pip install "babelscribe[finetune]"`, then `babelscribe FILE -l th --accurate`. The desktop app and AI apps on the same
+computer use the converted model from then on.
+
 **It is much slower than expected**
 `babelscribe doctor` (or `babelscribe devices`) shows which GPU is used. With none listed, update the graphics driver;
 with several, `--device N` chooses.
 
-**"this computer has no Vulkan library (libvulkan1) ... the CPU build is used"** (Linux)
-`sudo apt install libvulkan1`, or your distribution's Vulkan loader package, then run babelscribe again.
+**"this computer has no Vulkan library (libvulkan1 / vulkan-1.dll) ... the CPU build is used"** (Linux, Windows)
+babelscribe works, on the CPU. For the GPU: on Linux `sudo apt install libvulkan1` (or your distribution's Vulkan loader
+package); on Windows install or update the graphics card's driver (a virtual machine or a basic display driver has no
+Vulkan). Then run babelscribe again: it downloads the GPU build once the library is there.
 
 **"no font for ... text was found on this computer"** (burning subtitles into a video)
 Install one of the fonts the message names, or give one you have with `--font "Name"`.

@@ -78,14 +78,15 @@ def collect_report() -> tuple[list[tuple[str, str]], str]:
     binary = None
     try:
         binary = backend.find_binary(download=False)
-        result = subprocess.run(
-            [str(binary), "--help"],
-            capture_output=True,
-            text=True,
-            errors="replace",
-            timeout=10,
-            check=False,
-        )
+        with backend._no_error_boxes():
+            result = subprocess.run(
+                [str(binary), "--help"],
+                capture_output=True,
+                text=True,
+                errors="replace",
+                timeout=10,
+                check=False,
+            )
         if result.returncode == 0 or result.stdout or result.stderr:
             checks.append(("whisper-cli", f"Found and launched: {binary}"))
             checks.append(("whisper-cli build", backend.binary_origin(binary)))
@@ -102,7 +103,8 @@ def collect_report() -> tuple[list[tuple[str, str]], str]:
             except (OSError, subprocess.SubprocessError) as exc:
                 checks.append(("GPU backends", f"Could not inspect devices: {exc}"))
         else:
-            checks.append(("whisper-cli", f"Found at {binary}, but --help exited with {result.returncode}"))
+            why = f"; {backend.no_vulkan_notice()}" if backend.vulkan_loader_missing() else ""
+            checks.append(("whisper-cli", f"Found at {binary}, but --help exited with {result.returncode}{why}"))
     except FileNotFoundError:
         checks.append(("whisper-cli", "Not found; no download was attempted"))
     except (OSError, subprocess.SubprocessError) as exc:

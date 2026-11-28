@@ -87,7 +87,8 @@ def transcribe_many(
                 results.append({"path": str(src), "ok": False, "error": why})
                 continue
             results.append({"path": str(src), "ok": True, "skipped": False, "files": r["files"],
-                            "language": r["lang"], "segments": r["segments"], "seconds": r["seconds"]})
+                            "language": r["lang"], "segments": r["segments"], "seconds": r["seconds"],
+                            **({"accurate_note": r["accurate_note"]} if "accurate_note" in r else {})})
     failed = sum(not r["ok"] for r in results)
     skipped = sum(bool(r.get("skipped")) for r in results)
     return {"total": len(media), "succeeded": len(results) - failed - skipped, "skipped": skipped,
@@ -238,14 +239,22 @@ def transcribe_file(
         lang = transcribe.detected_language(binary, timing, src, dev)
         log(f"language: {lang}")
     beam = 5 if translate and accurate else None
+    accurate_note = None
     if accurate and not text_model and not translate:
-        if lang in models.ACCURATE:
-            text_model = models.ACCURATE[lang]          # fine-tune text + turbo timing
+        wanted = models.ACCURATE.get(lang)
+        if wanted and models.usable(wanted, load=True):
+            text_model = wanted                         # fine-tune text + turbo timing
             _tell(log, mem and ram.warning(text_model, mem[0], ram.media_minutes(src), mem[1]))
-        elif model == "turbo":
-            model, beam = "large-v3", 5
-            _tell(log, mem and ram.warning(model, mem[0], ram.media_minutes(src), mem[1]))
-            timing = models.ensure(model, _quantizer(binary))
+        else:                                           # no fine-tune for the language, or none to be had here
+            if model == "turbo":
+                model, beam = "large-v3", 5
+                _tell(log, mem and ram.warning(model, mem[0], ram.media_minutes(src), mem[1]))
+                timing = models.ensure(model, _quantizer(binary))
+            elif wanted and models.resolve(model)[0] == "large-v3":
+                beam = 5
+            if wanted:
+                accurate_note = models.accurate_fallback(lang, models.resolve(model)[0])
+                log(accurate_note)
     t0 = time.time()
     log(f"transcribing with {model} on {gpu['backend']} {gpu['name']} ...")
     more: dict = {}   # only passed when asked for, so callers and stand-ins that predate progress keep working
@@ -287,4 +296,5 @@ def transcribe_file(
     took = time.time() - t0
     log(f"{len(segs)} segments in {took:.1f}s -> " + ", ".join(str(f) for f in files))
     return {**meta, "files": [str(f) for f in files], "segments": len(segs), "seconds": round(took, 1),
-            "text": "\n".join(s["text"].strip() for s in segs)}
+            "text": "\n".join(s["text"].strip() for s in segs),
+            **({"accurate_note": accurate_note} if accurate_note else {})}

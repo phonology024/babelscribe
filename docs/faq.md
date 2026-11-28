@@ -12,6 +12,7 @@ Back to the [README](../README.md).
 **What is the most accurate free transcription for Thai?**
 `babelscribe video.mp4 -l th --accurate` — Pathumma Whisper (NECTEC) for the text plus Whisper turbo for timing:
 CER 8.9% on Google FLEURS vs 15.9% for plain Whisper turbo. Thonburian Whisper is available too (`--text-model thai-thonburian`).
+The Thai and Hindi fine-tunes are converted on your computer once, which needs `pip install "babelscribe[finetune]"`. Without it (the desktop app and the Claude Desktop bundle cannot convert) and with no model converted earlier, `--accurate` uses large-v3, which is less accurate for those two, and says so. A model converted once is used by every babelscribe that shares the models folder.
 
 **Can Claude / ChatGPT Codex / Gemini transcribe a video on my computer?**
 Yes — add babelscribe as an MCP server (see [Use it from an AI app](../README.md#use-it-from-an-ai-app-mcp--no-terminal-needed)). Claude Desktop installs it with one click from

@@ -14,7 +14,7 @@ Vulkan SDK yourself. babelscribe downloads a prebuilt `whisper-cli` for your sys
 | NVIDIA on Linux (alternative) | CUDA | `linux-x64-cuda` (`--flavor cuda`) |
 | AMD / NVIDIA / Intel GPU on Linux | Vulkan | `linux-x64-vulkan` |
 | Apple Silicon | Metal | `macos-arm64-metal` |
-| No usable GPU | CPU | `*-cpu` (`--flavor cpu`) |
+| No usable GPU | CPU | `*-cpu` (`--flavor cpu`; chosen by itself where the Vulkan library is missing) |
 
 ## Features
 - **Any input** — mp4, mkv, mov, mp3, wav, m4a… (ffmpeg is bundled through `imageio-ffmpeg`).
@@ -22,7 +22,7 @@ Vulkan SDK yourself. babelscribe downloads a prebuilt `whisper-cli` for your sys
 - **Picks the right GPU** — prefers a discrete card over an integrated one; `babelscribe devices` lists them, `--device N` overrides.
 - **Long files that don't loop** — runs whisper with `--max-context 0`, which stops the classic "same sentence repeated forever" hallucination on long recordings.
 - **Hybrid mode for better spelling in your language** — community fine-tunes (e.g. Thai *Thonburian Whisper*) spell far better but often lose timestamps. `--text-model` takes the text from the fine-tune and the timing from `large-v3-turbo`, aligned character by character (works for languages without spaces), cut only at word boundaries, with the timing model filling any words the fine-tune skipped.
-- **`--accurate`** — slower, fewest errors: large-v3 with beam search, or for Thai and Hindi the best community fine-tune (hybrid). Chosen per language from the [FLEURS benchmark](benchmarks.md#benchmark-16-languages-on-fleurs).
+- **`--accurate`** — slower, fewest errors: large-v3 with beam search, or for Thai and Hindi the best community fine-tune (hybrid). Chosen per language from the [FLEURS benchmark](benchmarks.md#benchmark-16-languages-on-fleurs). The Thai and Hindi fine-tunes are converted on your computer once, which needs `pip install "babelscribe[finetune]"`. Without it (the desktop app and the Claude Desktop bundle cannot convert) and with no model converted earlier, `--accurate` uses large-v3, which is less accurate for those two, and says so. A model converted once is used by every babelscribe that shares the models folder.
 - **Custom vocabulary** — `--prompt "Pitakpong, babelscribe"` gives whisper an initial prompt that biases the spelling of names and jargon. In the MCP `transcribe` tool the same thing is the `vocabulary` argument. While a prompt is set, `--max-context 0` is not passed (whisper.cpp ignores the prompt otherwise).
 - **Translate to English** — `--translate` writes the transcript translated to English (whisper's translate task, any source language). It uses `large-v3` because turbo was not trained to translate, and cannot be combined with `--text-model`. In the MCP `transcribe` tool it is the `translate` argument.
 - **Progress** — in a terminal the CLI draws a progress bar per file (`--no-progress` turns it off; it is never drawn into a pipe or a log). MCP clients get a notification every 5 seconds with the real percentage (`progress` of `total` 100 for one file; files done plus the fraction of the current one for a folder). From Python: `transcribe_file(..., progress=callback)`, called with 0 to 100. For a program that runs the command, `--progress-json` prints one JSON object per line on stdout instead (`progress`, `log`, then `done` with the files written, or `error`); everything else goes to stderr. `--exit-when-stdin-closes` is for a program that keeps babelscribe's standard input open (and never writes to it): when that program ends, however it ends, babelscribe stops whisper-cli and ffmpeg and exits. The desktop app uses it, so killing the app never leaves a transcription running on the GPU.
@@ -122,7 +122,8 @@ run babelscribe if it has to give up. The finished file is checked against its s
 ([troubleshooting.md](troubleshooting.md)).
 
 Models download on first use to `~/.babelscribe/models` (`BABELSCRIBE_MODELS` to change). Hybrid fine-tunes are converted on your
-machine from their original Hugging Face repo — install `pip install "babelscribe[finetune]"` once; converted weights are never
+machine from their original Hugging Face repo — install `pip install "babelscribe[finetune]"` once. Only one weights file and
+the few files the converter reads are downloaded (about 3 GB; 6 GB for Hindi). Converted weights are never
 redistributed, so each fine-tune keeps its own licence. Thai word boundaries: `pip install "babelscribe[thai]"`.
 A computer with little free memory gets a smaller model than `turbo` when you do not name one, and a warning when you name one
 that will not fit; what each model needs is in [memory.md](memory.md).

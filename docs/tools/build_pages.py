@@ -92,6 +92,7 @@ babelscribe talk.mp4 --accurate            # fewest errors</code></pre>""",
 babelscribe คลิป.mp4 -l th              # เร็ว
 babelscribe คลิป.mp4 -l th --accurate   # แม่นที่สุด (ช้ากว่า)
 babelscribe คลิป.mp4 -l th -f srt,txt   # ได้ทั้งซับและข้อความล้วน</code></pre>
+<p>โมเดลภาษาไทยต้องแปลงในเครื่องหนึ่งครั้ง โดยติดตั้ง <code>pip install "babelscribe[finetune]"</code> ถ้าไม่ได้ติดตั้งส่วนนี้ (แอปเดสก์ท็อปและไฟล์ .mcpb ของ Claude Desktop แปลงเองไม่ได้) และยังไม่เคยแปลงมาก่อน babelscribe จะใช้ large-v3 แทน ซึ่งแม่นน้อยกว่าสำหรับภาษาไทย และจะแจ้งให้ทราบ แปลงครั้งเดียวแล้ว babelscribe ทุกตัวในเครื่องที่ใช้โฟลเดอร์โมเดลเดียวกันจะใช้ได้</p>
 <p>ไม่อยากพิมพ์คำสั่ง: ติดตั้ง babelscribe ใน Claude Desktop แล้วพิมพ์ในแชทว่า “ทำซับไทยให้คลิปล่าสุดในโฟลเดอร์ดาวน์โหลด” ได้เลย</p>""",
      [("ถอดเสียงภาษาไทยฟรีโปรแกรมไหนแม่นที่สุด",
        "จากการวัดบน FLEURS ของ Google การใช้ Pathumma Whisper ของ NECTEC ผ่าน babelscribe --accurate ได้ CER 8.9% "
@@ -241,7 +242,7 @@ babelscribe meeting.m4a -f txt,srt</code></pre>""",
 <li>ดับเบิลคลิก หรือเปิด Claude Desktop → Settings → Extensions → Install extension</li>
 <li>พิมพ์ในแชท เช่น “ทำซับไทยให้คลิปล่าสุดใน Downloads” แล้ว Claude จะหาไฟล์ ถอดเสียงด้วยการ์ดจอของคุณ และบันทึก <code>.srt</code> ไว้ข้างไฟล์</li>
 <li>สั่งต่อได้ เช่น “ตรวจชื่อคนให้หน่อย” หรือ “แปลซับเป็นอังกฤษ”</li></ol>
-<p>ใช้ Claude Code ได้เหมือนกัน: <code>claude mcp add babelscribe -- uvx babelscribe mcp</code> ภาษาไทยให้เลือกโหมดแม่นยำสูง (Pathumma Whisper ของ NECTEC, CER 8.9% บน FLEURS) ดูรายละเอียดที่ <a href="thai-speech-to-text.html">ถอดเสียงภาษาไทย</a></p>""",
+<p>ใช้ Claude Code ได้เหมือนกัน: <code>claude mcp add babelscribe -- uvx babelscribe mcp</code> โหมดแม่นยำสูงของภาษาไทย (Pathumma Whisper ของ NECTEC, CER 8.9% บน FLEURS) ต้องแปลงโมเดลหนึ่งครั้งก่อน ดูวิธีที่ <a href="thai-speech-to-text.html">ถอดเสียงภาษาไทย</a></p>""",
      [("ทำซับไทยด้วย Claude ได้ไหม", "ได้ ติดตั้ง babelscribe เป็น MCP ใน Claude Desktop แล้วสั่งในแชท Claude จะถอดเสียงคลิปในเครื่องของคุณให้"),
       ("ไฟล์วิดีโอถูกอัปโหลดไหม", "ไม่ การถอดเสียงทำงานในเครื่องของคุณ ไม่มีการอัปโหลดไฟล์เสียงหรือวิดีโอ"),
       ("ใช้ ChatGPT หรือ Grok บนเว็บได้ไหม", "ไม่ได้ เพราะแอปเว็บเข้าถึงได้เฉพาะเซิร์ฟเวอร์บนอินเทอร์เน็ต ไม่ใช่คอมพิวเตอร์ของคุณ ให้ใช้ Claude Desktop, Claude Code, Codex CLI, Gemini CLI หรือ Cursor")]),

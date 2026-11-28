@@ -1,7 +1,7 @@
 """One real fine-tune conversion, end to end, with the pinned files. Heavy (several GB, CPU torch): run by the
 finetune-conversion workflow, not by the unit tests.
 
-    python bench/fleurs.py fetch clips --n 3 --langs th_th
+    python bench/fleurs.py fetch clips --n 3 --langs th_th          # hi_in, vi_vn: the fine-tune's language
     BABELSCRIBE_HOME=empty-folder python tests/smoke/finetune_conversion.py clips/th_th thai-pathumma
 
 1. The command a person types downloads the pinned fine-tune, converter and filter table, converts, quantizes and
@@ -18,7 +18,8 @@ from pathlib import Path
 
 from babelscribe import api, backend, download, models, transcribe
 
-MAX_CER = 0.35        # mean character error rate; the model scores 0.089 on FLEURS Thai (docs/benchmarks.md)
+MAX_CER = 0.35        # mean character error rate; a working fine-tune is far below it, a broken conversion far above
+SCRIPT = {"th": ("\u0e00", "\u0e7f"), "hi": ("\u0900", "\u097f"), "vi": ("a", "z")}      # letters the language is written in
 
 
 def plain(text: str) -> str:
@@ -35,8 +36,9 @@ def cer(ref: str, hyp: str) -> float:
     return row[-1] / max(1, len(ref))
 
 
-def has_thai(text: str) -> bool:
-    return any("฀" <= c <= "๿" for c in text)
+def written_in(lang: str, text: str) -> bool:
+    low, high = SCRIPT[lang]
+    return any(low <= c <= high for c in text.lower())
 
 
 def check(ok: bool, what: str) -> None:
@@ -54,13 +56,14 @@ def main() -> None:
 
     first = sorted(refs)[0]
     out = clips / "hybrid"
-    # what --accurate does for Thai: the fine-tune's text with the default model's (turbo) timing
-    subprocess.run([sys.executable, "-m", "babelscribe", str(clips / f"{first}.wav"), "-l", "th",
+    # what --accurate does: the fine-tune's text with the default model's (turbo) timing
+    lang = ft["lang"]
+    subprocess.run([sys.executable, "-m", "babelscribe", str(clips / f"{first}.wav"), "-l", lang,
                     "--text-model", name, "--flavor", "cpu", "-f", "txt,json", "-o", str(out)], check=True)
     text = Path(f"{out}.txt").read_text(encoding="utf-8")
     meta = json.loads(Path(f"{out}.json").read_text(encoding="utf-8"))["meta"]
     print("reference:", refs[first], "\nhybrid:   ", text.strip())
-    check(meta.get("text_model") == name and has_thai(text), "the command converted the fine-tune and wrote Thai text")
+    check(meta.get("text_model") == name and written_in(lang, text), f"the command converted the fine-tune and wrote text ({lang})")
     together = cer(plain(refs[first]), plain(text))
     check(together < MAX_CER, f"and that text is right: CER {together:.3f} is below {MAX_CER}")
 
@@ -70,6 +73,11 @@ def main() -> None:
     mel = work / "openai-whisper" / "whisper" / "assets" / "mel_filters.npz"
     check(download.sha256_of(mel) == models.MEL_FILTERS_SHA256, "with the pinned filter table")
     check(not (work / "openai-whisper" / ".git").exists(), "nothing was cloned")
+    got = sorted(p.relative_to(work / "hf").as_posix() for p in (work / "hf").rglob("*")
+                 if p.is_file() and ".cache" not in p.parts)
+    wanted = sorted([*models.CONVERTER_READS, ft["weights"]])
+    check(got == wanted, f"only the files that are read were downloaded: {got}")
+    fetched = sum((work / "hf" / f).stat().st_size for f in got) / 1e9
     records = list((work / "hf" / ".cache").rglob("*.metadata"))       # huggingface_hub: line 1 is the commit
     commits = {r.read_text(encoding="utf-8").splitlines()[0] for r in records}
     check(bool(records) and commits == {ft["revision"]}, f"the weights are of commit {ft['revision']} (found {commits})")
@@ -85,12 +93,13 @@ def main() -> None:
         said = " ".join(s["text"] for s in segs)
         scores.append(cer(plain(refs[key]), plain(said)))
         print(f"clip {key}: CER {scores[-1]:.3f}\n  reference: {refs[key]}\n  converted: {said}", flush=True)
-        check(has_thai(said), f"clip {key}: the converted model writes Thai")
+        check(written_in(lang, said), f"clip {key}: the converted model writes text ({lang})")
     mean = sum(scores) / len(scores)
     check(mean < MAX_CER, f"mean CER {mean:.3f} over {len(scores)} clips is below {MAX_CER}")
 
     summary = (f"### {name} converted and transcribing\n- commit `{ft['revision']}`, {size:.2f} GB q8_0\n"
-               f"- CER on {len(scores)} FLEURS Thai clips: {', '.join(f'{s:.3f}' for s in scores)} (mean {mean:.3f})\n"
+               f"- downloaded from the repository: {fetched:.2f} GB ({', '.join(got)})\n"
+               f"- CER on {len(scores)} FLEURS {lang} clips: {', '.join(f'{s:.3f}' for s in scores)} (mean {mean:.3f})\n"
                f"- CER of the command's own output (fine-tune text, turbo timing) on the first clip: {together:.3f}\n")
     try:
         import resource

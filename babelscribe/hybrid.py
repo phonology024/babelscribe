@@ -29,6 +29,13 @@ def run(binary: Path, text_model: Path, media: Path, time_segs: list[dict], lang
         progress: Callable[[float], None] | None = None) -> list[dict]:
     """progress, when given, is called with 0-100: the share of chunks whisper-cli has finished."""
     parts = chunks(time_segs)
+    return merge(parts, text_pass(binary, text_model, media, parts, lang, device, beam, verbose, pad, prompt, progress))
+
+
+def text_pass(binary: Path, text_model: Path, media: Path, parts: list[tuple[float, float, list[dict]]], lang: str,
+              device: int, beam: int | None, verbose: bool = False, pad: float = .25, prompt: str | None = None,
+              progress: Callable[[float], None] | None = None) -> list[str]:
+    """What the text model writes for each chunk."""
     with tempfile.TemporaryDirectory() as d:
         wavs = []
         for i, (a, b, _) in enumerate(parts):
@@ -48,9 +55,14 @@ def run(binary: Path, text_model: Path, media: Path, time_segs: list[dict], lang
         for w in wavs:
             j = json.loads(Path(str(w) + ".json").read_text(encoding="utf-8", errors="replace"))
             texts.append(" ".join(s["text"].strip() for s in j.get("transcription", [])))
+    return texts
+
+
+def merge(parts: list[tuple[float, float, list[dict]]], texts: list[str], combine=align.hybrid) -> list[dict]:
+    """The chunk texts on the timing model's segments (bench/hybrid_bench.py also calls this with an older `combine`)."""
     out = []
     for (a, b, segs), text in zip(parts, texts):
         if not text.strip():
             out.extend(segs); continue
-        out.extend(align.hybrid([{"start": a, "end": b, "text": text, "words": []}], segs))
+        out.extend(combine([{"start": a, "end": b, "text": text, "words": []}], segs))
     return out
