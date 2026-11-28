@@ -104,16 +104,15 @@ def asset_name(flavor: str | None = None) -> str:
 
 
 def _cached_order(flavor: str | None) -> list[Path]:
-    """The whisper-cli builds in the cache, best first: the flavour asked for; else, on a Linux that can run Vulkan, the
-    Vulkan build (a CPU build kept from a time it could not must not stay the choice for good); else by name."""
+    """The whisper-cli builds in the cache, best first. With a flavour asked for, only builds of that flavour (another
+    one is no answer to it: "--flavor cpu" must not run the cached Vulkan build). Else, on a Linux that can run Vulkan,
+    the Vulkan build first (a CPU build kept from a time it could not must not stay the choice for good); else by name."""
     found = sorted((CACHE / "bin").rglob(EXE)) if (CACHE / "bin").exists() else []
     if flavor:
-        want = flavor
-    elif platform.system() == "Linux" and not vulkan_loader_missing():
-        want = "vulkan"
-    else:
+        return [p for p in found if p.relative_to(CACHE / "bin").parts[0].endswith("-" + flavor)]
+    if platform.system() != "Linux" or vulkan_loader_missing():
         return found
-    return sorted(found, key=lambda path: not path.parent.name.endswith("-" + want))   # stable: ties keep name order
+    return sorted(found, key=lambda path: not path.parent.name.endswith("-vulkan"))   # stable: ties keep name order
 
 
 def find_binary(explicit: str | None = None, flavor: str | None = None, download: bool = True) -> Path:

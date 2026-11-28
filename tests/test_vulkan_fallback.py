@@ -103,3 +103,18 @@ def test_a_cached_cpu_build_does_not_outrank_vulkan_once_the_library_is_there(li
     assert backend.find_binary() == cpu
     monkeypatch.setattr(backend, "vulkan_loader_missing", lambda: False)
     assert backend.find_binary(flavor="cpu") == cpu                                  # the flavour asked for first
+
+
+def test_a_flavour_asked_for_is_never_answered_with_another_cached_one(monkeypatch, tmp_path):
+    monkeypatch.setattr(backend, "CACHE", tmp_path)
+    monkeypatch.setattr(backend.shutil, "which", lambda name: None)
+    monkeypatch.delenv("BABELSCRIBE_WHISPER_BIN", raising=False)
+    vulkan = tmp_path / "bin" / "whisper-cli-windows-x64-vulkan" / backend.EXE
+    vulkan.parent.mkdir(parents=True)
+    vulkan.write_bytes(b"x")
+    fetched = []
+    monkeypatch.setattr(backend, "fetch_binary", lambda flavor=None: (fetched.append(flavor), tmp_path / "cpu")[1])
+    assert backend.find_binary(flavor="cpu") == tmp_path / "cpu" and fetched == ["cpu"]
+    with pytest.raises(FileNotFoundError):
+        backend.find_binary(flavor="cpu", download=False)
+    assert backend.find_binary(flavor="vulkan") == vulkan and backend.find_binary() == vulkan
