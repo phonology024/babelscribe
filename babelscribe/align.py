@@ -89,22 +89,33 @@ def hybrid(text_segs: list[dict], time_segs: list[dict]) -> list[dict]:
     return _fill_uncovered(out, time_segs, sm, ref, ref_t)
 
 
+def _skipped(unmatched_text: int, unmatched_timing: int) -> bool:
+    """At one end of a chunk, did the text model leave speech out, or only write it differently?
+
+    Both leave characters of the timing transcript unmatched. When the text model also has unmatched characters there,
+    it heard those words and spelled them its own way (a name in Thai letters where the timing model wrote Latin ones,
+    digits, another spelling); adding the timing model's words then says them twice. Only where the text model wrote
+    next to nothing, at most a quarter as much as the timing model, is something missing."""
+    return 4 * unmatched_text <= unmatched_timing
+
+
 def _fill_uncovered(out: list[dict], time_segs: list[dict], sm: difflib.SequenceMatcher, ref: str, ref_t: list[float]) -> list[dict]:
-    """Text models often skip the first/last words of a clip. Where the timing transcript has speech that the
-    accurate text never matched (head or tail), keep the timing model's words there instead of losing them."""
+    """Text models often skip the first/last words of a clip. Where the timing transcript has speech at the head or
+    tail that the accurate text left out (_skipped), keep the timing model's words there instead of losing them."""
     blocks = [b for b in sm.get_matching_blocks() if b.size >= 3]   # ignore stray 1–2 char matches
     if not blocks or not ref:
         return out
     first_ref, last_ref = blocks[0].b, blocks[-1].b + blocks[-1].size - 1
+    written = len(sm.a) - (blocks[-1].a + blocks[-1].size)          # the text model's characters after the last match
     def words_between(t0: float, t1: float) -> str:
         ws = [w for s in time_segs for w in (s.get("words") or [[s["text"], s["start"], s["end"]]]) if t0 < (w[1] + w[2]) / 2 <= t1]
         return "".join(w[0] for w in ws).strip()
-    if len(ref) - 1 - last_ref > 2:
+    if len(ref) - 1 - last_ref > 2 and _skipped(written, len(ref) - 1 - last_ref):
         tail = words_between(ref_t[last_ref], time_segs[-1]["end"] + 1)
         tail = tail.lstrip("".join(chr(c) for c in range(0x0e31, 0x0e4f) if unicodedata.category(chr(c)) == "Mn"))   # no orphan vowel/tone marks
         if tail and out:
             out[-1]["text"] = (out[-1]["text"] + " " + tail).strip(); out[-1]["end"] = time_segs[-1]["end"]
-    if first_ref > 2:
+    if first_ref > 2 and _skipped(blocks[0].a, first_ref):
         head = words_between(time_segs[0]["start"] - 1, ref_t[first_ref] - .01)
         if head and out:
             out[0]["text"] = (head + " " + out[0]["text"]).strip(); out[0]["start"] = time_segs[0]["start"]
