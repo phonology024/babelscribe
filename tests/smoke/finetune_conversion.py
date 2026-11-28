@@ -54,12 +54,15 @@ def main() -> None:
 
     first = sorted(refs)[0]
     out = clips / "hybrid"
-    subprocess.run([sys.executable, "-m", "babelscribe", str(clips / f"{first}.wav"), "-l", "th", "-m", "tiny",
+    # what --accurate does for Thai: the fine-tune's text with the default model's (turbo) timing
+    subprocess.run([sys.executable, "-m", "babelscribe", str(clips / f"{first}.wav"), "-l", "th",
                     "--text-model", name, "--flavor", "cpu", "-f", "txt,json", "-o", str(out)], check=True)
     text = Path(f"{out}.txt").read_text(encoding="utf-8")
     meta = json.loads(Path(f"{out}.json").read_text(encoding="utf-8"))["meta"]
     print("reference:", refs[first], "\nhybrid:   ", text.strip())
     check(meta.get("text_model") == name and has_thai(text), "the command converted the fine-tune and wrote Thai text")
+    together = cer(plain(refs[first]), plain(text))
+    check(together < MAX_CER, f"and that text is right: CER {together:.3f} is below {MAX_CER}")
 
     work = models.MODELS / f"_{name}"
     check(download.sha256_of(work / "convert-h5-to-ggml.orig.py") == models.CONVERTER_SHA256, "the pinned converter ran")
@@ -87,7 +90,8 @@ def main() -> None:
     check(mean < MAX_CER, f"mean CER {mean:.3f} over {len(scores)} clips is below {MAX_CER}")
 
     summary = (f"### {name} converted and transcribing\n- commit `{ft['revision']}`, {size:.2f} GB q8_0\n"
-               f"- CER on {len(scores)} FLEURS Thai clips: {', '.join(f'{s:.3f}' for s in scores)} (mean {mean:.3f})\n")
+               f"- CER on {len(scores)} FLEURS Thai clips: {', '.join(f'{s:.3f}' for s in scores)} (mean {mean:.3f})\n"
+               f"- CER of the command's own output (fine-tune text, turbo timing) on the first clip: {together:.3f}\n")
     try:
         import resource
         peak = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss / 1024 ** 2          # Linux: kB

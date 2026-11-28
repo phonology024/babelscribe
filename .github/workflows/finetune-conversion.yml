@@ -6,7 +6,8 @@ name: finetune-conversion
 on:
   workflow_dispatch:
     inputs:
-      model: { description: "fine-tune to convert (a name from babelscribe/models.py)", default: "thai-pathumma" }
+      model:                                   # the Thai ones: the test clips are Thai
+        { description: "fine-tune to convert", type: choice, options: [thai-pathumma, thai-thonburian], default: thai-pathumma }
   push:
     branches: ["finetune-check/**"]
 
